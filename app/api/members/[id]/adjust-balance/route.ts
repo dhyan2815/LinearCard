@@ -58,11 +58,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
 
     const pushMessage = note || `Your balance was updated to ${parsedBalance} points.`;
-    Promise.all([
-      updateGenericObject(pass.fullPassId, { balance: parsedBalance.toString(), tier: newTierValue, pushNotification: pushMessage })
-        .then(() => logNotification({ supabase, tenantId: pass.tenantId, memberId, type: 'balance_update', channel: 'wallet_push', status: 'sent' }))
-        .catch((err) => logNotification({ supabase, tenantId: pass.tenantId, memberId, type: 'balance_update', channel: 'wallet_push', status: 'failed', errorReason: err.message })),
-    ]).catch((err) => console.error('Async adjust failed:', err));
+    void updateGenericObject(pass.fullPassId, { balance: parsedBalance.toString(), tier: newTierValue, pushNotification: pushMessage })
+      .then(() => logNotification({ supabase, tenantId: pass.tenantId, memberId, type: 'balance_update', channel: 'wallet_push', status: 'sent' }))
+      .catch((err) => logNotification({ supabase, tenantId: pass.tenantId, memberId, type: 'balance_update', channel: 'wallet_push', status: 'failed', errorReason: err.message }));
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

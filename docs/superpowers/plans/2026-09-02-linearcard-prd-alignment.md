@@ -1183,7 +1183,7 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {logs.map((log: any) => (
               <div key={log.id} className="flex items-start gap-3 py-2 border-b border-border-subtle/50 last:border-0 text-sm">
-                <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${log.status === 'sent' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${log.status === 'sent' ? 'bg-emerald-500' : 'bg-red-500'}`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-ink-secondary truncate">{log.messageContent}</p>
                   <p className="text-ink-muted text-xs">{log.channel} · {log.member?.name || log.member?.phone || 'Unknown'} · {new Date(log.sentAt).toLocaleString()}</p>
@@ -1494,7 +1494,7 @@ export default function MemberDetailPage() {
           <div className="space-y-1">
             {member.auditLog.map((entry: any) => (
               <div key={entry.id} className="flex items-start gap-3 py-3 border-b border-border-subtle/50 last:border-0">
-                <div className="w-2 h-2 rounded-full bg-brand-orange mt-2 flex-shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-brand-orange mt-2 shrink-0" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-ink-dark capitalize">{entry.action.replace(/_/g, ' ')}</p>
                   {entry.previousValue && entry.newValue && (
