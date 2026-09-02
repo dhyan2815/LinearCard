@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateGenericObject } from '@/lib/google-wallet';
-import { sendRedemptionReceipt } from '@/lib/whatsapp';
+import { sendRedemptionReceiptWithLog } from '@/lib/whatsapp';
+import { logNotification } from '@/lib/notify';
 import { supabase } from '@/lib/db';
 
 /**
@@ -93,10 +94,15 @@ export async function POST(request: NextRequest) {
       tier: tier || pass.tier
     }).eq('id', pass.id);
 
-    // Async follow-ups (Google PATCH + WAHA)
+    // Async follow-ups (Google PATCH + WAHA with logging)
     Promise.all([
-      updateGenericObject(pass.fullPassId, { balance: balance.toString(), tier: tier || pass.tier, pushNotification }),
-      (pass.Member?.phone || phone) ? sendRedemptionReceipt(pass.Member?.phone || phone, balance.toString(), pass.Tenant?.name || brandName || 'LinearCard') : Promise.resolve()
+      updateGenericObject(pass.fullPassId, { balance: balance.toString(), tier: tier || pass.tier, pushNotification })
+        .then(() => logNotification({ supabase, tenantId: pass.tenantId, memberId: pass.memberId, type: 'balance_update', channel: 'wallet_push', status: 'sent' }))
+        .catch(err => logNotification({ supabase, tenantId: pass.tenantId, memberId: pass.memberId, type: 'balance_update', channel: 'wallet_push', status: 'failed', errorReason: err?.message || String(err) })),
+      (pass.Member?.phone || phone)
+        ? sendRedemptionReceiptWithLog(pass.Member?.phone || phone, balance.toString(), pass.Tenant?.name || brandName || 'LinearCard', { tenantId: pass.tenantId, memberId: pass.memberId })
+            .catch(err => console.error('WhatsApp receipt failed (non-fatal):', err))
+        : Promise.resolve()
     ]).catch(err => {
       console.error('Async follow-up failed (non-fatal):', err);
     });

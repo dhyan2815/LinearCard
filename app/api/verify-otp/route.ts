@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleWalletPass } from '@/lib/google-wallet';
-import { sendPassLink } from '@/lib/whatsapp';
+import { sendPassLinkWithLog } from '@/lib/whatsapp';
 import { supabase } from '@/lib/db';
 import { verifyOtp } from '@/lib/otp';
 
@@ -136,11 +136,12 @@ export async function POST(request: NextRequest) {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
       const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
       
-      sendPassLink(
+      sendPassLinkWithLog(
         phone, 
         shortUrl, 
         passData.memberName || phone, 
-        tenant.name
+        tenant.name,
+        { tenantId: targetTenantId, memberId: member.id }
       ).catch(err => console.error('WhatsApp pass link failed (non-fatal):', err)); // Log but do not crash on delivery failure
     }
 

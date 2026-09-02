@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleWalletPass } from '@/lib/google-wallet';
 import { supabase } from '@/lib/db';
-import { sendPassLink } from '@/lib/whatsapp';
+import { sendPassLinkWithLog } from '@/lib/whatsapp';
 import crypto from 'crypto';
 
 /**
@@ -91,11 +91,12 @@ export async function POST(request: NextRequest) {
          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin;
          const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
          
-         sendPassLink(
+         sendPassLinkWithLog(
            body.phone,
            shortUrl,
            body.memberName || 'Member',
-           body.cardTitle || 'LinearCard'
+           body.cardTitle || 'LinearCard',
+           { tenantId: targetTenantId, memberId: member.id }
          ).catch(e => console.error("WAHA delivery error:", e)); // Log delivery errors without failing the overall request
       }
     }
