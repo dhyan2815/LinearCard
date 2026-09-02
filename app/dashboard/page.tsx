@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Palette, Zap, RefreshCw, ArrowRight, ExternalLink, CheckCircle2, AlertCircle, Plus, X, QrCode, Bell } from 'lucide-react';
+import { Palette, Zap, RefreshCw, ArrowRight, ExternalLink, CheckCircle2, AlertCircle, Plus, X, QrCode, Bell, Settings } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
 import PassPreviewCard from '@/components/PassPreviewCard';
@@ -30,6 +30,99 @@ const ARCHETYPES = [
   { value: 'access_badge', label: 'Access Badge' },
 ] as const;
 type Archetype = typeof ARCHETYPES[number]['value'];
+
+function WalletStatusPill({ label, status }: { label: string; status: string }) {
+  const colors: Record<string, string> = {
+    connected: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    not_configured: 'bg-zinc-500/10 text-ink-muted border-border-subtle',
+    pending_approval: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    loading: 'bg-zinc-500/10 text-ink-muted border-border-subtle',
+  };
+  const dot: Record<string, string> = {
+    connected: 'bg-emerald-500 animate-pulse',
+    not_configured: 'bg-zinc-500',
+    pending_approval: 'bg-amber-500',
+    loading: 'bg-zinc-400',
+  };
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${colors[status] || colors.not_configured}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || dot.not_configured}`} />
+      {label}: {(status || 'loading').replace(/_/g, ' ')}
+    </div>
+  );
+}
+
+function SettingsTab() {
+  const [tenant,     setTenant]     = React.useState<any>(null);
+  const [webhookUrl, setWebhookUrl] = React.useState('');
+  const [isSaving,   setIsSaving]   = React.useState(false);
+  const [isRotating, setIsRotating] = React.useState(false);
+  const [msg,        setMsg]        = React.useState('');
+
+  React.useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then(d => {
+      if (d.success) { setTenant(d.tenant); setWebhookUrl(d.tenant.webhookUrl || ''); }
+    }).catch(err => console.error('Error fetching settings:', err));
+  }, []);
+
+  const handleSaveWebhook = async () => {
+    setIsSaving(true); setMsg('');
+    try {
+      const data = await (await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhookUrl }),
+      })).json();
+      if (!data.success) throw new Error(data.error || 'Failed to save webhook URL');
+      setMsg('Webhook URL saved.');
+    } catch (err: any) { setMsg(`Error: ${err.message}`); }
+    finally { setIsSaving(false); }
+  };
+
+  const handleRotateKey = async () => {
+    if (!confirm('Rotate API key? The old key stops working immediately.')) return;
+    setIsRotating(true);
+    try {
+      const data = await (await fetch('/api/admin/developer-settings', { method: 'POST' })).json();
+      if (!data.success) throw new Error(data.error || 'Failed to rotate key');
+      setTenant((prev: any) => ({ ...prev, apiKey: data.apiKey }));
+      setMsg('API key rotated.');
+    } catch (err: any) { setMsg(`Error: ${err.message}`); }
+    finally { setIsRotating(false); }
+  };
+
+  if (!tenant) return <p className="text-ink-muted text-sm">Loading settings...</p>;
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <Card className="p-6 space-y-4">
+        <h3 className="text-base font-semibold text-ink-dark">API Key</h3>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 bg-surface-bone border border-border-subtle rounded-lg px-3 py-2 text-xs font-mono text-ink-secondary truncate">
+            {tenant.apiKey || 'No key generated'}
+          </code>
+          <Button onClick={handleRotateKey} disabled={isRotating} variant="secondary" className="shrink-0">
+            {isRotating ? 'Rotating...' : 'Rotate'}
+          </Button>
+        </div>
+        <p className="text-xs text-ink-muted">Pass as <code>Authorization: Bearer &lt;key&gt;</code> for API calls.</p>
+      </Card>
+      <Card className="p-6 space-y-4">
+        <h3 className="text-base font-semibold text-ink-dark">Webhook URL</h3>
+        <div className="space-y-1">
+          <Label>Endpoint URL</Label>
+          <Input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
+            placeholder="https://your-server.com/webhook/linearcard" />
+        </div>
+        <p className="text-xs text-ink-muted">LinearCard will POST signed events here (HMAC-SHA256 signing in a future release).</p>
+        {msg && <p className={`text-sm font-medium ${msg.startsWith('Error') ? 'text-red-500' : 'text-emerald-400'}`}>{msg}</p>}
+        <Button onClick={handleSaveWebhook} disabled={isSaving} className="w-full">
+          {isSaving ? 'Saving...' : 'Save Webhook URL'}
+        </Button>
+      </Card>
+    </div>
+  );
+}
 
 function NotificationsTab({ tenantId }: { tenantId: string }) {
   const [channel,   setChannel]   = React.useState<'whatsapp' | 'wallet_push'>('whatsapp');
@@ -122,11 +215,21 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'design' | 'issue' | 'manage' | 'developer' | 'notifications'>('design');
+  const [activeTab, setActiveTab] = useState<'design' | 'issue' | 'manage' | 'notifications' | 'settings'>('design');
   const [tenants, setTenants] = useState<any[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [origin, setOrigin] = useState<string>('');
-  const [stats, setStats] = useState({ memberCount: 0, passCount: 0, walletStatus: 'Loading...' });
+  const [stats, setStats] = useState<{
+    memberCount: number;
+    passCount: number;
+    walletStatus: { google: string; apple: string; samsung: string };
+    tierDistribution: Record<string, number>;
+  }>({
+    memberCount: 0,
+    passCount: 0,
+    walletStatus: { google: 'loading', apple: 'not_configured', samsung: 'pending_approval' },
+    tierDistribution: {},
+  });
 
   const currentTenant = tenants.find(t => t.id === selectedTenantId);
 
@@ -138,7 +241,8 @@ export default function Dashboard() {
           setStats({
             memberCount: data.memberCount,
             passCount: data.passCount,
-            walletStatus: data.walletStatus
+            walletStatus: data.walletStatus || { google: 'not_configured', apple: 'not_configured', samsung: 'pending_approval' },
+            tierDistribution: data.tierDistribution || {}
           });
         }
       });
@@ -239,32 +343,9 @@ export default function Dashboard() {
   const [generatedPassUrl, setGeneratedPassUrl] = useState<string | null>(null);
   const [passHistory, setPassHistory] = useState<any[]>([]);
 
-  const [devSettings, setDevSettings] = useState({ apiKey: '' });
-
   const getWalletUrl = (url: string | null) => {
     return url || '#';
   };
-
-  const loadDeveloperSettings = async () => {
-    try {
-      const res = await fetch('/api/admin/developer-settings');
-      const data = await res.json();
-      // Populate API key field only if the API call succeeds
-      if (data.success) {
-        setDevSettings({ apiKey: data.apiKey || 'No API Key generated yet.' });
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab === 'manage' || activeTab === 'design' || activeTab === 'issue') {
-      // Nothing special here
-    } else if (activeTab === 'developer' as any) {
-      loadDeveloperSettings();
-    }
-  }, [activeTab]);
 
   const addRow = () => {
     // Limit to 3 rows max as dictated by Google Wallet's layout constraints
@@ -355,24 +436,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleGenerateApiKey = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/admin/developer-settings', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        setDevSettings({ apiKey: data.apiKey });
-        setSuccessMsg('New API Key generated successfully.');
-      } else {
-        throw new Error(data.error || 'Failed to generate key');
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fadeUp = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, type: 'spring' as const, bounce: 0, damping: 20 } }
@@ -392,7 +455,7 @@ export default function Dashboard() {
           <h1 className="text-3xl font-semibold text-ink-dark tracking-tight mb-6">
             Dashboard
           </h1>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
             <Card className="p-4 bg-surface-card border-border-subtle flex flex-col justify-center">
               <p className="text-sm font-medium text-ink-secondary">Total Members</p>
               <h3 className="text-2xl font-semibold text-ink-dark mt-1">{stats.memberCount}</h3>
@@ -404,11 +467,20 @@ export default function Dashboard() {
             <Card className="p-4 bg-surface-card border-border-subtle flex flex-col justify-center">
               <p className="text-sm font-medium text-ink-secondary">System Status</p>
               <div className="flex items-center gap-2 mt-1">
-                <div className={`w-2 h-2 rounded-full ${stats.walletStatus.includes('Active') ? 'bg-emerald-500' : 'bg-brand-orange animate-pulse'}`} />
-                <h3 className="text-sm font-medium text-ink-dark">{stats.walletStatus}</h3>
+                <div className={`w-2 h-2 rounded-full ${stats.walletStatus.google === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-brand-orange'}`} />
+                <h3 className="text-sm font-medium text-ink-dark">
+                  {stats.walletStatus.google === 'connected' ? 'Google Wallet Active' : 'Setup Required'}
+                </h3>
               </div>
             </Card>
           </div>
+
+          <div className="flex flex-wrap gap-2 mt-4">
+            <WalletStatusPill label="Google Wallet" status={stats.walletStatus.google} />
+            <WalletStatusPill label="Apple Wallet"  status={stats.walletStatus.apple} />
+            <WalletStatusPill label="Samsung Wallet" status={stats.walletStatus.samsung} />
+          </div>
+
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-6">
             <div className="flex flex-wrap sm:flex-nowrap gap-2 bg-surface-card p-1.5 rounded-xl border border-border-subtle w-full sm:w-fit">
               <button onClick={() => setActiveTab('design')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'design' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
@@ -421,8 +493,8 @@ export default function Dashboard() {
               <button onClick={() => setActiveTab('notifications')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'notifications' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
                 <Bell className="w-4 h-4"/> Notify
               </button>
-              <button onClick={() => setActiveTab('developer' as any)} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${(activeTab as any) === 'developer' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
-                <Zap className="w-4 h-4"/> Developer Settings
+              <button onClick={() => setActiveTab('settings')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
+                <Settings className="w-4 h-4"/> Settings
               </button>
             </div>
             <div className="flex flex-col items-start sm:items-end gap-1.5 w-full sm:w-auto">
@@ -711,26 +783,14 @@ export default function Dashboard() {
                 </motion.div>
               )}
 
-              {/* DEVELOPER SETTINGS TAB */}
-              {(activeTab as any) === 'developer' && (
-                <motion.div key="tab-developer" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
+              {/* SETTINGS TAB */}
+              {activeTab === 'settings' && (
+                <motion.div key="tab-settings" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
                   <div className="border-b border-white/5 pb-4 mb-4">
-                    <h2 className="text-xl font-medium text-ink-dark tracking-tight">Developer Settings</h2>
-                    <p className="text-sm text-ink-secondary mt-1">Manage API keys for programmatic programmatic access.</p>
+                    <h2 className="text-xl font-medium text-ink-dark tracking-tight">Tenant Settings</h2>
+                    <p className="text-sm text-ink-secondary mt-1">Configure your API credentials and webhook integration endpoints.</p>
                   </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Tenant API Key (Bearer Token)</Label>
-                      <div className="flex items-center gap-3">
-                        <Input type="text" value={devSettings.apiKey} readOnly className="font-mono" />
-                        <Button variant="secondary" onClick={handleGenerateApiKey} disabled={loading} className="shrink-0">
-                           Regenerate
-                        </Button>
-                      </div>
-                      <p className="text-xs text-ink-muted mt-2">Use this key in the Authorization header to call /api/update-pass.</p>
-                    </div>
-                  </div>
+                  <SettingsTab />
                 </motion.div>
               )}
 
