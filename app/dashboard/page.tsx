@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Palette, Zap, RefreshCw, ArrowRight, ExternalLink, CheckCircle2, AlertCircle, Plus, X, QrCode, Bell, Settings } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -53,14 +54,22 @@ function WalletStatusPill({ label, status }: { label: string; status: string }) 
 }
 
 function SettingsTab() {
+  const router                       = useRouter();
   const [tenant,     setTenant]     = React.useState<any>(null);
   const [webhookUrl, setWebhookUrl] = React.useState('');
   const [isSaving,   setIsSaving]   = React.useState(false);
   const [isRotating, setIsRotating] = React.useState(false);
   const [msg,        setMsg]        = React.useState('');
+  const [authError,  setAuthError]  = React.useState(false);
 
   React.useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(d => {
+    fetch('/api/settings').then(async (r) => {
+      if (r.status === 401) {
+        setAuthError(true);
+        router.push('/admin/login');
+        return;
+      }
+      const d = await r.json();
       if (d.success) { setTenant(d.tenant); setWebhookUrl(d.tenant.webhookUrl || ''); }
     }).catch(err => console.error('Error fetching settings:', err));
   }, []);
@@ -68,11 +77,13 @@ function SettingsTab() {
   const handleSaveWebhook = async () => {
     setIsSaving(true); setMsg('');
     try {
-      const data = await (await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ webhookUrl }),
-      })).json();
+      });
+      if (res.status === 401) { setAuthError(true); router.push('/admin/login'); return; }
+      const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to save webhook URL');
       setMsg('Webhook URL saved.');
     } catch (err: any) { setMsg(`Error: ${err.message}`); }
@@ -83,7 +94,9 @@ function SettingsTab() {
     if (!confirm('Rotate API key? The old key stops working immediately.')) return;
     setIsRotating(true);
     try {
-      const data = await (await fetch('/api/admin/developer-settings', { method: 'POST' })).json();
+      const res = await fetch('/api/admin/developer-settings', { method: 'POST' });
+      if (res.status === 401) { setAuthError(true); router.push('/admin/login'); return; }
+      const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to rotate key');
       setTenant((prev: any) => ({ ...prev, apiKey: data.apiKey }));
       setMsg('API key rotated.');
@@ -91,6 +104,11 @@ function SettingsTab() {
     finally { setIsRotating(false); }
   };
 
+  if (authError) return (
+    <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
+      Session expired. Redirecting to login…
+    </div>
+  );
   if (!tenant) return <p className="text-ink-muted text-sm">Loading settings...</p>;
 
   return (
@@ -129,6 +147,7 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
   const [message,   setMessage]   = React.useState('');
   const [isSending, setIsSending] = React.useState(false);
   const [result,    setResult]    = React.useState<{ sent: number; failed: number } | null>(null);
+  const [sendError, setSendError] = React.useState<string | null>(null);
   const [logs,      setLogs]      = React.useState<any[]>([]);
 
   React.useEffect(() => {
@@ -141,7 +160,7 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
 
   const handleSend = async () => {
     if (!tenantId || !message.trim()) return;
-    setIsSending(true); setResult(null);
+    setIsSending(true); setResult(null); setSendError(null);
     try {
       const res = await fetch('/api/notifications/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -152,7 +171,7 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
       setResult({ sent: data.sent, failed: data.failed });
       setMessage('');
     } catch (err: any) {
-      alert(`Failed: ${err.message}`);
+      setSendError(err.message);
     } finally {
       setIsSending(false);
     }
@@ -182,6 +201,11 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
             rows={4} className="w-full rounded-xl border border-border-subtle bg-surface-bone text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-orange resize-none placeholder:text-ink-muted" />
         </div>
         {result && <p className="text-sm text-emerald-400 font-medium">✅ Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</p>}
+        {sendError && (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-2">
+            <span className="shrink-0">⚠</span> {sendError}
+          </div>
+        )}
         <Button onClick={handleSend} disabled={!message.trim() || isSending || !tenantId} className="w-full">
           {isSending ? 'Sending...' : 'Send to All Members'}
         </Button>
@@ -513,7 +537,7 @@ export default function Dashboard() {
               {/* DESIGN TAB */}
               {activeTab === 'design' && (
                 <motion.div key="tab-design" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
-                  <div className="border-b border-white/5 pb-4 mb-4">
+                  <div className="border-b border-border-subtle pb-4 mb-4">
                     <h2 className="text-xl font-medium text-ink-dark tracking-tight">Template Designer</h2>
                     <p className="text-sm text-ink-secondary mt-1">Design your Class template mirroring the Google Wallet console structure.</p>
                   </div>
@@ -695,6 +719,7 @@ export default function Dashboard() {
                     <Button type="button" className="flex-1" disabled={templateStatus === 'published'} onClick={async () => {
                       let tplId = savedTemplateId;
                       if (!tplId) {
+                        // No existing template — create one from current on-screen state
                         try {
                           const res = await fetch('/api/templates', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -705,6 +730,17 @@ export default function Dashboard() {
                           tplId = data.template.id;
                           setSavedTemplateId(tplId);
                         } catch (err: any) { alert(`Failed: ${err.message}`); return; }
+                      } else {
+                        // Template already exists — auto-sync on-screen edits to DB before publishing
+                        try {
+                          const res = await fetch(`/api/templates/${tplId}`, {
+                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+                          });
+                          const data = await res.json();
+                          if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
+                          setTemplateStatus('draft');
+                        } catch (err: any) { alert(`Sync failed: ${err.message}`); return; }
                       }
                       try {
                         const res = await fetch(`/api/templates/${tplId}/publish`, { method: 'POST' });
@@ -725,7 +761,7 @@ export default function Dashboard() {
               {/* MANAGE TAB */}
               {activeTab === 'manage' && (
                 <motion.form key="tab-manage" initial={{opacity:0}} animate={{opacity:1}} onSubmit={handleUpdatePass} className="space-y-6">
-                  <div className="border-b border-white/5 pb-4 mb-4">
+                  <div className="border-b border-border-subtle pb-4 mb-4">
                     <h2 className="text-xl font-medium text-ink-dark tracking-tight">Live Update</h2>
                     <p className="text-sm text-ink-secondary mt-1">Select a pass from history to instantly patch its data.</p>
                   </div>
@@ -775,7 +811,7 @@ export default function Dashboard() {
               {/* NOTIFICATIONS TAB */}
               {activeTab === 'notifications' && (
                 <motion.div key="tab-notifications" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
-                  <div className="border-b border-white/5 pb-4 mb-4">
+                  <div className="border-b border-border-subtle pb-4 mb-4">
                     <h2 className="text-xl font-medium text-ink-dark tracking-tight">Notifications Composer</h2>
                     <p className="text-sm text-ink-secondary mt-1">Broadcast marketing updates or pass notifications across WhatsApp and Wallet Push.</p>
                   </div>
@@ -786,7 +822,7 @@ export default function Dashboard() {
               {/* SETTINGS TAB */}
               {activeTab === 'settings' && (
                 <motion.div key="tab-settings" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
-                  <div className="border-b border-white/5 pb-4 mb-4">
+                  <div className="border-b border-border-subtle pb-4 mb-4">
                     <h2 className="text-xl font-medium text-ink-dark tracking-tight">Tenant Settings</h2>
                     <p className="text-sm text-ink-secondary mt-1">Configure your API credentials and webhook integration endpoints.</p>
                   </div>
