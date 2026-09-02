@@ -42,7 +42,7 @@ export async function GET(
       classSuffix: pass.tenant.classSuffix,
       logoUrl: pass.tenant.logoUrl?.startsWith('/') ? `${request.nextUrl.origin}${pass.tenant.logoUrl}` : pass.tenant.logoUrl,
       heroImageUrl: pass.tenant.heroUrl?.startsWith('/') ? `${request.nextUrl.origin}${pass.tenant.heroUrl}` : pass.tenant.heroUrl,
-      objectSuffixOverride
+      passId: objectSuffixOverride
     });
 
     if (passResult.success && passResult.googleWalletUrl) {

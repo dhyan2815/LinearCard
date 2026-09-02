@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
 import jwt from 'jsonwebtoken';
+import { verifyOtp } from '@/lib/otp';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
 
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'OTP expired. Please request a new code.' }, { status: 401 });
     }
 
-    if (otpSession.otpHash !== otp) {
+    if (!verifyOtp(otp, otpSession.otpHash)) {
       return NextResponse.json({ success: false, error: 'Invalid code. Please try again.' }, { status: 401 });
     }
 

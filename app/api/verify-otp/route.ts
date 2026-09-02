@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleWalletPass } from '@/lib/google-wallet';
 import { sendPassLink } from '@/lib/whatsapp';
 import { supabase } from '@/lib/db';
+import { verifyOtp } from '@/lib/otp';
 
 /**
  * POST /api/verify-otp
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the provided code matches the stored (hashed) code
-    if (otpSession.otpHash !== otp) {
+    if (!verifyOtp(otp, otpSession.otpHash)) {
       return NextResponse.json({ success: false, error: 'Incorrect code. Please try again.' }, { status: 401 });
     }
 
