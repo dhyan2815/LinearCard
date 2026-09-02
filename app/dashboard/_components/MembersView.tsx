@@ -79,7 +79,7 @@ export function MembersView({ initialTenantId = 'all' }: { initialTenantId?: str
                  placeholder="Search by name or phone..." 
                  value={search} 
                  onChange={(e) => setSearch(e.target.value)} 
-                 className="pl-9 h-[38px]"
+                 className="pl-9 h-9.5"
                />
              </div>
           </div>

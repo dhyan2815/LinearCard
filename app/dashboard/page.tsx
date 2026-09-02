@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Settings2, Zap, Menu, Palette, Bell } from 'lucide-react';
+import { Settings2, Zap, Menu, Palette, Bell, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PassPreviewCard from '@/components/PassPreviewCard';
 
@@ -9,6 +9,7 @@ import { LiveManageView } from './_components/LiveManageView';
 import { TemplateWorkspace } from './_components/TemplateWorkspace';
 import { BroadcastView } from './_components/BroadcastView';
 import { SettingsView } from './_components/SettingsView';
+import { MembersView } from './_components/MembersView';
 
 type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
 
@@ -34,7 +35,7 @@ function WalletStatusPill({ label, status }: { label: string; status: string }) 
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'design' | 'manage' | 'notify' | 'settings'>('design');
+  const [activeTab, setActiveTab] = useState<'design' | 'manage' | 'notify' | 'members' | 'settings'>('design');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const [tenants, setTenants] = useState<any[]>([]);
@@ -48,65 +49,14 @@ export default function Dashboard() {
   }>({
     memberCount: 0,
     passCount: 0,
-    walletStatus: { google: 'loading', apple: 'not_configured', samsung: 'pending_approval' },
-    tierDistribution: {},
+    walletStatus: { google: 'loading', apple: 'not_configured', samsung: 'not_configured' },
+    tierDistribution: {}
   });
 
-  const currentTenant = tenants.find(t => t.id === selectedTenantId);
-
-  useEffect(() => {
-    fetch('/api/dashboard/stats')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setStats({
-            memberCount: data.memberCount,
-            passCount: data.passCount,
-            walletStatus: data.walletStatus || { google: 'not_configured', apple: 'not_configured', samsung: 'pending_approval' },
-            tierDistribution: data.tierDistribution || {}
-          });
-        }
-      });
-  }, []);
-
-  useEffect(() => {
-    setOrigin('https://linearcard.vercel.app');
-    fetch('/api/tenants').then(res => res.json()).then(data => {
-      if (data.success && data.tenants.length > 0) {
-        setTenants(data.tenants);
-        const initial = data.tenants[0];
-        setSelectedTenantId(initial.id);
-        setDesignData(prev => ({
-          ...prev,
-          classSuffix: initial.classSuffix,
-          cardTitle: initial.name,
-          hexBackgroundColor: initial.brandHexColor,
-          logoUrl: initial.logoUrl,
-          heroImageUrl: initial.heroUrl,
-        }));
-      }
-    });
-  }, []);
-
-  const handleTenantChange = (tenantId: string) => {
-    setSelectedTenantId(tenantId);
-    const tenant = tenants.find(t => t.id === tenantId);
-    if (tenant) {
-      setDesignData(prev => ({
-        ...prev,
-        classSuffix: tenant.classSuffix,
-        cardTitle: tenant.name,
-        hexBackgroundColor: tenant.brandHexColor,
-        logoUrl: tenant.logoUrl,
-        heroImageUrl: tenant.heroUrl,
-      }));
-    }
-  };
-
   const [designData, setDesignData] = useState({
-    classSuffix: 'linearcard_sandbox_class',
+    classSuffix: '',
     archetype: 'loyalty' as Archetype,
-    cardTitle: 'The SkyHigh Alliance',
+    cardTitle: '',
     hexBackgroundColor: '#1A365D',
     logoUrl: '',
     heroImageUrl: '',
@@ -117,6 +67,54 @@ export default function Dashboard() {
   
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
   const [templateStatus, setTemplateStatus] = useState<'unsaved' | 'draft' | 'published'>('unsaved');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setOrigin(window.location.origin);
+    }
+    fetch('/api/tenants')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.tenants && data.tenants.length > 0) {
+          setTenants(data.tenants);
+          setSelectedTenantId(data.tenants[0].id);
+        }
+      });
+  }, []);
+
+  const currentTenant = tenants.find(t => t.id === selectedTenantId);
+
+  useEffect(() => {
+    if (selectedTenantId) {
+      fetch(`/api/dashboard/stats?tenantId=${selectedTenantId}`)
+        .then(res => res.json())
+        .then(data => {
+           if (data.success) {
+             setStats(data.stats);
+           }
+        });
+        
+      fetch(`/api/members?tenantId=${selectedTenantId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+             const allPasses = data.members?.flatMap((m: any) => m.passes?.map((p: any) => ({
+                memberId: m.id,
+                passData: { memberName: m.name || m.phone, ...p },
+                passId: p.id,
+                fullPassId: p.id
+             })) || []) || [];
+             setPassHistory(allPasses);
+          }
+        });
+    }
+  }, [selectedTenantId]);
+
+  const handleTenantChange = (newTenantId: string) => {
+    setSelectedTenantId(newTenantId);
+    setActiveTab('design');
+    setManageData({ passId: '', balance: '', tier: '', pushNotification: '', phone: '', brandName: '' });
+  };
 
   useEffect(() => {
     if (currentTenant) {
@@ -196,16 +194,17 @@ export default function Dashboard() {
     { id: 'design', label: 'Template Canvas', icon: <Palette className="w-4 h-4" /> },
     { id: 'manage', label: 'Live Updates', icon: <Zap className="w-4 h-4" /> },
     { id: 'notify', label: 'Broadcasts', icon: <Bell className="w-4 h-4" /> },
+    { id: 'members', label: 'Members', icon: <Users className="w-4 h-4" /> },
     { id: 'settings', label: 'Settings', icon: <Settings2 className="w-4 h-4" /> },
   ] as const;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-canvas">
+    <div className="flex flex-1 h-full overflow-hidden bg-canvas">
       {/* LEFT SIDEBAR (Collapsible) */}
       <motion.aside 
         initial={false}
         animate={{ width: isSidebarOpen ? 240 : 64 }}
-        className="flex flex-col border-r border-border-subtle bg-canvas z-20 shrink-0"
+        className="flex flex-col border-r border-border-subtle bg-canvas z-20 shrink-0 h-full"
       >
         <div className="h-16 flex items-center justify-between px-3 border-b border-border-subtle shrink-0">
            <motion.div animate={{ opacity: isSidebarOpen ? 1 : 0, width: isSidebarOpen ? 'auto' : 0 }} className="whitespace-nowrap overflow-hidden ml-1">
@@ -215,7 +214,7 @@ export default function Dashboard() {
               <Menu className="w-5 h-5" />
            </button>
         </div>
-        <div className="flex-1 py-4 flex flex-col gap-1.5 px-2 overflow-hidden">
+        <div className="flex-1 py-4 flex flex-col gap-1.5 px-2 overflow-y-auto">
            {tabs.map((tab) => (
              <button
                 key={tab.id}

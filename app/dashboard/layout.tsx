@@ -19,9 +19,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           </div>
           <div className="flex items-center gap-4">
-             <Link href="/dashboard/members" className="text-sm font-medium text-ink-secondary hover:text-ink-dark transition-colors mr-2">
-               Members
-             </Link>
              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               API Connected

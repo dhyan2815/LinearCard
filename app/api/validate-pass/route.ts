@@ -17,18 +17,33 @@ export async function POST(request: NextRequest) {
 
     let { data: pass } = await supabase
       .from('Pass')
-      .select('*, Member(*)')
+      .select('*, Member!inner(*)')
       .eq('fullPassId', fullPassId)
       .single();
 
     if (!pass) {
        // Also check short pass id just in case the scanner only read the suffix (using ilike)
-       const { data: fallbackPass } = await supabase
+       let { data: fallbackPass } = await supabase
          .from('Pass')
-         .select('*, Member(*)')
+         .select('*, Member!inner(*)')
          .ilike('fullPassId', `%${passId}%`)
          .limit(1)
          .single();
+       
+       // If the scanned passId consists of digits, it might be the user's phone number
+       if (!fallbackPass && /^\d+$/.test(passId)) {
+          const { data: phonePass } = await supabase
+            .from('Pass')
+            .select('*, Member!inner(*)')
+            .ilike('Member.phone', `%${passId}%`)
+            .order('createdAt', { ascending: false })
+            .limit(1)
+            .single();
+            
+          if (phonePass) {
+             fallbackPass = phonePass;
+          }
+       }
        
        pass = fallbackPass;
        
