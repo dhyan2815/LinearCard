@@ -10,7 +10,8 @@ CREATE TABLE "Tenant" (
   "logoUrl" TEXT NOT NULL,
   "heroUrl" TEXT NOT NULL,
   "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  "apiKey" TEXT UNIQUE
+  "apiKey" TEXT UNIQUE,
+  "webhookUrl" TEXT
 );
 
 -- Admin Table
@@ -66,6 +67,42 @@ CREATE TABLE "ConsentLog" (
   "ipAddress" TEXT,
   "userAgent" TEXT,
   "legalTextVersion" TEXT NOT NULL
+);
+
+-- PassTemplate Table
+CREATE TABLE IF NOT EXISTS "PassTemplate" (
+  "id" UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  "tenantId" UUID NOT NULL REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "archetype" TEXT NOT NULL,
+  "title" TEXT NOT NULL,
+  "subtitle" TEXT NOT NULL,
+  "status" TEXT NOT NULL DEFAULT 'draft',
+  "googleClassId" TEXT,
+  "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- AuditLog Table
+CREATE TABLE IF NOT EXISTS "AuditLog" (
+  "id" UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  "tenantId" UUID NOT NULL REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "memberId" UUID NOT NULL REFERENCES "Member"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "action" TEXT NOT NULL,
+  "details" JSONB NOT NULL,
+  "actor" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- NotificationLog Table
+CREATE TABLE IF NOT EXISTS "NotificationLog" (
+  "id" UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  "tenantId" UUID NOT NULL REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "memberId" UUID NOT NULL REFERENCES "Member"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  "type" TEXT NOT NULL,
+  "channel" TEXT NOT NULL,
+  "status" TEXT NOT NULL,
+  "error" TEXT,
+  "sentAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Seed Data
