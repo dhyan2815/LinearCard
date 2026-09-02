@@ -23,12 +23,22 @@ const COLOR_PALETTE = [
   { name: 'Royal Purple', hex: '#3B0764' }
 ];
 
+const ARCHETYPES = [
+  { value: 'loyalty',      label: 'Loyalty Pass' },
+  { value: 'membership',   label: 'Membership Card' },
+  { value: 'id_card',      label: 'ID Card' },
+  { value: 'access_badge', label: 'Access Badge' },
+] as const;
+type Archetype = typeof ARCHETYPES[number]['value'];
+
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'design' | 'issue' | 'manage'>('design');
   const [tenants, setTenants] = useState<any[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [origin, setOrigin] = useState<string>('');
   const [stats, setStats] = useState({ memberCount: 0, passCount: 0, walletStatus: 'Loading...' });
+
+  const currentTenant = tenants.find(t => t.id === selectedTenantId);
 
   useEffect(() => {
     fetch('/api/dashboard/stats')
@@ -81,7 +91,7 @@ export default function Dashboard() {
 
   const [designData, setDesignData] = useState({
     classSuffix: 'linearcard_sandbox_class',
-    archetype: 'Membership Card',
+    archetype: 'loyalty' as Archetype,
     cardTitle: 'The SkyHigh Alliance',
     hexBackgroundColor: '#1A365D',
     logoUrl: '',
@@ -90,8 +100,39 @@ export default function Dashboard() {
       { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
     ]
   });
+  const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
+  const [templateStatus, setTemplateStatus] = useState<'unsaved' | 'draft' | 'published'>('unsaved');
 
-
+  useEffect(() => {
+    if (activeTab === 'design' && currentTenant) {
+      fetch(`/api/templates?tenantId=${currentTenant.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.templates && data.templates.length > 0) {
+            const t = data.templates[0];
+            setSavedTemplateId(t.id);
+            setTemplateStatus(t.status || 'draft');
+            setDesignData({
+              classSuffix: t.classSuffix,
+              archetype: t.archetype,
+              cardTitle: t.title || t.name,
+              hexBackgroundColor: t.hexBackgroundColor,
+              logoUrl: t.logoUrl || '',
+              heroImageUrl: t.heroImageUrl || '',
+              rows: t.fieldRows || [{ id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }]
+            });
+          } else {
+            setSavedTemplateId(null);
+            setTemplateStatus('unsaved');
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching templates:', err);
+          setSavedTemplateId(null);
+          setTemplateStatus('unsaved');
+        });
+    }
+  }, [activeTab, currentTenant]);
 
   const [manageData, setManageData] = useState({
     passId: '',
@@ -182,25 +223,6 @@ export default function Dashboard() {
     });
     setDesignData({ ...designData, rows: newRows });
   };
-
-  const handleCreateClass = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); setError(null); setSuccessMsg(null);
-    try {
-      // Check if class exists first to avoid 409 Conflict
-      const checkRes = await fetch(`/api/check-class?classSuffix=${designData.classSuffix}`);
-      const checkData = await checkRes.json();
-      
-      const response = await fetch('/api/create-class', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...designData, isUpdate: checkData.exists })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to create class');
-      setSuccessMsg(`Template Class pushed successfully to Google Wallet!`);
-    } catch (err: any) { setError(err.message); } finally { setLoading(false); }
-  };
-
-
 
   const handleUpdatePass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -325,7 +347,7 @@ export default function Dashboard() {
               
               {/* DESIGN TAB */}
               {activeTab === 'design' && (
-                <motion.form key="tab-design" initial={{opacity:0}} animate={{opacity:1}} onSubmit={handleCreateClass} className="space-y-6">
+                <motion.div key="tab-design" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
                   <div className="border-b border-white/5 pb-4 mb-4">
                     <h2 className="text-xl font-medium text-ink-dark tracking-tight">Template Designer</h2>
                     <p className="text-sm text-ink-secondary mt-1">Design your Class template mirroring the Google Wallet console structure.</p>
@@ -358,18 +380,25 @@ export default function Dashboard() {
                     </div>
                   )}
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
-                      <Label>Pass Archetype</Label>
-                      <select value={designData.archetype} onChange={(e) => setDesignData({...designData, archetype: e.target.value})} className="w-full bg-surface-card border border-border-subtle rounded-xl px-4 py-3 text-ink-dark text-sm transition-all focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange">
-                        <option value="Loyalty Program">Loyalty Program</option>
-                        <option value="Membership Card">Membership Card</option>
-                        <option value="Digital ID">Digital ID</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label>Class Suffix</Label>
-                      <Input type="text" value={designData.classSuffix} onChange={(e) => setDesignData({...designData, classSuffix: e.target.value})} className="font-mono" required/>
+                  <div>
+                    <Label>Class Suffix</Label>
+                    <Input type="text" value={designData.classSuffix} onChange={(e) => setDesignData({...designData, classSuffix: e.target.value})} className="font-mono" required/>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>Pass Archetype</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {ARCHETYPES.map((arch) => (
+                        <button key={arch.value} type="button"
+                          onClick={() => setDesignData(prev => ({ ...prev, archetype: arch.value }))}
+                          className={`py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
+                            designData.archetype === arch.value
+                              ? 'bg-brand-orange/10 border-brand-orange text-brand-orange'
+                              : 'bg-surface-bone border-border-subtle text-ink-secondary hover:border-border-strong'
+                          }`}>
+                          {arch.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -464,10 +493,66 @@ export default function Dashboard() {
                       ))}
                     </div>
                   </div>
-                  <Button type="submit" disabled={loading} className="w-full">
-                    {loading ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> Pushing Class...</span> : 'Push Template to Google Wallet'}
-                  </Button>
-                </motion.form>
+
+                  {templateStatus !== 'unsaved' && (
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
+                      templateStatus === 'published'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${templateStatus === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                      {templateStatus === 'published' ? 'Published to Wallet' : 'Draft saved'}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-2">
+                    <Button type="button" variant="secondary" className="flex-1" onClick={async () => {
+                      try {
+                        if (savedTemplateId) {
+                          const res = await fetch(`/api/templates/${savedTemplateId}`, {
+                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+                          });
+                          const data = await res.json();
+                          if (data.success) { alert('Draft updated'); setTemplateStatus('draft'); }
+                        } else {
+                          const res = await fetch('/api/templates', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, classSuffix: designData.classSuffix, name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+                          });
+                          const data = await res.json();
+                          if (data.success) { setSavedTemplateId(data.template.id); setTemplateStatus('draft'); alert('Draft saved'); }
+                        }
+                      } catch (e) { console.error(e); alert('Error saving draft'); }
+                    }}>
+                      Save as Draft
+                    </Button>
+                    <Button type="button" className="flex-1" disabled={templateStatus === 'published'} onClick={async () => {
+                      let tplId = savedTemplateId;
+                      if (!tplId) {
+                        try {
+                          const res = await fetch('/api/templates', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, name: designData.cardTitle || 'New Template', archetype: designData.archetype, classSuffix: designData.classSuffix, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+                          });
+                          const data = await res.json();
+                          if (!data.success) throw new Error(data.error || 'Failed to create template');
+                          tplId = data.template.id;
+                          setSavedTemplateId(tplId);
+                        } catch (err: any) { alert(`Failed: ${err.message}`); return; }
+                      }
+                      try {
+                        const res = await fetch(`/api/templates/${tplId}/publish`, { method: 'POST' });
+                        const data = await res.json();
+                        if (!data.success) throw new Error(data.error || 'Failed to publish');
+                        setTemplateStatus('published');
+                        alert('Published to Google Wallet API');
+                      } catch (e: any) { console.error(e); alert(`Publish failed: ${e.message}`); }
+                    }}>
+                      Publish to Wallet
+                    </Button>
+                  </div>
+                </motion.div>
               )}
 
 

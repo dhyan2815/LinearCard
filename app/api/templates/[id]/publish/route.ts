@@ -24,7 +24,7 @@ export async function POST(
     const logoUrl = rawLogoUrl?.startsWith('/') ? `${origin}${rawLogoUrl}` : rawLogoUrl;
     const heroImageUrl = rawHeroImageUrl?.startsWith('/') ? `${origin}${rawHeroImageUrl}` : rawHeroImageUrl;
 
-    const classData = await createGenericClass({
+    const classData: any = await createGenericClass({
       classSuffix: template.classSuffix || template.tenant?.classSuffix,
       cardTitle: template.tenant?.name || template.title,
       hexBackgroundColor: template.hexBackgroundColor || template.tenant?.brandHexColor,
