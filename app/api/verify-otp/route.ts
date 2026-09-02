@@ -3,6 +3,7 @@ import { createGoogleWalletPass } from '@/lib/google-wallet';
 import { sendPassLinkWithLog } from '@/lib/whatsapp';
 import { supabase } from '@/lib/db';
 import { verifyOtp } from '@/lib/otp';
+import crypto from 'crypto';
 
 /**
  * POST /api/verify-otp
@@ -99,9 +100,13 @@ export async function POST(request: NextRequest) {
     // 4. Generate Google Wallet pass with Tenant branding
     const startingTier = passData.tier || 'Bronze';
     const startingBalance = passData.balance || '0 Pts';
+    
+    // Generate the definitive, explicit Pass ID (UUID)
+    const explicitPassId = crypto.randomUUID();
 
     const passResult = await createGoogleWalletPass({
       ...passData,
+      passId: explicitPassId,
       tier: startingTier,
       balance: startingBalance,
       barcodeAltText: `${startingTier} Tier • ${startingBalance}`,
@@ -113,12 +118,13 @@ export async function POST(request: NextRequest) {
     });
     
     let passRecordId = null;
-    if (passResult.passId) {
+    if (passResult.success && passResult.fullPassId) {
       // Save Pass record in DB
       const { data: insertedPass, error: passError } = await supabase.from('Pass').insert({
+        id: explicitPassId, // Enforcing Pass ID as the primary key to match Google Wallet
         memberId: member.id,
         tenantId: targetTenantId,
-        fullPassId: passResult.passId,
+        fullPassId: passResult.fullPassId,
         balance: 0,
         tier: startingTier,
       }).select().single();

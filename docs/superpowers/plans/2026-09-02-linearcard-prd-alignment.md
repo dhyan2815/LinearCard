@@ -15,7 +15,7 @@
 
 - Next.js `^16.3.3` — App Router only. No Pages Router.
 - TypeScript 7 strict mode per `tsconfig.json`.
-- Tailwind CSS v4 — use only semantic color tokens (`bg-canvas`, `text-ink-dark`, `bg-surface-card`, `border-border-subtle`, `text-brand-orange`, etc.). Zero hardcoded hex/color utilities.
+- Tailwind CSS v4 — use only semantic color tokens (`bg-canvas`, `text-ink-dark`, `bg-surface-card`, `border-border-subtle`, `text-brand-blue`, etc.). Zero hardcoded hex/color utilities.
 - Supabase tables: PascalCase, always double-quoted in SQL (`"Tenant"`, `"Member"`, `"Pass"`, `"OtpSession"`, `"ConsentLog"`). All new tables follow the same convention.
 - Google Wallet REST API base: `https://walletobjects.googleapis.com/walletobjects/v1/`
 - Google Wallet auth scope: `https://www.googleapis.com/auth/wallet_object.issuer`
@@ -681,7 +681,7 @@ const [templateStatus,  setTemplateStatus]  = useState<'unsaved' | 'draft' | 'pu
         onClick={() => setDesignData(prev => ({ ...prev, archetype: arch.value }))}
         className={`py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
           designData.archetype === arch.value
-            ? 'bg-brand-orange/10 border-brand-orange text-brand-orange'
+            ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
             : 'bg-surface-bone border-border-subtle text-ink-secondary hover:border-border-strong'
         }`}>
         {arch.label}
@@ -1153,13 +1153,13 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
     <div className="space-y-6 max-w-2xl">
       <Card className="p-6 space-y-4">
         <h3 className="text-base font-semibold text-ink-dark flex items-center gap-2">
-          <Bell className="w-4 h-4 text-brand-orange" /> Compose Notification
+          <Bell className="w-4 h-4 text-brand-blue" /> Compose Notification
         </h3>
         <div className="flex gap-2">
           {(['whatsapp', 'wallet_push'] as const).map(ch => (
             <button key={ch} onClick={() => setChannel(ch)}
               className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
-                channel === ch ? 'bg-brand-orange/10 border-brand-orange text-brand-orange'
+                channel === ch ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
                   : 'bg-surface-bone border-border-subtle text-ink-secondary hover:border-border-strong'
               }`}>
               {ch === 'whatsapp' ? '💬 WhatsApp' : '📲 Wallet Push'}
@@ -1170,7 +1170,7 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
           <Label>Message</Label>
           <textarea value={message} onChange={e => setMessage(e.target.value)}
             placeholder={channel === 'whatsapp' ? 'e.g. Earn double points this weekend!' : 'e.g. Your pass has been updated.'}
-            rows={4} className="w-full rounded-xl border border-border-subtle bg-surface-bone text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-orange resize-none" />
+            rows={4} className="w-full rounded-xl border border-border-subtle bg-surface-bone text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-blue resize-none" />
         </div>
         {result && <p className="text-sm text-emerald-400 font-medium">✓ Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</p>}
         <Button onClick={handleSend} disabled={!message.trim() || isSending || !tenantId} className="w-full">
@@ -1410,7 +1410,7 @@ export default function MemberDetailPage() {
     finally { setIsAdjusting(false); }
   };
 
-  if (loading) return <main className="flex-1 flex items-center justify-center"><div className="w-8 h-8 border-4 border-brand-orange/30 border-t-brand-orange rounded-full animate-spin" /></main>;
+  if (loading) return <main className="flex-1 flex items-center justify-center"><div className="w-8 h-8 border-4 border-brand-blue/30 border-t-brand-blue rounded-full animate-spin" /></main>;
   if (error)   return <main className="flex-1 flex items-center justify-center"><p className="text-red-500">{error}</p></main>;
 
   return (
@@ -1452,14 +1452,14 @@ export default function MemberDetailPage() {
       {member.passes?.length > 0 && (
         <Card className="p-6">
           <h2 className="text-base font-semibold text-ink-dark flex items-center gap-2 mb-4">
-            <Edit3 className="w-4 h-4 text-brand-orange" /> Adjust Balance
+            <Edit3 className="w-4 h-4 text-brand-blue" /> Adjust Balance
           </h2>
           <form onSubmit={handleAdjust} className="space-y-4">
             {member.passes.length > 1 && (
               <div className="space-y-1">
                 <Label>Select Pass</Label>
                 <select value={selectedPassId} onChange={e => { setSelectedPassId(e.target.value); const p = member.passes.find((p: any) => p.id === e.target.value); if (p) { setNewBalance(String(p.balance)); setNewTier(p.tier || ''); } }}
-                  className="w-full bg-surface-card border border-border-subtle rounded-lg px-3 py-2 text-sm text-ink-dark focus:outline-none focus:border-brand-orange">
+                  className="w-full bg-surface-card border border-border-subtle rounded-lg px-3 py-2 text-sm text-ink-dark focus:outline-none focus:border-brand-blue">
                   {member.passes.map((p: any) => <option key={p.id} value={p.id}>{p.fullPassId} — {p.balance} pts</option>)}
                 </select>
               </div>
@@ -1489,12 +1489,12 @@ export default function MemberDetailPage() {
       {member.auditLog?.length > 0 && (
         <Card className="p-6">
           <h2 className="text-base font-semibold text-ink-dark flex items-center gap-2 mb-4">
-            <History className="w-4 h-4 text-brand-orange" /> Audit Trail
+            <History className="w-4 h-4 text-brand-blue" /> Audit Trail
           </h2>
           <div className="space-y-1">
             {member.auditLog.map((entry: any) => (
               <div key={entry.id} className="flex items-start gap-3 py-3 border-b border-border-subtle/50 last:border-0">
-                <div className="w-2 h-2 rounded-full bg-brand-orange mt-2 shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-brand-blue mt-2 shrink-0" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-ink-dark capitalize">{entry.action.replace(/_/g, ' ')}</p>
                   {entry.previousValue && entry.newValue && (
@@ -1515,7 +1515,7 @@ export default function MemberDetailPage() {
       {member.consentLog?.length > 0 && (
         <Card className="p-6">
           <h2 className="text-base font-semibold text-ink-dark flex items-center gap-2 mb-4">
-            <ShieldCheck className="w-4 h-4 text-brand-orange" /> Consent Records
+            <ShieldCheck className="w-4 h-4 text-brand-blue" /> Consent Records
           </h2>
           <div className="space-y-2">
             {member.consentLog.map((entry: any) => (

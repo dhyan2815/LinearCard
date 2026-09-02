@@ -1,245 +1,42 @@
 'use client';
-
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Palette, Zap, RefreshCw, ArrowRight, ExternalLink, CheckCircle2, AlertCircle, Plus, X, QrCode, Bell, Settings } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { Settings2, Zap, Menu, Palette, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PassPreviewCard from '@/components/PassPreviewCard';
-import Link from 'next/link';
-import { Button, buttonVariants, buttonBaseClass } from '@/components/ui/Button';
-import { clsx } from 'clsx';
-import { Input } from '@/components/ui/Input';
-import { Card } from '@/components/ui/Card';
-import { Label } from '@/components/ui/Label';
 
-const COLOR_PALETTE = [
-  { name: 'Obsidian', hex: '#18181B' },
-  { name: 'Midnight', hex: '#0F172A' },
-  { name: 'Deep Navy', hex: '#1A365D' },
-  { name: 'Indigo Aura', hex: '#1E1B4B' },
-  { name: 'Dark Emerald', hex: '#064E3B' },
-  { name: 'Espresso', hex: '#38220F' },
-  { name: 'Crimson Velvet', hex: '#4C0519' },
-  { name: 'Royal Purple', hex: '#3B0764' }
-];
+import { LiveManageView } from './_components/LiveManageView';
+import { TemplateWorkspace } from './_components/TemplateWorkspace';
+import { BroadcastView } from './_components/BroadcastView';
+import { SettingsView } from './_components/SettingsView';
 
-const ARCHETYPES = [
-  { value: 'loyalty',      label: 'Loyalty Pass' },
-  { value: 'membership',   label: 'Membership Card' },
-  { value: 'id_card',      label: 'ID Card' },
-  { value: 'access_badge', label: 'Access Badge' },
-] as const;
-type Archetype = typeof ARCHETYPES[number]['value'];
+type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
 
 function WalletStatusPill({ label, status }: { label: string; status: string }) {
   const colors: Record<string, string> = {
-    connected: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    connected: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
     not_configured: 'bg-zinc-500/10 text-ink-muted border-border-subtle',
-    pending_approval: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    pending_approval: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
     loading: 'bg-zinc-500/10 text-ink-muted border-border-subtle',
   };
   const dot: Record<string, string> = {
     connected: 'bg-emerald-500 animate-pulse',
-    not_configured: 'bg-zinc-500',
+    not_configured: 'bg-zinc-400',
     pending_approval: 'bg-amber-500',
     loading: 'bg-zinc-400',
   };
   return (
-    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${colors[status] || colors.not_configured}`}>
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] uppercase tracking-wide font-semibold border ${colors[status] || colors.not_configured}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || dot.not_configured}`} />
       {label}: {(status || 'loading').replace(/_/g, ' ')}
     </div>
   );
 }
 
-function SettingsTab() {
-  const router                       = useRouter();
-  const [tenant,     setTenant]     = React.useState<any>(null);
-  const [webhookUrl, setWebhookUrl] = React.useState('');
-  const [isSaving,   setIsSaving]   = React.useState(false);
-  const [isRotating, setIsRotating] = React.useState(false);
-  const [msg,        setMsg]        = React.useState('');
-  const [authError,  setAuthError]  = React.useState(false);
-
-  React.useEffect(() => {
-    fetch('/api/settings').then(async (r) => {
-      if (r.status === 401) {
-        setAuthError(true);
-        router.push('/admin/login');
-        return;
-      }
-      const d = await r.json();
-      if (d.success) { setTenant(d.tenant); setWebhookUrl(d.tenant.webhookUrl || ''); }
-    }).catch(err => console.error('Error fetching settings:', err));
-  }, []);
-
-  const handleSaveWebhook = async () => {
-    setIsSaving(true); setMsg('');
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ webhookUrl }),
-      });
-      if (res.status === 401) { setAuthError(true); router.push('/admin/login'); return; }
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Failed to save webhook URL');
-      setMsg('Webhook URL saved.');
-    } catch (err: any) { setMsg(`Error: ${err.message}`); }
-    finally { setIsSaving(false); }
-  };
-
-  const handleRotateKey = async () => {
-    if (!confirm('Rotate API key? The old key stops working immediately.')) return;
-    setIsRotating(true);
-    try {
-      const res = await fetch('/api/admin/developer-settings', { method: 'POST' });
-      if (res.status === 401) { setAuthError(true); router.push('/admin/login'); return; }
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Failed to rotate key');
-      setTenant((prev: any) => ({ ...prev, apiKey: data.apiKey }));
-      setMsg('API key rotated.');
-    } catch (err: any) { setMsg(`Error: ${err.message}`); }
-    finally { setIsRotating(false); }
-  };
-
-  if (authError) return (
-    <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
-      Session expired. Redirecting to login…
-    </div>
-  );
-  if (!tenant) return <p className="text-ink-muted text-sm">Loading settings...</p>;
-
-  return (
-    <div className="space-y-6 max-w-2xl">
-      <Card className="p-6 space-y-4">
-        <h3 className="text-base font-semibold text-ink-dark">API Key</h3>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 bg-surface-bone border border-border-subtle rounded-lg px-3 py-2 text-xs font-mono text-ink-secondary truncate">
-            {tenant.apiKey || 'No key generated'}
-          </code>
-          <Button onClick={handleRotateKey} disabled={isRotating} variant="secondary" className="shrink-0">
-            {isRotating ? 'Rotating...' : 'Rotate'}
-          </Button>
-        </div>
-        <p className="text-xs text-ink-muted">Pass as <code>Authorization: Bearer &lt;key&gt;</code> for API calls.</p>
-      </Card>
-      <Card className="p-6 space-y-4">
-        <h3 className="text-base font-semibold text-ink-dark">Webhook URL</h3>
-        <div className="space-y-1">
-          <Label>Endpoint URL</Label>
-          <Input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
-            placeholder="https://your-server.com/webhook/linearcard" />
-        </div>
-        <p className="text-xs text-ink-muted">LinearCard will POST signed events here (HMAC-SHA256 signing in a future release).</p>
-        {msg && <p className={`text-sm font-medium ${msg.startsWith('Error') ? 'text-red-500' : 'text-emerald-400'}`}>{msg}</p>}
-        <Button onClick={handleSaveWebhook} disabled={isSaving} className="w-full">
-          {isSaving ? 'Saving...' : 'Save Webhook URL'}
-        </Button>
-      </Card>
-    </div>
-  );
-}
-
-function NotificationsTab({ tenantId }: { tenantId: string }) {
-  const [channel,   setChannel]   = React.useState<'whatsapp' | 'wallet_push'>('whatsapp');
-  const [message,   setMessage]   = React.useState('');
-  const [isSending, setIsSending] = React.useState(false);
-  const [result,    setResult]    = React.useState<{ sent: number; failed: number } | null>(null);
-  const [sendError, setSendError] = React.useState<string | null>(null);
-  const [logs,      setLogs]      = React.useState<any[]>([]);
-
-  React.useEffect(() => {
-    if (!tenantId) return;
-    fetch(`/api/notifications/log?tenantId=${tenantId}&limit=20`)
-      .then(r => r.json())
-      .then(d => { if (d.success) setLogs(d.logs); })
-      .catch(err => console.error('Error fetching logs:', err));
-  }, [tenantId, result]);
-
-  const handleSend = async () => {
-    if (!tenantId || !message.trim()) return;
-    setIsSending(true); setResult(null); setSendError(null);
-    try {
-      const res = await fetch('/api/notifications/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId, channel, message }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Failed to send');
-      setResult({ sent: data.sent, failed: data.failed });
-      setMessage('');
-    } catch (err: any) {
-      setSendError(err.message);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        <div className="space-y-1">
-          <Label>Channel</Label>
-          <div className="flex gap-2">
-            {(['whatsapp', 'wallet_push'] as const).map(ch => (
-              <button key={ch} type="button" onClick={() => setChannel(ch)}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
-                  channel === ch ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
-                    : 'bg-surface-bone border-border-subtle text-ink-secondary hover:border-border-strong'
-                }`}>
-                {ch === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label>Message</Label>
-          <textarea value={message} onChange={e => setMessage(e.target.value)}
-            placeholder={channel === 'whatsapp' ? 'e.g. Earn double points this weekend!' : 'e.g. Your pass has been updated.'}
-            rows={4} className="w-full rounded-xl border border-border-subtle bg-surface-bone text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-blue resize-none placeholder:text-ink-muted" />
-        </div>
-        {result && <p className="text-sm text-emerald-400 font-medium">✅ Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</p>}
-        {sendError && (
-          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-2">
-            <span className="shrink-0">⚠</span> {sendError}
-          </div>
-        )}
-        <Button onClick={handleSend} disabled={!message.trim() || isSending || !tenantId} className="w-full">
-          {isSending ? 'Sending...' : 'Send to All Members'}
-        </Button>
-      </div>
-      {logs.length > 0 && (
-        <div className="pt-4 border-t border-border-subtle/50">
-          <h3 className="text-base font-semibold text-ink-dark mb-3">Recent Sends</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-            {logs.map((log: any) => (
-              <div key={log.id} className="flex items-start gap-3 p-2.5 rounded-lg bg-surface-card border border-border-subtle/50 text-sm">
-                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${log.status === 'sent' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-ink-dark font-medium truncate capitalize">{log.type}</p>
-                    <span className="text-[10px] text-ink-muted font-mono shrink-0">
-                      {new Date(log.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p className="text-ink-secondary text-xs truncate">
-                    {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown Member'}
-                  </p>
-                  {log.error && <p className="text-red-400 text-xs mt-0.5">{log.error}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'design' | 'issue' | 'manage' | 'notifications' | 'settings'>('design');
+  const [activeTab, setActiveTab] = useState<'design' | 'manage' | 'notify' | 'settings'>('design');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   const [tenants, setTenants] = useState<any[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [origin, setOrigin] = useState<string>('');
@@ -275,7 +72,6 @@ export default function Dashboard() {
   useEffect(() => {
     setOrigin('https://linearcard.vercel.app');
     fetch('/api/tenants').then(res => res.json()).then(data => {
-      // Auto-select the first tenant if available to pre-fill the form
       if (data.success && data.tenants.length > 0) {
         setTenants(data.tenants);
         const initial = data.tenants[0];
@@ -318,11 +114,12 @@ export default function Dashboard() {
       { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
     ]
   });
+  
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
   const [templateStatus, setTemplateStatus] = useState<'unsaved' | 'draft' | 'published'>('unsaved');
 
   useEffect(() => {
-    if (activeTab === 'design' && currentTenant) {
+    if (currentTenant) {
       fetch(`/api/templates?tenantId=${currentTenant.id}`)
         .then(res => res.json())
         .then(data => {
@@ -350,74 +147,16 @@ export default function Dashboard() {
           setTemplateStatus('unsaved');
         });
     }
-  }, [activeTab, currentTenant]);
+  }, [currentTenant]);
 
   const [manageData, setManageData] = useState({
-    passId: '',
-    balance: '',
-    tier: '',
-    pushNotification: '',
-    phone: '',
-    brandName: ''
+    passId: '', balance: '', tier: '', pushNotification: '', phone: '', brandName: ''
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [generatedPassUrl, setGeneratedPassUrl] = useState<string | null>(null);
   const [passHistory, setPassHistory] = useState<any[]>([]);
-
-  const getWalletUrl = (url: string | null) => {
-    return url || '#';
-  };
-
-  const addRow = () => {
-    // Limit to 3 rows max as dictated by Google Wallet's layout constraints
-    if (designData.rows.length >= 3) return;
-    setDesignData({
-      ...designData, 
-      rows: [...designData.rows, { id: `row${Date.now()}`, columns: [{ header: 'New Field', body: 'Value' }] }]
-    });
-  };
-
-  const removeRow = (rowId: string) => {
-    setDesignData({ ...designData, rows: designData.rows.filter(r => r.id !== rowId) });
-  };
-
-  const addColumn = (rowId: string) => {
-    const newRows = designData.rows.map(r => {
-      // Limit columns to 3 per row to prevent text overlap in the mobile wallet
-      if (r.id === rowId && r.columns.length < 3) {
-        return { ...r, columns: [...r.columns, { header: 'New Field', body: 'Value' }] };
-      }
-      return r;
-    });
-    setDesignData({ ...designData, rows: newRows });
-  };
-
-  const updateColumn = (rowId: string, colIndex: number, field: 'header' | 'body', value: string) => {
-    const newRows = designData.rows.map(r => {
-      if (r.id === rowId) {
-        const newCols = [...r.columns];
-        newCols[colIndex] = { ...newCols[colIndex], [field]: value };
-        return { ...r, columns: newCols };
-      }
-      return r;
-    });
-    setDesignData({ ...designData, rows: newRows });
-  };
-
-  const removeColumn = (rowId: string, colIndex: number) => {
-    const newRows = designData.rows.map(r => {
-      if (r.id === rowId) {
-        const newCols = [...r.columns];
-        newCols.splice(colIndex, 1);
-        return { ...r, columns: newCols };
-      }
-      return r;
-    });
-    setDesignData({ ...designData, rows: newRows });
-  };
 
   const handleUpdatePass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,457 +189,156 @@ export default function Dashboard() {
       tier: pass.passData?.tier || '',
       pushNotification: ''
     }));
-    setActiveTab('manage'); setSuccessMsg(null); setError(null);
+    setSuccessMsg(null); setError(null);
   };
 
-  const handleCopyLink = async () => {
-    if (generatedPassUrl) {
-      await navigator.clipboard.writeText(generatedPassUrl);
-      alert('Link copied to clipboard!');
-    }
-  };
-
-  const fadeUp = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5, type: 'spring' as const, bounce: 0, damping: 20 } }
-  };
+  const tabs = [
+    { id: 'design', label: 'Template Canvas', icon: <Palette className="w-4 h-4" /> },
+    { id: 'manage', label: 'Live Updates', icon: <Zap className="w-4 h-4" /> },
+    { id: 'notify', label: 'Broadcasts', icon: <Bell className="w-4 h-4" /> },
+    { id: 'settings', label: 'Settings', icon: <Settings2 className="w-4 h-4" /> },
+  ] as const;
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.main key="dashboard" initial="hidden" animate="visible" exit="exit" variants={fadeUp} className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
-        <div className="mb-8 flex justify-between items-center">
-          <div />
-          <Link href="/scan" className={clsx(buttonBaseClass, buttonVariants.secondary, "py-2")}>
-            <QrCode className="w-4 h-4" /> Scanner App
-          </Link>
+    <div className="flex h-screen overflow-hidden bg-canvas">
+      {/* LEFT SIDEBAR (Collapsible) */}
+      <motion.aside 
+        initial={false}
+        animate={{ width: isSidebarOpen ? 240 : 64 }}
+        className="flex flex-col border-r border-border-subtle bg-surface-card z-20 shrink-0"
+      >
+        <div className="h-14 flex items-center px-4 border-b border-border-subtle">
+           <motion.div animate={{ opacity: isSidebarOpen ? 1 : 0 }} className="whitespace-nowrap overflow-hidden">
+             {isSidebarOpen && <span className="font-semibold text-ink-dark text-sm tracking-wide">LINEAR CARD</span>}
+           </motion.div>
         </div>
-        
-        <div className="mb-10">
-          <h1 className="text-3xl font-semibold text-ink-dark tracking-tight mb-6">
-            Dashboard
-          </h1>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
-            <Card className="p-4 bg-surface-card border-border-subtle flex flex-col justify-center">
-              <p className="text-sm font-medium text-ink-secondary">Total Members</p>
-              <h3 className="text-2xl font-semibold text-ink-dark mt-1">{stats.memberCount}</h3>
-            </Card>
-            <Card className="p-4 bg-surface-card border-border-subtle flex flex-col justify-center">
-              <p className="text-sm font-medium text-ink-secondary">Passes Issued</p>
-              <h3 className="text-2xl font-semibold text-ink-dark mt-1">{stats.passCount}</h3>
-            </Card>
-            <Card className="p-4 bg-surface-card border-border-subtle flex flex-col justify-center">
-              <p className="text-sm font-medium text-ink-secondary">System Status</p>
-              <div className="flex items-center gap-2 mt-1">
-                <div className={`w-2 h-2 rounded-full ${stats.walletStatus.google === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-brand-blue'}`} />
-                <h3 className="text-sm font-medium text-ink-dark">
-                  {stats.walletStatus.google === 'connected' ? 'Google Wallet Active' : 'Setup Required'}
-                </h3>
-              </div>
-            </Card>
-          </div>
+        <div className="flex-1 py-4 flex flex-col gap-1.5 px-2 overflow-hidden">
+           {tabs.map((tab) => (
+             <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors overflow-hidden ${
+                  activeTab === tab.id 
+                    ? 'bg-brand-blue/10 text-brand-blue' 
+                    : 'text-ink-secondary hover:bg-canvas hover:text-ink-dark'
+                }`}
+             >
+                <div className="shrink-0">{tab.icon}</div>
+                <motion.span 
+                  animate={{ opacity: isSidebarOpen ? 1 : 0, width: isSidebarOpen ? 'auto' : 0 }} 
+                  className="text-[13px] font-medium whitespace-nowrap overflow-hidden"
+                >
+                  {tab.label}
+                </motion.span>
+             </button>
+           ))}
+        </div>
+      </motion.aside>
 
-          <div className="flex flex-wrap gap-2 mt-4">
-            <WalletStatusPill label="Google Wallet" status={stats.walletStatus.google} />
-            <WalletStatusPill label="Apple Wallet"  status={stats.walletStatus.apple} />
-            <WalletStatusPill label="Samsung Wallet" status={stats.walletStatus.samsung} />
-          </div>
-
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-6">
-            <div className="flex flex-wrap sm:flex-nowrap gap-2 bg-surface-card p-1.5 rounded-xl border border-border-subtle w-full sm:w-fit">
-              <button onClick={() => setActiveTab('design')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'design' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
-                <Palette className="w-4 h-4"/> Template
-              </button>
-
-              <button onClick={() => setActiveTab('manage')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'manage' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
-                <RefreshCw className="w-4 h-4"/> Live Updates
-              </button>
-              <button onClick={() => setActiveTab('notifications')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'notifications' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
-                <Bell className="w-4 h-4"/> Notify
-              </button>
-              <button onClick={() => setActiveTab('settings')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
-                <Settings className="w-4 h-4"/> Settings
-              </button>
-            </div>
-            <div className="flex flex-col items-start sm:items-end gap-1.5 w-full sm:w-auto">
-               <label className="text-xs font-medium text-ink-secondary">Select Tenant</label>
-               <select value={selectedTenantId} onChange={(e) => handleTenantChange(e.target.value)} className="w-full sm:w-auto bg-surface-card border border-border-subtle rounded-lg px-3 py-1.5 text-sm text-ink-dark focus:outline-none focus:border-brand-blue">
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 flex flex-col min-w-0 bg-canvas">
+         {/* TOP NAVBAR */}
+         <header className="h-14 border-b border-border-subtle bg-surface-card flex items-center justify-between px-4 sm:px-6 shadow-sm z-10">
+            <div className="flex items-center gap-4">
+               <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1.5 text-ink-secondary hover:text-ink-dark hover:bg-canvas rounded-md transition-colors">
+                  <Menu className="w-5 h-5" />
+               </button>
+               <h1 className="font-semibold text-ink-dark text-sm hidden sm:block">LinearCard Admin</h1>
+               
+               <div className="h-4 w-px bg-border-strong hidden sm:block"/>
+               
+               <select value={selectedTenantId} onChange={(e) => handleTenantChange(e.target.value)} className="bg-transparent text-[13px] text-ink-secondary hover:text-ink-dark font-medium focus:outline-none focus:ring-0 cursor-pointer p-0 border-none appearance-none">
                   {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                </select>
             </div>
-          </div>
-        </div>
+            
+            <div className="flex items-center gap-4 sm:gap-6">
+               <div className="flex items-center gap-1.5">
+                 <span className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">Members</span>
+                 <span className="text-[13px] font-semibold text-ink-dark">{stats.memberCount}</span>
+               </div>
+               <div className="h-4 w-px bg-border-strong hidden sm:block"/>
+               <WalletStatusPill label="API" status={stats.walletStatus.google} />
+            </div>
+         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          <div className="lg:col-span-7 space-y-6">
-            <Card className="p-6 sm:p-8">
-              
-              {/* DESIGN TAB */}
-              {activeTab === 'design' && (
-                <motion.div key="tab-design" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
-                  <div className="border-b border-border-subtle pb-4 mb-4">
-                    <h2 className="text-xl font-medium text-ink-dark tracking-tight">Template Designer</h2>
-                    <p className="text-sm text-ink-secondary mt-1">Design your Class template mirroring the Google Wallet console structure.</p>
-                  </div>
-
-                  {origin && (
-                    <div className="bg-surface-card border border-brand-blue/30 p-4 rounded-xl flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <Label className="text-brand-blue mb-1">Consumer Enrollment Link</Label>
-                        <div className="flex items-center gap-2 mt-1 min-w-0">
-                          <code className="text-xs bg-surface-bone px-2 py-1 rounded text-ink-dark truncate flex-1">
-                            {`${origin}/enroll/${designData.classSuffix}`}
-                          </code>
-                          <Button 
-                            type="button" 
-                            variant="secondary" 
-                            className="shrink-0 h-7 text-xs px-3"
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${origin}/enroll/${designData.classSuffix}`);
-                              alert('Enrollment link copied to clipboard!');
-                            }}
-                          >
-                            Copy Link
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="p-2 bg-white rounded-lg shrink-0">
-                        <QRCodeSVG value={`${origin}/enroll/${designData.classSuffix}`} size={64} level="L" includeMargin={false} />
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div>
-                    <Label>Class Suffix</Label>
-                    <Input type="text" value={designData.classSuffix} onChange={(e) => setDesignData({...designData, classSuffix: e.target.value})} className="font-mono" required/>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label>Pass Archetype</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {ARCHETYPES.map((arch) => (
-                        <button key={arch.value} type="button"
-                          onClick={() => setDesignData(prev => ({ ...prev, archetype: arch.value }))}
-                          className={`py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
-                            designData.archetype === arch.value
-                              ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
-                              : 'bg-surface-bone border-border-subtle text-ink-secondary hover:border-border-strong'
-                          }`}>
-                          {arch.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label>Program / Brand Title</Label>
-                    <Input type="text" value={designData.cardTitle} onChange={(e) => setDesignData({...designData, cardTitle: e.target.value})} required/>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <Label>Logo Image URL</Label>
-                      <Input type="text" value={designData.logoUrl} onChange={(e) => setDesignData({...designData, logoUrl: e.target.value})} placeholder="https://.../logo.png"/>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => setDesignData({...designData, logoUrl: reader.result as string});
-                            reader.readAsDataURL(file);
-                          }
-                        }} 
-                        className="w-full text-xs text-ink-secondary file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-blue/10 file:text-brand-blue hover:file:bg-brand-blue/20 cursor-pointer"
+         {/* WORKSPACE */}
+         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+           <AnimatePresence mode="wait">
+             <motion.div 
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="h-full"
+             >
+               {activeTab === 'design' && (
+                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12 max-w-[1600px] mx-auto">
+                    <div className="xl:col-span-8 flex flex-col gap-6">
+                      <TemplateWorkspace 
+                          designData={designData}
+                          setDesignData={setDesignData}
+                          origin={origin}
+                          templateStatus={templateStatus}
+                          savedTemplateId={savedTemplateId}
+                          setSavedTemplateId={setSavedTemplateId}
+                          setTemplateStatus={setTemplateStatus}
+                          currentTenant={currentTenant}
+                          selectedTenantId={selectedTenantId}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Hero Image URL</Label>
-                      <Input type="text" value={designData.heroImageUrl} onChange={(e) => setDesignData({...designData, heroImageUrl: e.target.value})} placeholder="https://.../hero.png"/>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => setDesignData({...designData, heroImageUrl: reader.result as string});
-                            reader.readAsDataURL(file);
-                          }
-                        }} 
-                        className="w-full text-xs text-ink-secondary file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-blue/10 file:text-brand-blue hover:file:bg-brand-blue/20 cursor-pointer"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="bg-surface-card p-5 rounded-xl border border-border-subtle space-y-4">
-                    <div className="flex items-center justify-between">
-                       <Label>Dynamic Rows</Label>
-                       <button type="button" onClick={addRow} disabled={designData.rows.length >= 3} className="text-xs font-medium text-brand-blue hover:text-brand-blue-hover transition-colors flex items-center gap-1 disabled:opacity-50">
-                         <Plus className="w-3 h-3" /> Add Row
-                       </button>
-                    </div>
-                    
-                    {designData.rows.map((row, rIdx) => (
-                      <div key={row.id} className="p-3 bg-canvas rounded-lg border border-border-subtle relative">
-                        <div className="flex items-center justify-between mb-3">
-                           <span className="text-[10px] font-medium text-ink-muted">Row {rIdx + 1}</span>
-                           <button type="button" onClick={() => removeRow(row.id)} className="text-ink-muted hover:text-red-500 transition-colors"><X className="w-3 h-3"/></button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {row.columns.map((col, cIdx) => (
-                            <div key={cIdx} className="flex-1 min-w-30 space-y-1.5 border-l border-border-subtle pl-3">
-                              <div className="flex justify-between items-center">
-                                 <input type="text" value={col.header} onChange={(e) => updateColumn(row.id, cIdx, 'header', e.target.value)} placeholder="Header" className="text-xs font-medium w-full bg-transparent border-none focus:ring-0 p-0 text-ink-dark placeholder:text-ink-muted outline-none" />
-                                 {row.columns.length > 1 && (
-                                   <button type="button" onClick={() => removeColumn(row.id, cIdx)} className="text-ink-muted hover:text-red-500 ml-1"><X className="w-3 h-3"/></button>
-                                 )}
-                              </div>
-                              <input type="text" value={col.body} onChange={(e) => updateColumn(row.id, cIdx, 'body', e.target.value)} placeholder="Body" className="text-sm w-full bg-transparent border-none focus:ring-0 p-0 text-ink-secondary placeholder:text-ink-muted outline-none" />
-                            </div>
-                          ))}
-                          {row.columns.length < 3 && (
-                            <button type="button" onClick={() => addColumn(row.id)} className="flex items-center justify-center w-8 h-8 rounded-md border border-dashed border-border-strong text-ink-muted hover:text-brand-blue hover:border-brand-blue transition-colors shrink-0">
-                              <Plus className="w-4 h-4"/>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div>
-                    <Label>Background Theme</Label>
-                    <div className="flex flex-wrap items-center gap-3 mt-2">
-                      {COLOR_PALETTE.map((c) => (
-                        <button 
-                          key={c.hex} type="button" title={c.name}
-                          onClick={() => setDesignData({...designData, hexBackgroundColor: c.hex})} 
-                          className={`w-8 h-8 rounded-full border-2 transition-all ${designData.hexBackgroundColor === c.hex ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.3)]' : 'border-transparent opacity-60 hover:scale-105'}`} 
-                          style={{backgroundColor: c.hex}}
+                    <div className="xl:col-span-4 flex justify-center xl:sticky xl:top-0">
+                      <motion.div whileHover={{ scale: 1.02, rotateY: -2, rotateX: 2 }} transition={{ type: "spring", stiffness: 200, damping: 20 }} className="w-full sm:w-[320px]">
+                        <PassPreviewCard
+                          memberName={manageData.passId ? 'Live Pass' : 'Dhyan Patel'}
+                          cardTitle={designData.cardTitle}
+                          hexBackgroundColor={designData.hexBackgroundColor}
+                          barcodeAltText={'882190'}
+                          barcodeValue={'https://linearcard.vercel.app/member/882190'}
+                          logoUrl={designData.logoUrl}
+                          heroImageUrl={designData.heroImageUrl}
+                          rows={designData.rows}
+                          manageTier={manageData.tier}
+                          manageBalance={manageData.balance}
+                          isManageTab={!!manageData.passId}
                         />
-                      ))}
+                      </motion.div>
                     </div>
-                  </div>
+                 </div>
+               )}
 
-                  {templateStatus !== 'unsaved' && (
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
-                      templateStatus === 'published'
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${templateStatus === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                      {templateStatus === 'published' ? 'Published to Wallet' : 'Draft saved'}
-                    </div>
-                  )}
+               {activeTab === 'manage' && (
+                 <div className="max-w-[1600px] mx-auto">
+                   <LiveManageView 
+                      tenantId={selectedTenantId}
+                      manageData={manageData}
+                      setManageData={setManageData}
+                      handleUpdatePass={handleUpdatePass}
+                      loading={loading}
+                      error={error}
+                      successMsg={successMsg}
+                      passHistory={passHistory}
+                      selectPassForManage={selectPassForManage}
+                   />
+                 </div>
+               )}
 
-                  <div className="flex gap-2 pt-2">
-                    <Button type="button" variant="secondary" className="flex-1" onClick={async () => {
-                      try {
-                        if (savedTemplateId) {
-                          const res = await fetch(`/api/templates/${savedTemplateId}`, {
-                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
-                          });
-                          const data = await res.json();
-                          if (data.success) { alert('Draft updated'); setTemplateStatus('draft'); }
-                        } else {
-                          const res = await fetch('/api/templates', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, classSuffix: designData.classSuffix, name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
-                          });
-                          const data = await res.json();
-                          if (data.success) { setSavedTemplateId(data.template.id); setTemplateStatus('draft'); alert('Draft saved'); }
-                        }
-                      } catch (e) { console.error(e); alert('Error saving draft'); }
-                    }}>
-                      Save as Draft
-                    </Button>
-                    <Button type="button" className="flex-1" disabled={templateStatus === 'published'} onClick={async () => {
-                      let tplId = savedTemplateId;
-                      if (!tplId) {
-                        // No existing template — create one from current on-screen state
-                        try {
-                          const res = await fetch('/api/templates', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, name: designData.cardTitle || 'New Template', archetype: designData.archetype, classSuffix: designData.classSuffix, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
-                          });
-                          const data = await res.json();
-                          if (!data.success) throw new Error(data.error || 'Failed to create template');
-                          tplId = data.template.id;
-                          setSavedTemplateId(tplId);
-                        } catch (err: any) { alert(`Failed: ${err.message}`); return; }
-                      } else {
-                        // Template already exists — auto-sync on-screen edits to DB before publishing
-                        try {
-                          const res = await fetch(`/api/templates/${tplId}`, {
-                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
-                          });
-                          const data = await res.json();
-                          if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
-                          setTemplateStatus('draft');
-                        } catch (err: any) { alert(`Sync failed: ${err.message}`); return; }
-                      }
-                      try {
-                        const res = await fetch(`/api/templates/${tplId}/publish`, { method: 'POST' });
-                        const data = await res.json();
-                        if (!data.success) throw new Error(data.error || 'Failed to publish');
-                        setTemplateStatus('published');
-                        alert('Published to Google Wallet API');
-                      } catch (e: any) { console.error(e); alert(`Publish failed: ${e.message}`); }
-                    }}>
-                      Publish to Wallet
-                    </Button>
-                  </div>
-                </motion.div>
-              )}
+               {activeTab === 'notify' && (
+                 <div className="max-w-[1600px] mx-auto">
+                    <BroadcastView tenantId={selectedTenantId} />
+                 </div>
+               )}
 
-
-
-              {/* MANAGE TAB */}
-              {activeTab === 'manage' && (
-                <motion.form key="tab-manage" initial={{opacity:0}} animate={{opacity:1}} onSubmit={handleUpdatePass} className="space-y-6">
-                  <div className="border-b border-border-subtle pb-4 mb-4">
-                    <h2 className="text-xl font-medium text-ink-dark tracking-tight">Live Update</h2>
-                    <p className="text-sm text-ink-secondary mt-1">Select a pass from history to instantly patch its data.</p>
-                  </div>
-                  <div>
-                    <Label>Object Pass ID</Label>
-                    <Input type="text" value={manageData.passId} onChange={(e) => setManageData({...manageData, passId: e.target.value})} placeholder="Select a pass from history" className="font-mono" required readOnly/>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                     <div>
-                      <Label>Update Tier</Label>
-                      <Input type="text" value={manageData.tier} onChange={(e) => setManageData({...manageData, tier: e.target.value})} required disabled={!manageData.passId}/>
-                    </div>
-                    <div>
-                      <Label>Update Balance</Label>
-                      <Input type="text" value={manageData.balance} onChange={(e) => setManageData({...manageData, balance: e.target.value})} required disabled={!manageData.passId}/>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <Label>Push Notification Message (Optional)</Label>
-                    <Input 
-                      type="text" 
-                      value={manageData.pushNotification} 
-                      onChange={(e) => setManageData({...manageData, pushNotification: e.target.value})} 
-                      placeholder="e.g. Your new balance is 150 Pts." 
-                      disabled={!manageData.passId}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
-                      <Label>Customer Phone (WA Receipt)</Label>
-                      <Input type="text" value={manageData.phone} onChange={(e) => setManageData({...manageData, phone: e.target.value})} placeholder="+91..." disabled={!manageData.passId}/>
-                    </div>
-                    <div>
-                      <Label>Brand Name</Label>
-                      <Input type="text" value={manageData.brandName} onChange={(e) => setManageData({...manageData, brandName: e.target.value})} placeholder="LinearCard" disabled={!manageData.passId}/>
-                    </div>
-                  </div>
-
-                  <Button type="submit" disabled={loading || !manageData.passId} className="w-full">
-                    {loading ? 'Patching via API...' : 'Push Live Update'}
-                  </Button>
-                </motion.form>
-              )}
-
-              {/* NOTIFICATIONS TAB */}
-              {activeTab === 'notifications' && (
-                <motion.div key="tab-notifications" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
-                  <div className="border-b border-border-subtle pb-4 mb-4">
-                    <h2 className="text-xl font-medium text-ink-dark tracking-tight">Notifications Composer</h2>
-                    <p className="text-sm text-ink-secondary mt-1">Broadcast marketing updates or pass notifications across WhatsApp and Wallet Push.</p>
-                  </div>
-                  <NotificationsTab tenantId={selectedTenantId} />
-                </motion.div>
-              )}
-
-              {/* SETTINGS TAB */}
-              {activeTab === 'settings' && (
-                <motion.div key="tab-settings" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
-                  <div className="border-b border-border-subtle pb-4 mb-4">
-                    <h2 className="text-xl font-medium text-ink-dark tracking-tight">Tenant Settings</h2>
-                    <p className="text-sm text-ink-secondary mt-1">Configure your API credentials and webhook integration endpoints.</p>
-                  </div>
-                  <SettingsTab />
-                </motion.div>
-              )}
-
-              {error && <motion.div initial={{opacity:0}} animate={{opacity:1}} className="mt-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-start gap-3"><AlertCircle className="w-4 h-4 shrink-0 mt-0.5"/> <p>{error}</p></motion.div>}
-              {successMsg && <motion.div initial={{opacity:0}} animate={{opacity:1}} className="mt-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-start gap-3"><CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/> <p>{successMsg}</p></motion.div>}
-            </Card>
-          </div>
-
-          <div className="lg:col-span-5 space-y-6">
-            <Card className="p-6 flex flex-col items-center bg-surface-card border-none">
-               <div className="w-full flex items-center justify-between mb-6">
-                <span className="text-sm font-medium text-ink-secondary">Live Preview</span>
-              </div>
-              <div className="w-full py-2 flex justify-center">
-                <motion.div whileHover={{ scale: 1.02, rotateY: -2, rotateX: 2 }} transition={{ type: "spring", stiffness: 200, damping: 20 }} className="w-full sm:max-w-112.5">
-                  <PassPreviewCard
-                    memberName={activeTab === 'manage' && manageData.passId ? 'Live Pass' : 'Dhyan Patel'}
-                    cardTitle={designData.cardTitle}
-                    hexBackgroundColor={designData.hexBackgroundColor}
-                    barcodeAltText={'882190'}
-                    barcodeValue={'https://linearcard.vercel.app/member/882190'}
-                    logoUrl={designData.logoUrl}
-                    heroImageUrl={designData.heroImageUrl}
-                    rows={designData.rows}
-                    manageTier={manageData.tier}
-                    manageBalance={manageData.balance}
-                    isManageTab={activeTab === 'manage' && !!manageData.passId}
-                  />
-                </motion.div>
-              </div>
-            </Card>
-
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-medium text-ink-secondary">Session Passes</span>
-                <span className="text-[10px] text-ink-muted bg-surface-card px-2 py-1 rounded">Click to Manage</span>
-              </div>
-              
-              {passHistory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-28 text-ink-muted text-sm border border-dashed border-border-subtle rounded-xl bg-surface-card/50">
-                  No passes generated yet.
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {passHistory.map((item, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => selectPassForManage(item)}
-                      className={`p-3 rounded-lg border flex items-center justify-between cursor-pointer transition-colors group ${
-                        manageData.passId === (item.fullPassId || item.passId)
-                          ? 'bg-brand-blue/10 border-brand-blue/30'
-                          : 'bg-surface-card border-border-subtle hover:border-border-strong'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: item.passData?.hexBackgroundColor || '#1A365D'}}/>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-ink-dark truncate">
-                            {item.passData?.memberName}
-                          </p>
-                          <p className="text-[10px] text-ink-muted font-mono truncate">
-                            {item.fullPassId || item.passId}
-                          </p>
-                        </div>
-                      </div>
-                      <ArrowRight className={`w-3.5 h-3.5 transition-all ${manageData.passId === (item.fullPassId || item.passId) ? 'text-brand-blue' : 'text-ink-muted group-hover:text-ink-secondary'}`} />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-          </div>
-        </div>
-      </motion.main>
-    </AnimatePresence>
+               {activeTab === 'settings' && (
+                 <div className="max-w-[1600px] mx-auto">
+                    <SettingsView />
+                 </div>
+               )}
+             </motion.div>
+           </AnimatePresence>
+         </main>
+      </div>
+    </div>
   );
 }
