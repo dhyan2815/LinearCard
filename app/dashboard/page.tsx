@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Palette, Zap, RefreshCw, ArrowRight, ExternalLink, CheckCircle2, AlertCircle, Plus, X, QrCode } from 'lucide-react';
+import { Palette, Zap, RefreshCw, ArrowRight, ExternalLink, CheckCircle2, AlertCircle, Plus, X, QrCode, Bell } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
 import PassPreviewCard from '@/components/PassPreviewCard';
@@ -31,8 +31,98 @@ const ARCHETYPES = [
 ] as const;
 type Archetype = typeof ARCHETYPES[number]['value'];
 
+function NotificationsTab({ tenantId }: { tenantId: string }) {
+  const [channel,   setChannel]   = React.useState<'whatsapp' | 'wallet_push'>('whatsapp');
+  const [message,   setMessage]   = React.useState('');
+  const [isSending, setIsSending] = React.useState(false);
+  const [result,    setResult]    = React.useState<{ sent: number; failed: number } | null>(null);
+  const [logs,      setLogs]      = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    fetch(`/api/notifications/log?tenantId=${tenantId}&limit=20`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setLogs(d.logs); })
+      .catch(err => console.error('Error fetching logs:', err));
+  }, [tenantId, result]);
+
+  const handleSend = async () => {
+    if (!tenantId || !message.trim()) return;
+    setIsSending(true); setResult(null);
+    try {
+      const res = await fetch('/api/notifications/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, channel, message }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to send');
+      setResult({ sent: data.sent, failed: data.failed });
+      setMessage('');
+    } catch (err: any) {
+      alert(`Failed: ${err.message}`);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <Label>Channel</Label>
+          <div className="flex gap-2">
+            {(['whatsapp', 'wallet_push'] as const).map(ch => (
+              <button key={ch} type="button" onClick={() => setChannel(ch)}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
+                  channel === ch ? 'bg-brand-orange/10 border-brand-orange text-brand-orange'
+                    : 'bg-surface-bone border-border-subtle text-ink-secondary hover:border-border-strong'
+                }`}>
+                {ch === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label>Message</Label>
+          <textarea value={message} onChange={e => setMessage(e.target.value)}
+            placeholder={channel === 'whatsapp' ? 'e.g. Earn double points this weekend!' : 'e.g. Your pass has been updated.'}
+            rows={4} className="w-full rounded-xl border border-border-subtle bg-surface-bone text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-orange resize-none placeholder:text-ink-muted" />
+        </div>
+        {result && <p className="text-sm text-emerald-400 font-medium">✅ Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</p>}
+        <Button onClick={handleSend} disabled={!message.trim() || isSending || !tenantId} className="w-full">
+          {isSending ? 'Sending...' : 'Send to All Members'}
+        </Button>
+      </div>
+      {logs.length > 0 && (
+        <div className="pt-4 border-t border-border-subtle/50">
+          <h3 className="text-base font-semibold text-ink-dark mb-3">Recent Sends</h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {logs.map((log: any) => (
+              <div key={log.id} className="flex items-start gap-3 p-2.5 rounded-lg bg-surface-card border border-border-subtle/50 text-sm">
+                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${log.status === 'sent' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-ink-dark font-medium truncate capitalize">{log.type}</p>
+                    <span className="text-[10px] text-ink-muted font-mono shrink-0">
+                      {new Date(log.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-ink-secondary text-xs truncate">
+                    {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown Member'}
+                  </p>
+                  {log.error && <p className="text-red-400 text-xs mt-0.5">{log.error}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'design' | 'issue' | 'manage'>('design');
+  const [activeTab, setActiveTab] = useState<'design' | 'issue' | 'manage' | 'developer' | 'notifications'>('design');
   const [tenants, setTenants] = useState<any[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [origin, setOrigin] = useState<string>('');
@@ -328,6 +418,9 @@ export default function Dashboard() {
               <button onClick={() => setActiveTab('manage')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'manage' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
                 <RefreshCw className="w-4 h-4"/> Live Updates
               </button>
+              <button onClick={() => setActiveTab('notifications')} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${activeTab === 'notifications' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
+                <Bell className="w-4 h-4"/> Notify
+              </button>
               <button onClick={() => setActiveTab('developer' as any)} className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${(activeTab as any) === 'developer' ? 'bg-surface-bone text-ink-dark shadow-sm' : 'text-ink-secondary hover:text-ink-dark'}`}>
                 <Zap className="w-4 h-4"/> Developer Settings
               </button>
@@ -605,6 +698,17 @@ export default function Dashboard() {
                     {loading ? 'Patching via API...' : 'Push Live Update'}
                   </Button>
                 </motion.form>
+              )}
+
+              {/* NOTIFICATIONS TAB */}
+              {activeTab === 'notifications' && (
+                <motion.div key="tab-notifications" initial={{opacity:0}} animate={{opacity:1}} className="space-y-6">
+                  <div className="border-b border-white/5 pb-4 mb-4">
+                    <h2 className="text-xl font-medium text-ink-dark tracking-tight">Notifications Composer</h2>
+                    <p className="text-sm text-ink-secondary mt-1">Broadcast marketing updates or pass notifications across WhatsApp and Wallet Push.</p>
+                  </div>
+                  <NotificationsTab tenantId={selectedTenantId} />
+                </motion.div>
               )}
 
               {/* DEVELOPER SETTINGS TAB */}
