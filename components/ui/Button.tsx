@@ -2,7 +2,7 @@ import React, { ButtonHTMLAttributes, forwardRef } from 'react';
 import { clsx } from 'clsx';
 
 export const buttonVariants = {
-  primary: "bg-brand-orange text-white border border-white/10 hover:bg-brand-orange-hover shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] cursor-pointer",
+  primary: "bg-brand-blue text-white border border-white/10 hover:bg-brand-blue-hover shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] cursor-pointer",
   secondary: "bg-surface-card text-ink-dark border border-border-subtle hover:bg-surface-bone cursor-pointer"
 };
 

@@ -82,7 +82,7 @@ export default function TenantEnrollPage() {
   if (currentScreen === 'loading') {
     return (
       <main className="flex-1 w-full mx-auto px-4 py-20 flex flex-col items-center justify-center">
-         <div className="w-8 h-8 border-4 border-brand-orange/30 border-t-brand-orange rounded-full animate-spin"/>
+         <div className="w-8 h-8 border-4 border-brand-blue/30 border-t-brand-blue rounded-full animate-spin"/>
       </main>
     );
   }
@@ -172,7 +172,7 @@ export default function TenantEnrollPage() {
                            }}
                          >
                            <span className="text-base">{c.flag}</span>
-                           <span className="text-brand-orange font-medium w-10">{c.code}</span>
+                           <span className="text-brand-blue font-medium w-10">{c.code}</span>
                            <span className="truncate text-ink-secondary">{c.name}</span>
                          </div>
                        )) : (
@@ -189,7 +189,7 @@ export default function TenantEnrollPage() {
                  </div>
                </div>
                <div className="flex items-start gap-3 p-4 bg-surface-card rounded-xl border border-border-subtle">
-                 <input type="checkbox" id="consent" checked={consentGiven} onChange={(e) => setConsentGiven(e.target.checked)} className="mt-1 w-4 h-4 rounded text-brand-orange focus:ring-brand-orange border-border-strong bg-surface-bone" required/>
+                 <input type="checkbox" id="consent" checked={consentGiven} onChange={(e) => setConsentGiven(e.target.checked)} className="mt-1 w-4 h-4 rounded text-brand-blue focus:ring-brand-blue border-border-strong bg-surface-bone" required/>
                  <label htmlFor="consent" className="text-xs font-medium text-ink-secondary cursor-pointer leading-relaxed">
                    I consent to receiving WhatsApp messages and agree to the DPDP guidelines for digital identity verification.
                  </label>
@@ -281,7 +281,7 @@ export default function TenantEnrollPage() {
            <Card className="p-6 sm:p-8 w-full flex flex-col items-center text-center relative overflow-hidden">
              {/* Decorative background glows */}
              <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-             <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-brand-orange/10 rounded-full blur-3xl pointer-events-none" />
+             <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-brand-blue/10 rounded-full blur-3xl pointer-events-none" />
              
              <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20 shadow-inner relative z-10">
                <ShieldCheck className="w-10 h-10 text-emerald-500" />

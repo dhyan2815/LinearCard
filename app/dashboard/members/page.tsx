@@ -63,7 +63,7 @@ export default function MembersPage() {
       <div className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-ink-dark tracking-tight mb-2 flex items-center gap-3">
-            <Users className="w-8 h-8 text-brand-orange" />
+            <Users className="w-8 h-8 text-brand-blue" />
             Members List
           </h1>
           <p className="text-sm text-ink-secondary">View and search through all enrolled members.</p>
@@ -74,7 +74,7 @@ export default function MembersPage() {
              <select 
                value={selectedTenantId} 
                onChange={(e) => setSelectedTenantId(e.target.value)} 
-               className="w-full sm:w-48 bg-surface-card border border-border-subtle rounded-lg px-3 py-2 text-sm text-ink-dark focus:outline-none focus:border-brand-orange"
+               className="w-full sm:w-48 bg-surface-card border border-border-subtle rounded-lg px-3 py-2 text-sm text-ink-dark focus:outline-none focus:border-brand-blue"
              >
                 <option value="all">All Brands</option>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}

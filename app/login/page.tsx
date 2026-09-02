@@ -118,7 +118,7 @@ export default function LoginPage() {
                            }}
                          >
                            <span className="text-base">{c.flag}</span>
-                           <span className="text-brand-orange font-medium w-10">{c.code}</span>
+                           <span className="text-brand-blue font-medium w-10">{c.code}</span>
                            <span className="truncate text-ink-secondary">{c.name}</span>
                          </div>
                        )) : (
@@ -145,8 +145,8 @@ export default function LoginPage() {
       {currentScreen === 'admin_otp' && (
         <motion.main key="admin_otp" initial="hidden" animate="visible" exit="exit" variants={slideLeft} className="flex-1 max-w-md w-full mx-auto px-4 py-12 sm:py-20 flex flex-col items-center justify-center">
            <Card className="p-6 sm:p-8 w-full">
-             <div className="w-10 h-10 bg-brand-orange/10 rounded-xl flex items-center justify-center mb-6 border border-brand-orange/20">
-               <Zap className="w-5 h-5 text-brand-orange" />
+             <div className="w-10 h-10 bg-brand-blue/10 rounded-xl flex items-center justify-center mb-6 border border-brand-blue/20">
+               <Zap className="w-5 h-5 text-brand-blue" />
              </div>
              <h2 className="text-2xl font-semibold tracking-tight mb-2">Verify Admin Access</h2>
              <p className="text-ink-secondary text-sm mb-8">We sent a secure code to <strong className="text-ink-dark font-medium">{countryCode}{onboardingPhone}</strong> via WhatsApp.</p>

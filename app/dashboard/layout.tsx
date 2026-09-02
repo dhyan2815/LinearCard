@@ -16,7 +16,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
             <div className="w-px h-4 bg-white/10 hidden sm:block"></div>
             <Link href="/" className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-brand-orange flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
+              <div className="w-8 h-8 rounded-lg bg-brand-blue flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
                 <CreditCard className="w-4 h-4 text-white" />
               </div>
               <span className="font-semibold text-base text-ink-dark tracking-tight">LinearCard Admin</span>

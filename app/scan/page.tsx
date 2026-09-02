@@ -115,11 +115,11 @@ export default function ScanPage() {
   return (
     <div className="min-h-screen bg-canvas flex flex-col font-sans">
       <header className="border-b border-white/5 bg-canvas/80 backdrop-blur sticky top-0 z-10 px-4 py-3 flex items-center justify-between shadow-sm">
-        <a href="/dashboard" className="flex items-center gap-2 text-ink-secondary hover:text-brand-orange transition-colors font-medium text-sm flex-1">
+        <a href="/dashboard" className="flex items-center gap-2 text-ink-secondary hover:text-brand-blue transition-colors font-medium text-sm flex-1">
           <ArrowLeft className="w-4 h-4" /> Dashboard
         </a>
         <div className="flex items-center gap-2 font-bold text-ink-dark tracking-tight">
-          <QrCode className="w-5 h-5 text-brand-orange" />
+          <QrCode className="w-5 h-5 text-brand-blue" />
           <span>Staff Scanner</span>
         </div>
         <div className="flex-1"></div> {/* Spacer for centering */}
@@ -186,7 +186,7 @@ export default function ScanPage() {
         )}
 
         {passData && (
-          <div className="bg-surface-card border-2 border-brand-orange/30 p-6 rounded-2xl shadow-lg shadow-brand-orange/10 animate-in slide-in-from-bottom-4">
+          <div className="bg-surface-card border-2 border-brand-blue/30 p-6 rounded-2xl shadow-lg shadow-brand-blue/10 animate-in slide-in-from-bottom-4">
             <div className="flex items-start justify-between border-b border-white/5 pb-4 mb-4">
               <div>
                 <p className="text-[10px] font-bold text-ink-secondary uppercase tracking-widest mb-1">Member Name</p>

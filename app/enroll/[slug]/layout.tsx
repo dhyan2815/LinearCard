@@ -32,7 +32,7 @@ export default async function TenantLayout({ children, params }: { children: Rea
               {logoUrl ? (
                 <img src={logoUrl} alt={brandName} className="w-8 h-8 rounded-lg object-cover" />
               ) : (
-                <div className="w-8 h-8 rounded-lg bg-brand-orange flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
+                <div className="w-8 h-8 rounded-lg bg-brand-blue flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
                   <CreditCard className="w-4 h-4 text-white" />
                 </div>
               )}

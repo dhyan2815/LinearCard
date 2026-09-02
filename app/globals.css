@@ -6,8 +6,8 @@
   --color-surface-bone: #18181b;
   --color-border-subtle: rgba(255, 255, 255, 0.1);
   --color-border-strong: rgba(255, 255, 255, 0.2);
-  --color-brand-orange: #ff4500;
-  --color-brand-orange-hover: #ff5511;
+  --color-brand-blue: #2b00ff;
+  --color-brand-blue-hover: #1e00cc;
   --color-ink-dark: #f8fafc;
   --color-ink-secondary: #94a3b8;
   --color-ink-muted: #64748b;
@@ -38,7 +38,7 @@
   }
 
   ::selection {
-    background-color: var(--color-brand-orange);
+    background-color: var(--color-brand-blue);
     color: #ffffff;
   }
 }

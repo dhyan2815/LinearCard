@@ -17,7 +17,7 @@ export default function EnrollFallbackPage() {
        <p className="text-sm text-ink-secondary mb-4">
          This is an internal LinearCard test enrollment. Redirecting to demo pass...
        </p>
-       <div className="w-6 h-6 border-2 border-brand-orange/30 border-t-brand-orange rounded-full animate-spin mx-auto"/>
+       <div className="w-6 h-6 border-2 border-brand-blue/30 border-t-brand-blue rounded-full animate-spin mx-auto"/>
     </main>
   );
 }

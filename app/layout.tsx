@@ -23,7 +23,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`dark ${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className="antialiased bg-canvas text-ink-dark selection:bg-brand-orange selection:text-white overflow-x-hidden">
+      <body className="antialiased bg-canvas text-ink-dark selection:bg-brand-blue selection:text-white overflow-x-hidden">
         {children}
         <ThemeToggle />
       </body>

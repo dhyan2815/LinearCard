@@ -186,7 +186,7 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
             {(['whatsapp', 'wallet_push'] as const).map(ch => (
               <button key={ch} type="button" onClick={() => setChannel(ch)}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
-                  channel === ch ? 'bg-brand-orange/10 border-brand-orange text-brand-orange'
+                  channel === ch ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
                     : 'bg-surface-bone border-border-subtle text-ink-secondary hover:border-border-strong'
                 }`}>
                 {ch === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'}
@@ -198,7 +198,7 @@ function NotificationsTab({ tenantId }: { tenantId: string }) {
           <Label>Message</Label>
           <textarea value={message} onChange={e => setMessage(e.target.value)}
             placeholder={channel === 'whatsapp' ? 'e.g. Earn double points this weekend!' : 'e.g. Your pass has been updated.'}
-            rows={4} className="w-full rounded-xl border border-border-subtle bg-surface-bone text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-orange resize-none placeholder:text-ink-muted" />
+            rows={4} className="w-full rounded-xl border border-border-subtle bg-surface-bone text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-blue resize-none placeholder:text-ink-muted" />
         </div>
         {result && <p className="text-sm text-emerald-400 font-medium">✅ Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</p>}
         {sendError && (
@@ -491,7 +491,7 @@ export default function Dashboard() {
             <Card className="p-4 bg-surface-card border-border-subtle flex flex-col justify-center">
               <p className="text-sm font-medium text-ink-secondary">System Status</p>
               <div className="flex items-center gap-2 mt-1">
-                <div className={`w-2 h-2 rounded-full ${stats.walletStatus.google === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-brand-orange'}`} />
+                <div className={`w-2 h-2 rounded-full ${stats.walletStatus.google === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-brand-blue'}`} />
                 <h3 className="text-sm font-medium text-ink-dark">
                   {stats.walletStatus.google === 'connected' ? 'Google Wallet Active' : 'Setup Required'}
                 </h3>
@@ -523,7 +523,7 @@ export default function Dashboard() {
             </div>
             <div className="flex flex-col items-start sm:items-end gap-1.5 w-full sm:w-auto">
                <label className="text-xs font-medium text-ink-secondary">Select Tenant</label>
-               <select value={selectedTenantId} onChange={(e) => handleTenantChange(e.target.value)} className="w-full sm:w-auto bg-surface-card border border-border-subtle rounded-lg px-3 py-1.5 text-sm text-ink-dark focus:outline-none focus:border-brand-orange">
+               <select value={selectedTenantId} onChange={(e) => handleTenantChange(e.target.value)} className="w-full sm:w-auto bg-surface-card border border-border-subtle rounded-lg px-3 py-1.5 text-sm text-ink-dark focus:outline-none focus:border-brand-blue">
                   {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                </select>
             </div>
@@ -543,9 +543,9 @@ export default function Dashboard() {
                   </div>
 
                   {origin && (
-                    <div className="bg-surface-card border border-brand-orange/30 p-4 rounded-xl flex items-center justify-between gap-4">
+                    <div className="bg-surface-card border border-brand-blue/30 p-4 rounded-xl flex items-center justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <Label className="text-brand-orange mb-1">Consumer Enrollment Link</Label>
+                        <Label className="text-brand-blue mb-1">Consumer Enrollment Link</Label>
                         <div className="flex items-center gap-2 mt-1 min-w-0">
                           <code className="text-xs bg-surface-bone px-2 py-1 rounded text-ink-dark truncate flex-1">
                             {`${origin}/enroll/${designData.classSuffix}`}
@@ -582,7 +582,7 @@ export default function Dashboard() {
                           onClick={() => setDesignData(prev => ({ ...prev, archetype: arch.value }))}
                           className={`py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
                             designData.archetype === arch.value
-                              ? 'bg-brand-orange/10 border-brand-orange text-brand-orange'
+                              ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
                               : 'bg-surface-bone border-border-subtle text-ink-secondary hover:border-border-strong'
                           }`}>
                           {arch.label}
@@ -611,7 +611,7 @@ export default function Dashboard() {
                             reader.readAsDataURL(file);
                           }
                         }} 
-                        className="w-full text-xs text-ink-secondary file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-orange/10 file:text-brand-orange hover:file:bg-brand-orange/20 cursor-pointer"
+                        className="w-full text-xs text-ink-secondary file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-blue/10 file:text-brand-blue hover:file:bg-brand-blue/20 cursor-pointer"
                       />
                     </div>
                     <div className="space-y-2">
@@ -628,7 +628,7 @@ export default function Dashboard() {
                             reader.readAsDataURL(file);
                           }
                         }} 
-                        className="w-full text-xs text-ink-secondary file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-orange/10 file:text-brand-orange hover:file:bg-brand-orange/20 cursor-pointer"
+                        className="w-full text-xs text-ink-secondary file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-blue/10 file:text-brand-blue hover:file:bg-brand-blue/20 cursor-pointer"
                       />
                     </div>
                   </div>
@@ -636,7 +636,7 @@ export default function Dashboard() {
                   <div className="bg-surface-card p-5 rounded-xl border border-border-subtle space-y-4">
                     <div className="flex items-center justify-between">
                        <Label>Dynamic Rows</Label>
-                       <button type="button" onClick={addRow} disabled={designData.rows.length >= 3} className="text-xs font-medium text-brand-orange hover:text-brand-orange-hover transition-colors flex items-center gap-1 disabled:opacity-50">
+                       <button type="button" onClick={addRow} disabled={designData.rows.length >= 3} className="text-xs font-medium text-brand-blue hover:text-brand-blue-hover transition-colors flex items-center gap-1 disabled:opacity-50">
                          <Plus className="w-3 h-3" /> Add Row
                        </button>
                     </div>
@@ -660,7 +660,7 @@ export default function Dashboard() {
                             </div>
                           ))}
                           {row.columns.length < 3 && (
-                            <button type="button" onClick={() => addColumn(row.id)} className="flex items-center justify-center w-8 h-8 rounded-md border border-dashed border-border-strong text-ink-muted hover:text-brand-orange hover:border-brand-orange transition-colors shrink-0">
+                            <button type="button" onClick={() => addColumn(row.id)} className="flex items-center justify-center w-8 h-8 rounded-md border border-dashed border-border-strong text-ink-muted hover:text-brand-blue hover:border-brand-blue transition-colors shrink-0">
                               <Plus className="w-4 h-4"/>
                             </button>
                           )}
@@ -877,7 +877,7 @@ export default function Dashboard() {
                       onClick={() => selectPassForManage(item)}
                       className={`p-3 rounded-lg border flex items-center justify-between cursor-pointer transition-colors group ${
                         manageData.passId === (item.fullPassId || item.passId)
-                          ? 'bg-brand-orange/10 border-brand-orange/30'
+                          ? 'bg-brand-blue/10 border-brand-blue/30'
                           : 'bg-surface-card border-border-subtle hover:border-border-strong'
                       }`}
                     >
@@ -892,7 +892,7 @@ export default function Dashboard() {
                           </p>
                         </div>
                       </div>
-                      <ArrowRight className={`w-3.5 h-3.5 transition-all ${manageData.passId === (item.fullPassId || item.passId) ? 'text-brand-orange' : 'text-ink-muted group-hover:text-ink-secondary'}`} />
+                      <ArrowRight className={`w-3.5 h-3.5 transition-all ${manageData.passId === (item.fullPassId || item.passId) ? 'text-brand-blue' : 'text-ink-muted group-hover:text-ink-secondary'}`} />
                     </div>
                   ))}
                 </div>

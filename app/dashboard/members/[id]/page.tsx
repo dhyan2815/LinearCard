@@ -68,7 +68,7 @@ export default function MemberDetailPage() {
   if (loading) {
     return (
       <main className="flex-1 flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-4 border-brand-orange/30 border-t-brand-orange rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-brand-blue/30 border-t-brand-blue rounded-full animate-spin" />
       </main>
     );
   }
@@ -120,7 +120,7 @@ export default function MemberDetailPage() {
       {member.passes?.length > 0 && (
         <Card className="p-6">
           <h2 className="text-base font-semibold text-ink-dark flex items-center gap-2 mb-4">
-            <Edit3 className="w-4 h-4 text-brand-orange" /> Adjust Balance
+            <Edit3 className="w-4 h-4 text-brand-blue" /> Adjust Balance
           </h2>
           <form onSubmit={handleAdjust} className="space-y-4">
             {member.passes.length > 1 && (
@@ -136,7 +136,7 @@ export default function MemberDetailPage() {
                       setNewTier(p.tier || '');
                     }
                   }}
-                  className="w-full bg-surface-card border border-border-subtle rounded-lg px-3 py-2 text-sm text-ink-dark focus:outline-none focus:border-brand-orange"
+                  className="w-full bg-surface-card border border-border-subtle rounded-lg px-3 py-2 text-sm text-ink-dark focus:outline-none focus:border-brand-blue"
                 >
                   {member.passes.map((p: any) => (
                     <option key={p.id} value={p.id}>{p.fullPassId} — {p.balance} pts</option>
@@ -169,7 +169,7 @@ export default function MemberDetailPage() {
       {member.auditLog?.length > 0 && (
         <Card className="p-6">
           <h2 className="text-base font-semibold text-ink-dark flex items-center gap-2 mb-4">
-            <History className="w-4 h-4 text-brand-orange" /> Audit Trail
+            <History className="w-4 h-4 text-brand-blue" /> Audit Trail
           </h2>
           <div className="space-y-1">
             {member.auditLog.map((entry: any) => {
@@ -178,7 +178,7 @@ export default function MemberDetailPage() {
               const entryNote = entry.note || entry.details?.note;
               return (
                 <div key={entry.id} className="flex items-start gap-3 py-3 border-b border-border-subtle/50 last:border-0">
-                  <div className="w-2 h-2 rounded-full bg-brand-orange mt-2 shrink-0" />
+                  <div className="w-2 h-2 rounded-full bg-brand-blue mt-2 shrink-0" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-ink-dark capitalize">{entry.action.replace(/_/g, ' ')}</p>
                     {prev && next && (
@@ -200,7 +200,7 @@ export default function MemberDetailPage() {
       {member.consentLog?.length > 0 && (
         <Card className="p-6">
           <h2 className="text-base font-semibold text-ink-dark flex items-center gap-2 mb-4">
-            <ShieldCheck className="w-4 h-4 text-brand-orange" /> Consent Records
+            <ShieldCheck className="w-4 h-4 text-brand-blue" /> Consent Records
           </h2>
           <div className="space-y-2">
             {member.consentLog.map((entry: any) => (
