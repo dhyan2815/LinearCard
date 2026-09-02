@@ -6,6 +6,19 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Activity, ArrowRight, Zap } from 'lucide-react';
 
+function formatTimeAgo(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) return 'Just now';
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes} min ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+  return date.toLocaleDateString();
+}
+
 export function LiveManageView({
   tenantId,
   manageData,
@@ -67,30 +80,58 @@ export function LiveManageView({
                   {successMsg && <p className="text-emerald-500 text-xs">{successMsg}</p>}
                </form>
              ) : (
-               <div className="space-y-3 h-full flex flex-col">
-                 <p className="text-sm text-ink-muted">Select a pass from your local session history.</p>
-                 <div className="space-y-2 overflow-y-auto flex-1 pr-2 max-h-64">
-                   {passHistory.length === 0 && <p className="text-sm text-ink-muted italic">No passes issued yet.</p>}
-                   {passHistory.map((item: any, idx: number) => (
-                      <div
-                        key={idx}
-                        onClick={() => selectPassForManage(item)}
-                        className="p-3 rounded-lg border flex items-center justify-between cursor-pointer transition-colors group bg-canvas border-border-subtle hover:border-border-strong"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: item.passData?.hexBackgroundColor || '#1A365D'}}/>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-ink-dark truncate">
-                              {item.passData?.memberName}
-                            </p>
-                            <p className="text-xs text-ink-muted font-mono truncate mt-0.5">
-                              {item.fullPassId || item.passId}
-                            </p>
+               <div className="space-y-5 h-full flex flex-col">
+                 <div>
+                   <Label className="text-xs text-ink-secondary uppercase tracking-wide">Enter Pass ID Manually</Label>
+                   <div className="flex gap-2 mt-1.5">
+                     <Input 
+                        id="manual-pass-id"
+                        placeholder="e.g. 33880000000000000.pass_123" 
+                        className="h-10 text-sm flex-1"
+                        onKeyDown={(e: any) => {
+                          if (e.key === 'Enter' && e.target.value) {
+                             e.preventDefault();
+                             setManageData({...manageData, passId: e.target.value, balance: '', tier: '', pushNotification: ''});
+                          }
+                        }}
+                     />
+                     <Button 
+                        type="button"
+                        onClick={() => {
+                          const val = (document.getElementById('manual-pass-id') as HTMLInputElement)?.value;
+                          if (val) setManageData({...manageData, passId: val, balance: '', tier: '', pushNotification: ''});
+                        }} 
+                        className="h-10"
+                     >
+                       Select
+                     </Button>
+                   </div>
+                 </div>
+                 <div className="space-y-3 flex-1 flex flex-col">
+                   <p className="text-xs text-ink-secondary uppercase tracking-wide">Or select from history</p>
+                   <div className="space-y-2 overflow-y-auto flex-1 pr-2 max-h-48">
+                     {passHistory.length === 0 && <p className="text-sm text-ink-muted italic">No passes issued yet.</p>}
+                     {passHistory.map((item: any, idx: number) => (
+                        <div
+                          key={idx}
+                          onClick={() => selectPassForManage(item)}
+                          className="p-3 rounded-lg border flex items-center justify-between cursor-pointer transition-colors group bg-canvas border-border-subtle hover:border-border-strong"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: item.passData?.hexBackgroundColor || '#1A365D'}}/>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-ink-dark truncate">
+                                {item.passData?.memberName}
+                              </p>
+                              <p className="text-xs text-ink-muted font-mono truncate mt-0.5">
+                                {item.fullPassId || item.passId}
+                              </p>
+                            </div>
                           </div>
+                          <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-ink-secondary" />
                         </div>
-                        <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-ink-secondary" />
-                      </div>
-                    ))}
+                      ))}
+                   </div>
                  </div>
                </div>
              )}
@@ -113,13 +154,13 @@ export function LiveManageView({
                    <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium text-ink-dark capitalize truncate">{log.type}</p>
                       <span className="text-xs text-ink-muted font-mono shrink-0">
-                        {new Date(log.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatTimeAgo(log.sentAt)}
                       </span>
                    </div>
                    <p className="text-xs text-ink-secondary mt-1 truncate">
                       {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown'}
                    </p>
-                   {log.error && <p className="text-red-400 text-xs mt-1">{log.error}</p>}
+                   {log.error && <p className="text-red-400 text-xs mt-1">Balance update failed: Connection disconnected.</p>}
                 </div>
               </div>
             ))}

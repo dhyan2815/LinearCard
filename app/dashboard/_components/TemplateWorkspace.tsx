@@ -136,7 +136,7 @@ export function TemplateWorkspace({
   };
 
   return (
-    <div className="flex flex-col gap-8 w-full max-w-2xl">
+    <div className="flex flex-col gap-8 w-full max-w-3xl">
       <div className="border-b border-border-subtle pb-4">
         <h2 className="text-xl font-medium text-ink-dark tracking-tight">Template Builder</h2>
         <p className="text-sm text-ink-secondary mt-1">Design the core structure of your Google Wallet Class.</p>

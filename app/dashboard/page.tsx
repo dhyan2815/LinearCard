@@ -205,12 +205,15 @@ export default function Dashboard() {
       <motion.aside 
         initial={false}
         animate={{ width: isSidebarOpen ? 240 : 64 }}
-        className="flex flex-col border-r border-border-subtle bg-surface-card z-20 shrink-0"
+        className="flex flex-col border-r border-border-subtle bg-canvas z-20 shrink-0"
       >
-        <div className="h-14 flex items-center px-4 border-b border-border-subtle">
-           <motion.div animate={{ opacity: isSidebarOpen ? 1 : 0 }} className="whitespace-nowrap overflow-hidden">
-             {isSidebarOpen && <span className="font-semibold text-ink-dark text-sm tracking-wide">LINEAR CARD</span>}
+        <div className="h-16 flex items-center justify-between px-3 border-b border-border-subtle shrink-0">
+           <motion.div animate={{ opacity: isSidebarOpen ? 1 : 0, width: isSidebarOpen ? 'auto' : 0 }} className="whitespace-nowrap overflow-hidden ml-1">
+             <span className="font-semibold text-ink-dark text-[13px] tracking-wide uppercase">Workspace</span>
            </motion.div>
+           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1.5 text-ink-secondary hover:text-ink-dark hover:bg-canvas rounded-md transition-colors shrink-0">
+              <Menu className="w-5 h-5" />
+           </button>
         </div>
         <div className="flex-1 py-4 flex flex-col gap-1.5 px-2 overflow-hidden">
            {tabs.map((tab) => (
@@ -226,42 +229,31 @@ export default function Dashboard() {
                 <div className="shrink-0">{tab.icon}</div>
                 <motion.span 
                   animate={{ opacity: isSidebarOpen ? 1 : 0, width: isSidebarOpen ? 'auto' : 0 }} 
-                  className="text-[13px] font-medium whitespace-nowrap overflow-hidden"
+                  className="text-[13px] font-medium whitespace-nowrap overflow-hidden text-left"
                 >
                   {tab.label}
                 </motion.span>
              </button>
            ))}
         </div>
+        <div className="p-3 border-t border-border-subtle mt-auto overflow-hidden shrink-0">
+           {isSidebarOpen ? (
+             <div className="flex flex-col gap-1.5">
+               <span className="text-[10px] uppercase font-semibold text-ink-muted px-1 tracking-wider">Active Tenant</span>
+               <select value={selectedTenantId} onChange={(e) => handleTenantChange(e.target.value)} className="bg-canvas border border-border-subtle rounded-md text-xs text-ink-dark p-2 w-full focus:outline-none focus:border-brand-blue cursor-pointer">
+                  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+               </select>
+             </div>
+           ) : (
+             <div className="w-8 h-8 mx-auto bg-canvas border border-border-subtle rounded-md flex items-center justify-center text-xs font-bold text-ink-dark cursor-help" title={currentTenant?.name}>
+                {currentTenant?.name?.charAt(0) || 'T'}
+             </div>
+           )}
+        </div>
       </motion.aside>
 
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0 bg-canvas">
-         {/* TOP NAVBAR */}
-         <header className="h-14 border-b border-border-subtle bg-surface-card flex items-center justify-between px-4 sm:px-6 shadow-sm z-10">
-            <div className="flex items-center gap-4">
-               <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1.5 text-ink-secondary hover:text-ink-dark hover:bg-canvas rounded-md transition-colors">
-                  <Menu className="w-5 h-5" />
-               </button>
-               <h1 className="font-semibold text-ink-dark text-sm hidden sm:block">LinearCard Admin</h1>
-               
-               <div className="h-4 w-px bg-border-strong hidden sm:block"/>
-               
-               <select value={selectedTenantId} onChange={(e) => handleTenantChange(e.target.value)} className="bg-transparent text-[13px] text-ink-secondary hover:text-ink-dark font-medium focus:outline-none focus:ring-0 cursor-pointer p-0 border-none appearance-none">
-                  {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-               </select>
-            </div>
-            
-            <div className="flex items-center gap-4 sm:gap-6">
-               <div className="flex items-center gap-1.5">
-                 <span className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">Members</span>
-                 <span className="text-[13px] font-semibold text-ink-dark">{stats.memberCount}</span>
-               </div>
-               <div className="h-4 w-px bg-border-strong hidden sm:block"/>
-               <WalletStatusPill label="API" status={stats.walletStatus.google} />
-            </div>
-         </header>
-
          {/* WORKSPACE */}
          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
            <AnimatePresence mode="wait">
@@ -275,7 +267,7 @@ export default function Dashboard() {
              >
                {activeTab === 'design' && (
                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12 max-w-[1600px] mx-auto">
-                    <div className="xl:col-span-8 flex flex-col gap-6">
+                    <div className="xl:col-span-7 flex flex-col gap-6">
                       <TemplateWorkspace 
                           designData={designData}
                           setDesignData={setDesignData}
@@ -288,7 +280,7 @@ export default function Dashboard() {
                           selectedTenantId={selectedTenantId}
                       />
                     </div>
-                    <div className="xl:col-span-4 flex justify-center xl:sticky xl:top-0">
+                    <div className="xl:col-span-5 flex justify-center xl:justify-start xl:pl-12 xl:sticky xl:top-0">
                       <motion.div whileHover={{ scale: 1.02, rotateY: -2, rotateX: 2 }} transition={{ type: "spring", stiffness: 200, damping: 20 }} className="w-full sm:w-[320px]">
                         <PassPreviewCard
                           memberName={manageData.passId ? 'Live Pass' : 'Dhyan Patel'}

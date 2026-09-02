@@ -80,7 +80,7 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
         </Card>
 
         {logs.length > 0 && (
-          <Card className="p-6 bg-surface-card border-border-subtle shadow-sm flex flex-col h-full max-h-[500px]">
+          <Card className="p-6 bg-surface-card border-border-subtle shadow-sm flex flex-col h-full max-h-125">
             <h3 className="text-base font-semibold text-ink-dark mb-4">Recent Broadcasts</h3>
             <div className="space-y-3 overflow-y-auto pr-2 flex-1">
               {logs.map((log: any) => (

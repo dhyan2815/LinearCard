@@ -6,6 +6,19 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Activity, ArrowRight, Zap, RefreshCw } from 'lucide-react';
 
+function formatTimeAgo(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) return 'Just now';
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes} min ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+  return date.toLocaleDateString();
+}
+
 export function LiveActivitySidebar({
   tenantId,
   manageData,
@@ -44,13 +57,13 @@ export function LiveActivitySidebar({
                  <div className="flex items-center justify-between gap-2">
                     <p className="text-[13px] font-medium text-zinc-900 dark:text-zinc-200 leading-snug capitalize truncate">{log.type}</p>
                     <span className="text-[10px] text-zinc-500 font-mono shrink-0">
-                      {new Date(log.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatTimeAgo(log.sentAt)}
                     </span>
                  </div>
                  <p className="text-[11px] text-zinc-500 mt-0.5 truncate">
                     {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown'}
                  </p>
-                 {log.error && <p className="text-rose-400 text-[11px] mt-0.5">{log.error}</p>}
+                 {log.error && <p className="text-rose-400 text-[11px] mt-0.5">Balance update failed: Connection disconnected.</p>}
               </div>
             </div>
           ))}
@@ -61,7 +74,7 @@ export function LiveActivitySidebar({
       <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 shadow-sm bg-white dark:bg-zinc-900 overflow-hidden">
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex justify-between items-center">
           <h2 className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-brand-blue" /> Live Update
+            <Zap className="w-4 h-4 text-brand-blue" /> Pass Patcher
           </h2>
           {manageData.passId && (
             <button onClick={() => setManageData({...manageData, passId: ''})} className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">Cancel</button>
@@ -89,30 +102,59 @@ export function LiveActivitySidebar({
                 {successMsg && <p className="text-emerald-500 text-[11px]">{successMsg}</p>}
              </form>
            ) : (
-             <div className="space-y-3">
-               <p className="text-[13px] text-zinc-500">Select a pass from the current session to update it live.</p>
-               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                 {passHistory.length === 0 && <p className="text-xs text-zinc-400 italic">No passes issued yet.</p>}
-                 {passHistory.map((item: any, idx: number) => (
-                    <div
-                      key={idx}
-                      onClick={() => selectPassForManage(item)}
-                      className="p-2.5 rounded-lg border flex items-center justify-between cursor-pointer transition-colors group bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: item.passData?.hexBackgroundColor || '#1A365D'}}/>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                            {item.passData?.memberName}
-                          </p>
-                          <p className="text-[10px] text-zinc-500 font-mono truncate mt-0.5">
-                            {item.fullPassId || item.passId}
-                          </p>
+             <div className="space-y-4 flex flex-col">
+               <div>
+                 <Label className="text-xs text-zinc-500 dark:text-zinc-400">Enter Pass ID Manually</Label>
+                 <div className="flex gap-2 mt-1.5">
+                   <Input 
+                      id="sidebar-manual-pass-id"
+                      placeholder="e.g. 33880.pass_123" 
+                      className="h-9 text-sm flex-1"
+                      onKeyDown={(e: any) => {
+                        if (e.key === 'Enter' && e.target.value) {
+                           e.preventDefault();
+                           setManageData({...manageData, passId: e.target.value, balance: '', tier: '', pushNotification: ''});
+                        }
+                      }}
+                   />
+                   <Button 
+                      type="button"
+                      onClick={() => {
+                        const val = (document.getElementById('sidebar-manual-pass-id') as HTMLInputElement)?.value;
+                        if (val) setManageData({...manageData, passId: val, balance: '', tier: '', pushNotification: ''});
+                      }} 
+                      className="h-9 text-xs"
+                   >
+                     Select
+                   </Button>
+                 </div>
+               </div>
+               
+               <div className="space-y-2">
+                 <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Or select from history</p>
+                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                   {passHistory.length === 0 && <p className="text-xs text-zinc-400 italic">No passes issued yet.</p>}
+                   {passHistory.map((item: any, idx: number) => (
+                      <div
+                        key={idx}
+                        onClick={() => selectPassForManage(item)}
+                        className="p-2.5 rounded-lg border flex items-center justify-between cursor-pointer transition-colors group bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: item.passData?.hexBackgroundColor || '#1A365D'}}/>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                              {item.passData?.memberName}
+                            </p>
+                            <p className="text-[10px] text-zinc-500 font-mono truncate mt-0.5">
+                              {item.fullPassId || item.passId}
+                            </p>
+                          </div>
                         </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300" />
                       </div>
-                      <ArrowRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300" />
-                    </div>
-                  ))}
+                    ))}
+                 </div>
                </div>
              </div>
            )}
