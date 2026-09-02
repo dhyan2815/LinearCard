@@ -21,13 +21,19 @@ export default function MemberDetailPage() {
   const [adjustMsg, setAdjustMsg] = useState('');
 
   const loadMember = async () => {
+    const previousPassId = selectedPassId; // capture before async fetch resets state
     const data = await (await fetch(`/api/members/${id}`)).json();
     if (data.success) {
       setMember(data.member);
       if (data.member.passes?.length > 0) {
-        setSelectedPassId(data.member.passes[0].id);
-        setNewBalance(String(data.member.passes[0].balance));
-        setNewTier(data.member.passes[0].tier || '');
+        // Preserve the admin's current selection; fall back to passes[0] on initial load
+        const passStillExists = data.member.passes.some((p: any) => p.id === previousPassId);
+        const targetPass = passStillExists
+          ? data.member.passes.find((p: any) => p.id === previousPassId)!
+          : data.member.passes[0];
+        setSelectedPassId(targetPass.id);
+        setNewBalance(String(targetPass.balance));
+        setNewTier(targetPass.tier || '');
       }
     } else setError(data.error || 'Failed to load member');
     setLoading(false);
