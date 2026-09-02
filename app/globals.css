@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #09090b;
+  --color-surface-card: #18181b;
+  --color-surface-bone: #18181b;
+  --color-border-subtle: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.2);
+  --color-brand-orange: #ff4500;
+  --color-brand-orange-hover: #ff5511;
+  --color-ink-dark: #f8fafc;
+  --color-ink-secondary: #94a3b8;
+  --color-ink-muted: #64748b;
+  
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+}
+
+@layer base {
+  .light {
+    color-scheme: light;
+    --color-canvas: #f8fafc;
+    --color-surface-card: #ffffff;
+    --color-surface-bone: #ffffff;
+    --color-border-subtle: rgba(0, 0, 0, 0.1);
+    --color-border-strong: rgba(0, 0, 0, 0.2);
+    --color-ink-dark: #0f172a;
+    --color-ink-secondary: #475569;
+    --color-ink-muted: #94a3b8;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink-dark);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: var(--color-brand-orange);
+    color: #ffffff;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-canvas);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
