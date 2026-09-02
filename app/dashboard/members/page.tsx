@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Users, Search, ArrowLeft } from 'lucide-react';
@@ -9,6 +10,7 @@ import { buttonBaseClass, buttonVariants } from '@/components/ui/Button';
 import { clsx } from 'clsx';
 
 export default function MembersPage() {
+  const router = useRouter();
   const [members, setMembers] = useState<any[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('all');
@@ -117,7 +119,11 @@ export default function MembersPage() {
                 </tr>
               ) : (
                 flatMembers.map((item, idx) => (
-                  <tr key={`${item.id}-${item.pass?.id || idx}`} className="hover:bg-surface-bone/50 transition-colors">
+                  <tr
+                    key={`${item.id}-${item.pass?.id || idx}`}
+                    className="hover:bg-surface-bone/50 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/dashboard/members/${item.id}`)}
+                  >
                     <td className="px-6 py-4 font-medium text-ink-dark">{item.name || '—'}</td>
                     <td className="px-6 py-4 font-mono text-ink-secondary">{item.phone}</td>
                     <td className="px-6 py-4 font-mono text-xs text-ink-secondary">
