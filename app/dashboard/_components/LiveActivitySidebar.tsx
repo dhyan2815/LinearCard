@@ -33,11 +33,43 @@ export function LiveActivitySidebar({
   const [logs, setLogs] = useState<any[]>([]);
   useEffect(() => {
     if (!tenantId) return;
-    fetch(`/api/notifications/log?tenantId=${tenantId}&limit=20`)
+    fetch(`/api/notifications/log?tenantId=${tenantId}&limit=50`)
       .then(r => r.json())
       .then(d => { if (d.success) setLogs(d.logs); })
       .catch(err => console.error('Error fetching logs:', err));
   }, [tenantId, successMsg]);
+
+  // Group consecutive campaign logs
+  const displayLogs = logs.reduce((acc: any[], log: any) => {
+    if (log.type === 'campaign') {
+      const lastGroup = acc[acc.length - 1];
+      if (lastGroup && lastGroup.isGroup && lastGroup.type === 'campaign') {
+        const timeDiff = Math.abs(new Date(lastGroup.sentAt).getTime() - new Date(log.sentAt).getTime());
+        // If within 60 seconds of the group's timestamp, bundle it
+        if (timeDiff < 60000) {
+          lastGroup.count += 1;
+          lastGroup.items.push(log);
+          if (log.status === 'sent') lastGroup.successCount += 1;
+          return acc;
+        }
+      }
+      // Start a new group
+      acc.push({
+        id: `group-${log.id}`,
+        isGroup: true,
+        type: 'campaign',
+        status: log.status,
+        sentAt: log.sentAt,
+        items: [log],
+        count: 1,
+        successCount: log.status === 'sent' ? 1 : 0
+      });
+      return acc;
+    }
+    // Non-campaign logs stay as-is
+    acc.push(log);
+    return acc;
+  }, []);
 
   return (
     <div className="flex flex-col gap-6 h-full">
@@ -49,21 +81,31 @@ export function LiveActivitySidebar({
           </h2>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {logs.length === 0 && <p className="text-xs text-zinc-500 text-center py-4">No recent activity.</p>}
-          {logs.map((log: any) => (
+          {displayLogs.length === 0 && <p className="text-xs text-zinc-500 text-center py-4">No recent activity.</p>}
+          {displayLogs.map((log: any) => (
             <div key={log.id} className="group p-3 rounded-xl border border-zinc-100 dark:border-zinc-800/60 bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all duration-200 ease-in-out flex gap-3 items-start">
-              <div className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${log.status === 'sent' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+              <div className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${log.isGroup ? (log.successCount > 0 ? 'bg-emerald-500' : 'bg-rose-500') : (log.status === 'sent' ? 'bg-emerald-500' : 'bg-rose-500')}`} />
               <div className="flex-1 min-w-0">
                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[13px] font-medium text-zinc-900 dark:text-zinc-200 leading-snug capitalize truncate">{log.type}</p>
+                    <p className="text-[13px] font-medium text-zinc-900 dark:text-zinc-200 leading-snug capitalize truncate">
+                      {log.isGroup ? `Campaign (${log.count} recipients)` : log.type}
+                    </p>
                     <span className="text-[10px] text-zinc-500 font-mono shrink-0">
                       {formatTimeAgo(log.sentAt)}
                     </span>
                  </div>
-                 <p className="text-[11px] text-zinc-500 mt-0.5 truncate">
-                    {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown'}
-                 </p>
-                 {log.error && <p className="text-rose-400 text-[11px] mt-0.5">Balance update failed: Connection disconnected.</p>}
+                 {log.isGroup ? (
+                   <div className="text-[11px] text-zinc-500 mt-0.5 truncate space-y-0.5">
+                     <p>Delivered to {log.successCount} of {log.count}</p>
+                   </div>
+                 ) : (
+                   <>
+                     <p className="text-[11px] text-zinc-500 mt-0.5 truncate">
+                        {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown'}
+                     </p>
+                     {log.error && <p className="text-rose-400 text-[11px] mt-0.5">{log.error}</p>}
+                   </>
+                 )}
               </div>
             </div>
           ))}
