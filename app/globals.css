@@ -17,6 +17,29 @@
 }
 
 @layer base {
+  :root {
+    --background: var(--color-canvas);
+    --foreground: var(--color-ink-dark);
+    --card: var(--color-surface-card);
+    --card-foreground: var(--color-ink-dark);
+    --popover: var(--color-surface-card);
+    --popover-foreground: var(--color-ink-dark);
+    --primary: var(--color-brand-blue);
+    --primary-foreground: #ffffff;
+    --secondary: var(--color-surface-bone);
+    --secondary-foreground: var(--color-ink-dark);
+    --muted: var(--color-surface-bone);
+    --muted-foreground: var(--color-ink-muted);
+    --accent: var(--color-surface-bone);
+    --accent-foreground: var(--color-ink-dark);
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --border: var(--color-border-subtle);
+    --input: var(--color-border-subtle);
+    --ring: var(--color-brand-blue);
+    --radius: 0.75rem;
+  }
+
   .light {
     color-scheme: light;
     --color-canvas: #f8fafc;

@@ -3,8 +3,6 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Users, Search } from 'lucide-react';
-import { buttonBaseClass, buttonVariants } from '@/components/ui/Button';
-import { clsx } from 'clsx';
 
 export function MembersView({ initialTenantId = 'all' }: { initialTenantId?: string }) {
   const router = useRouter();

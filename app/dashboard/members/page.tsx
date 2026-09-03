@@ -6,8 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Users, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { buttonBaseClass, buttonVariants } from '@/components/ui/Button';
-import { clsx } from 'clsx';
+import { Button } from '@/components/ui/Button';
 
 export default function MembersPage() {
   const router = useRouter();
@@ -55,9 +54,11 @@ export default function MembersPage() {
   return (
     <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
       <div className="mb-8 flex justify-between items-center">
-        <Link href="/dashboard" className={clsx(buttonBaseClass, buttonVariants.secondary, "py-2")}>
-          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-        </Link>
+        <Button asChild variant="secondary" size="sm">
+          <Link href="/dashboard">
+            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+          </Link>
+        </Button>
       </div>
 
       <div className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
