@@ -329,10 +329,6 @@ export async function updateGenericObject(passId: string, updateData: any) {
   const client = await getGoogleAuthClient();
   const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${passId}`;
 
-  // Since we mapped the dynamic fields to specific IDs in createGoogleWalletPass, 
-  // we assume 'row1_0' or 'row1_1' could be the IDs if we kept them. 
-  // For the sake of the update demo acting magically, we will fetch the object first to find the ID of the tier/balance.
-  
   try {
      const getRes = await client.request({
        url,
@@ -340,13 +336,20 @@ export async function updateGenericObject(passId: string, updateData: any) {
      });
      const genericObject: any = getRes.data;
      
-     const patchPayload: any = { textModulesData: [] };
+     const patchPayload: any = {};
+     
+     // Format balance properly if provided (e.g. "100" -> "100 Pts")
+     const formattedBalance = updateData.balance !== undefined 
+        ? (updateData.balance.toString().includes('Pts') ? updateData.balance : `${updateData.balance} Pts`) 
+        : undefined;
+
      // Map over existing text modules and inject the updated tier or balance values
      if (genericObject.textModulesData) {
+       patchPayload.textModulesData = [];
        genericObject.textModulesData.forEach((mod: any) => {
          let newBody = mod.body;
          if (mod.header.toLowerCase().includes('tier') && updateData.tier) newBody = updateData.tier;
-         if ((mod.header.toLowerCase().includes('balance') || mod.header.toLowerCase().includes('points')) && updateData.balance) newBody = updateData.balance;
+         if ((mod.header.toLowerCase().includes('balance') || mod.header.toLowerCase().includes('points')) && formattedBalance !== undefined) newBody = formattedBalance;
          
          patchPayload.textModulesData.push({
            id: mod.id,
@@ -354,12 +357,39 @@ export async function updateGenericObject(passId: string, updateData: any) {
            body: newBody
          });
        });
-     } else {
+     } else if (formattedBalance !== undefined || updateData.tier) {
        // Fallback payload if the object lacks text modules
        patchPayload.textModulesData = [
-         { id: 'balance', header: 'Points / Status', body: updateData.balance },
+         { id: 'balance', header: 'Points / Status', body: formattedBalance || '0 Pts' },
          { id: 'tier_info', header: 'Tier Level', body: updateData.tier || 'Standard' }
        ];
+     }
+
+     if (updateData.tier) {
+       patchPayload.subheader = {
+         defaultValue: {
+           language: 'en-US',
+           value: updateData.tier
+         }
+       };
+     }
+
+     if (genericObject.barcode && (formattedBalance !== undefined || updateData.tier)) {
+       const currentTier = updateData.tier || (genericObject.subheader?.defaultValue?.value || 'Member');
+       
+       let displayBalance = formattedBalance;
+       if (displayBalance === undefined) {
+          if (genericObject.textModulesData) {
+            const balMod = genericObject.textModulesData.find((m: any) => m.header.toLowerCase().includes('balance') || m.header.toLowerCase().includes('points'));
+            if (balMod) displayBalance = balMod.body;
+          }
+          if (displayBalance === undefined) displayBalance = '0 Pts';
+       }
+
+       patchPayload.barcode = {
+         ...genericObject.barcode,
+         alternateText: `${currentTier} • ${displayBalance}`
+       };
      }
 
      // If a push notification message is provided, append it to the update payload
