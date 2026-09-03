@@ -153,7 +153,33 @@ export async function createGoogleWalletPass(options: GoogleWalletPassOptions) {
     });
   } catch (error: any) {
     console.error('Failed to create generic object in Google Wallet:', error.response?.data || error.message);
-    throw new Error('Google Wallet API rejected the pass payload. Verify Class ID and image URLs.');
+    
+    // Fallback: If the class does not exist, attempt to auto-create it with provided details
+    try {
+      console.log(`Attempting to auto-create missing class ${classId}...`);
+      await createGenericClass({
+        classSuffix,
+        cardTitle,
+        hexBackgroundColor,
+        logoUrl,
+        heroImageUrl,
+        rows
+      });
+      // Retry creating the object after class is created
+      await client.request({
+        url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject',
+        method: 'POST',
+        data: genericObjectPayload
+      });
+    } catch (retryError: any) {
+      console.error('Failed to auto-create class and retry object creation:', retryError.response?.data || retryError.message);
+      
+      let errorMsg = 'Google Wallet API rejected the pass payload. Verify Class ID and image URLs.';
+      if (retryError.response?.data?.error?.message) {
+        errorMsg += ` Details: ${retryError.response.data.error.message}`;
+      }
+      throw new Error(errorMsg);
+    }
   }
 
   // Generate lightweight JWT with just object reference
