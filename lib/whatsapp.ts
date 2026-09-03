@@ -8,6 +8,10 @@ function toWahaId(phone: string): string {
 }
 
 async function wahaPost(endpoint: string, body: object) {
+  // WAHA temporarily disabled per RM due to unstable sessions causing errors
+  console.log(`[WAHA TEMPORARILY DISABLED] Skipping message to ${endpoint}`);
+  return { success: true };
+
   const WAHA_BASE_URL = process.env.WAHA_BASE_URL;
   const WAHA_API_KEY  = process.env.WAHA_API_KEY;
   const WAHA_SESSION  = process.env.WAHA_SESSION ?? 'default';

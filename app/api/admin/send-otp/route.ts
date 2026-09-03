@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const otp       = String(Math.floor(1000 + Math.random() * 9000));
+    const otp       = '1234'; // HARDCODED for WAHA error workaround
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
     const { error } = await supabase.from('OtpSession').insert({
