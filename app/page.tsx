@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Sparkles, CreditCard, ArrowRight } from 'lucide-react';
+import { Sparkles, CreditCard, ArrowRight, QrCode } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Link from 'next/link';
 
@@ -28,6 +28,13 @@ export default function Home() {
             <span className="font-semibold text-base text-ink-dark tracking-tight">LinearCard</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link 
+              href="/scan" 
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle hover:bg-surface-hover transition-colors text-xs font-medium text-ink-dark"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              Scanner
+            </Link>
              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               API Connected

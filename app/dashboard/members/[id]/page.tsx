@@ -91,7 +91,14 @@ export default function MemberDetailPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-ink-dark tracking-tight">{member.name || 'Unknown Member'}</h1>
-            <p className="text-ink-secondary font-mono text-sm mt-1">{member.phone}</p>
+            <p className="text-ink-secondary font-mono text-sm mt-1 flex items-center gap-2">
+              {member.phone}
+              {member.Tenant?.name && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-bone text-ink-dark uppercase tracking-widest font-sans border border-border-subtle">
+                  {member.Tenant.name}
+                </span>
+              )}
+            </p>
           </div>
           {member.consentedAt && (
             <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">

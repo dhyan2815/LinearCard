@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
 
 /**
  * POST /api/validate-pass
@@ -13,44 +16,63 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'passId is required' }, { status: 400 });
     }
 
-    const fullPassId = passId.includes('.') ? passId : `${process.env.ISSUER_ID}.${passId}`;
+    let pass: any = null;
 
-    let { data: pass } = await supabase
-      .from('Pass')
-      .select('*, Member!inner(*)')
-      .eq('fullPassId', fullPassId)
-      .single();
+    // 1. Phone number check (if passId is likely a phone number)
+    if (/^\d{8,}$/.test(passId) || /^\+\d+$/.test(passId)) {
+       const { data: phonePasses } = await supabase
+         .from('Pass')
+         .select('*, Member!inner(*)')
+         .ilike('Member.phone', `%${passId}%`)
+         .order('createdAt', { ascending: false });
 
+       if (phonePasses && phonePasses.length > 0) {
+         const cookie = request.cookies.get('admin_session');
+         let staffTenantId = null;
+         if (cookie?.value) {
+            try {
+               const decoded: any = jwt.verify(cookie.value, JWT_SECRET);
+               staffTenantId = decoded.tenantId;
+            } catch (e) {
+               // Ignore invalid session
+            }
+         }
+         
+         // If a staff member is logged in, prioritize returning the pass for their tenant
+         if (staffTenantId) {
+            pass = phonePasses.find((p: any) => p.tenantId === staffTenantId) || phonePasses[0];
+         } else {
+            pass = phonePasses[0];
+         }
+       }
+    }
+
+    // 2. Exact match check using fullPassId
     if (!pass) {
-       // Also check short pass id just in case the scanner only read the suffix (using ilike)
+      const fullPassId = passId.includes('.') ? passId : `${process.env.ISSUER_ID}.${passId}`;
+      const { data: exactPass } = await supabase
+        .from('Pass')
+        .select('*, Member!inner(*)')
+        .eq('fullPassId', fullPassId)
+        .single();
+        
+      pass = exactPass;
+    }
+
+    // 3. Fallback suffix/partial match
+    if (!pass) {
        let { data: fallbackPass } = await supabase
          .from('Pass')
          .select('*, Member!inner(*)')
          .ilike('fullPassId', `%${passId}%`)
+         .order('createdAt', { ascending: false })
          .limit(1)
          .single();
-       
-       // If the scanned passId consists of digits, it might be the user's phone number
-       if (!fallbackPass && /^\d+$/.test(passId)) {
-          const { data: phonePass } = await supabase
-            .from('Pass')
-            .select('*, Member!inner(*)')
-            .ilike('Member.phone', `%${passId}%`)
-            .order('createdAt', { ascending: false })
-            .limit(1)
-            .single();
-            
-          if (phonePass) {
-             fallbackPass = phonePass;
-          }
-       }
-       
        pass = fallbackPass;
-       
-       // If no pass record matches, return a 404 so the scanner can display an invalid state
-       if (!pass) {
-          return NextResponse.json({ valid: false, error: 'Pass not found or invalid' }, { status: 404 });
-       }
+    }
+    
+    if (!pass) {
+       return NextResponse.json({ valid: false, error: 'Pass not found or invalid' }, { status: 404 });
     }
 
     const member = pass.Member;

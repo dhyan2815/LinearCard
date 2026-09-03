@@ -1,5 +1,5 @@
 import React from 'react';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, QrCode } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -19,6 +19,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           </div>
           <div className="flex items-center gap-4">
+            <Link 
+              href="/scan" 
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle hover:bg-surface-card transition-colors text-xs font-medium text-ink-dark"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              Scanner
+            </Link>
              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               API Connected

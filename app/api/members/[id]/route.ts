@@ -4,7 +4,7 @@ import { supabase } from '@/lib/db';
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const { data: member, error } = await supabase.from('Member').select('*').eq('id', id).single();
+    const { data: member, error } = await supabase.from('Member').select('*, Tenant(name)').eq('id', id).single();
     if (error || !member) return NextResponse.json({ success: false, error: 'Member not found' }, { status: 404 });
 
     const [{ data: passes }, { data: auditLog }, { data: consentLog }] = await Promise.all([
