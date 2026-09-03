@@ -231,7 +231,7 @@ export default function Dashboard() {
   ] as const;
 
   return (
-    <div className="flex flex-1 h-full overflow-hidden bg-canvas">
+    <div className="flex flex-1 overflow-hidden bg-canvas min-h-0">
       {/* LEFT SIDEBAR (Collapsible) */}
       <motion.aside 
         initial={false}
@@ -284,7 +284,7 @@ export default function Dashboard() {
       </motion.aside>
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col min-w-0 bg-canvas">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-canvas">
          {/* WORKSPACE */}
          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
            <AnimatePresence mode="wait">
@@ -294,7 +294,7 @@ export default function Dashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="h-full"
+                className="min-h-full pb-12"
              >
                {activeTab === 'design' && (
                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12 max-w-[1600px] mx-auto">

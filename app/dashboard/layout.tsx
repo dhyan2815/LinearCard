@@ -4,11 +4,11 @@ import Link from 'next/link';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col bg-canvas text-ink-dark font-sans relative overflow-hidden">
+    <div className="h-screen flex flex-col bg-canvas text-ink-dark font-sans relative overflow-hidden">
       {/* Subtle Grain / Glow background overlay */}
       <div className="fixed inset-0 z-0 pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_top,var(--tw-gradient-stops))] from-border-strong via-canvas to-canvas" />
 
-      <header className="border-b border-border-subtle bg-canvas/80 backdrop-blur-xl sticky top-0 z-40">
+      <header className="border-b border-border-subtle bg-canvas/80 backdrop-blur-xl sticky top-0 z-40 shrink-0">
         <div className="w-full px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-3">
@@ -34,7 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </header>
 
-      <div className="relative z-10 flex-1 flex flex-col">
+      <div className="relative z-10 flex-1 flex flex-col min-h-0">
         {children}
       </div>
     </div>
