@@ -145,9 +145,6 @@ export interface PassPreviewCardProps {
                 level="M"
                 includeMargin={false}
               />
-              <span className="mt-4 font-mono text-sm tracking-widest text-slate-900 font-medium text-center">
-                {shortPassId}
-              </span>
           </div>
 
           {/* Hero Image: Only render if a URL is provided (Google Wallet renders this at the bottom of the pass) */}

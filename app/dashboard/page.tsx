@@ -114,6 +114,27 @@ export default function Dashboard() {
     setSelectedTenantId(newTenantId);
     setActiveTab('design');
     setManageData({ passId: '', balance: '', tier: '', pushNotification: '', phone: '', brandName: '' });
+    const t = tenants.find(tenant => tenant.id === newTenantId);
+    setDesignData({
+      classSuffix: t?.classSuffix || '',
+      archetype: 'loyalty',
+      cardTitle: t?.name || '',
+      hexBackgroundColor: t?.brandHexColor || '#1A365D',
+      logoUrl: t?.logoUrl || '',
+      heroImageUrl: t?.heroUrl || '',
+      rows: [
+        { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
+      ]
+    });
+    setSavedTemplateId(null);
+    setTemplateStatus('unsaved');
+    setStats({
+      memberCount: 0,
+      passCount: 0,
+      walletStatus: { google: 'loading', apple: 'not_configured', samsung: 'not_configured' },
+      tierDistribution: {}
+    });
+    setPassHistory([]);
   };
 
   useEffect(() => {
@@ -137,6 +158,17 @@ export default function Dashboard() {
           } else {
             setSavedTemplateId(null);
             setTemplateStatus('unsaved');
+            setDesignData({
+              classSuffix: currentTenant.classSuffix || '',
+              archetype: 'loyalty',
+              cardTitle: currentTenant.name || '',
+              hexBackgroundColor: currentTenant.brandHexColor || '#1A365D',
+              logoUrl: currentTenant.logoUrl || '',
+              heroImageUrl: currentTenant.heroUrl || '',
+              rows: [
+                { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
+              ]
+            });
           }
         })
         .catch(err => {
@@ -191,7 +223,7 @@ export default function Dashboard() {
   };
 
   const tabs = [
-    { id: 'design', label: 'Template Canvas', icon: <Palette className="w-4 h-4" /> },
+    { id: 'design', label: 'Template Designer', icon: <Palette className="w-4 h-4" /> },
     { id: 'manage', label: 'Live Updates', icon: <Zap className="w-4 h-4" /> },
     { id: 'notify', label: 'Broadcasts', icon: <Bell className="w-4 h-4" /> },
     { id: 'members', label: 'Members', icon: <Users className="w-4 h-4" /> },
@@ -318,6 +350,12 @@ export default function Dashboard() {
                {activeTab === 'notify' && (
                  <div className="max-w-[1600px] mx-auto">
                     <BroadcastView tenantId={selectedTenantId} />
+                 </div>
+               )}
+
+               {activeTab === 'members' && (
+                 <div className="max-w-[1600px] mx-auto">
+                    <MembersView initialTenantId={selectedTenantId} />
                  </div>
                )}
 

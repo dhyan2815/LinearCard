@@ -96,7 +96,7 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
                     <p className="text-ink-secondary text-xs truncate">
                       {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown'}
                     </p>
-                    {log.error && <p className="text-red-400 text-xs mt-0.5">{log.error}</p>}
+                    {log.error && <p className="text-red-400 text-xs mt-0.5 break-all">{log.error}</p>}
                   </div>
                 </div>
               ))}
