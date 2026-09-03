@@ -14,22 +14,24 @@ LinearCard enables brands to issue, manage, and dynamically update digital passe
 ## ✨ Features
 
 - **Google Wallet Integration:** On-the-fly RS256 JWT creation and official `savetowallet` link generation. No third-party middlemen.
-- **Premium Design System:** Linear-inspired aesthetic with glassmorphism, metallic shine animations, and a responsive 3D card tilt effect.
+- **Premium Design System:** Linear-inspired aesthetic with global dark/light mode, brand-blue accents, glassmorphism, metallic shine animations, and a responsive 3D card tilt effect.
+- **Tenant Isolation:** Multi-tenant architecture with tenant-aware filtering, customizable webhooks, and separate data silos per brand.
 - **Consumer Onboarding Flow:** Beautiful mobile-first enrollment, real-time OTP verification, and DPDP consent tracking.
 - **Admin Dashboard & CRM:** 
   - Manage live digital pass templates (Loyalty, Membership, ID Card, Access Badge).
   - Modify member points/balances live via the Google Wallet REST API.
-  - Full audit trails and customer consent logs.
+  - Complete CRM view with full audit trails and customer consent logs.
 - **Notification Deliveries:** Built-in multi-channel marketing campaigns through WhatsApp and Google Wallet Push Notifications.
 - **Integrated QR Scanner:** Built-in staff-facing application to scan passes and process redemptions securely.
+- **Robust Security:** HTTP-only JWT admin authentication, persistent audit logs, and SHA-256 OTP hashing with rate limits.
 
 ## 🛠 Tech Stack
 
 - **Framework:** Next.js 16 (App Router) + React 19
 - **Language:** TypeScript / Node.js (ES Modules)
-- **Styling:** Tailwind CSS v4
+- **Styling:** Tailwind CSS v4 (with Semantic Theming)
 - **Database:** Supabase (PostgreSQL)
-- **Authentication:** `google-auth-library` (for Google API integration), Custom JWTs for Admin roles.
+- **Authentication:** `google-auth-library` (Google API), Custom HTTP-only JWTs (Admin).
 - **UI Libraries:** `lucide-react`, `qrcode.react`, `canvas-confetti`, `motion` (Framer Motion)
 
 ## 🚀 Getting Started
@@ -68,18 +70,21 @@ LinearCard enables brands to issue, manage, and dynamically update digital passe
 
 - `app/` - Next.js App Router endpoints, layouts, and pages (Dashboard, Scanner, Enrollment).
 - `components/` - Reusable UI components (PassPreviewCard, ThemeToggle, WalletModal, etc.).
+- `docs/` - Product requirement documents, E2E testing guides, and competitor research.
 - `lib/` - Core business logic:
   - `google-wallet.ts` - Cryptographic pass generation & API sync.
   - `otp.ts` - Secure SHA-256 OTP generation, validation, and rate limiting.
   - `notify.ts` - Delivery ledger and push notification logic.
   - `whatsapp.ts` - WhatsApp integration for pass distribution.
 - `supabase/` - SQL schemas and database setup scripts.
+- `tests/` - Standalone API validation scripts (`smoke-test.mjs`, `schema-check.mjs`, etc.).
 
 ## 🛡 Security & Compliance
 
 - Rate-limited and SHA-256 hashed OTPs for consumer protection.
 - Strict multi-tenant data segregation.
 - Persistent audit logs for all point adjustments, pass creations, and administrative actions.
+- Admin dashboard protected behind proxy-based HTTP-only JWT verification.
 
 ## 📄 License
 

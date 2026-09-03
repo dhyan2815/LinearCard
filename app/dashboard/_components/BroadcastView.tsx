@@ -42,7 +42,7 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
   return (
     <div className="max-w-4xl space-y-6">
       <div className="border-b border-border-subtle pb-4 mb-4">
-        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Notifications Composer</h2>
+        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Broadcast</h2>
         <p className="text-sm text-ink-secondary mt-1">Broadcast marketing updates or pass notifications across WhatsApp and Wallet Push.</p>
       </div>
 
