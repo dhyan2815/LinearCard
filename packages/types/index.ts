@@ -2,4 +2,26 @@ export interface User {
   id: string;
   email: string;
 }
-// Further types will be migrated from apps/web/lib as needed
+
+export interface SendOtpRequest {
+  phone: string;
+  tenantId?: string;
+}
+
+export interface VerifyOtpRequest {
+  phone: string;
+  otp: string;
+  consentGiven: boolean;
+  tenantId?: string;
+  memberName?: string;
+  tier?: string;
+  balance?: string;
+}
+
+export interface GeneratePassRequest {
+  phone: string;
+  memberName?: string;
+  tier?: string;
+  balance?: string;
+  tenantId?: string;
+}
