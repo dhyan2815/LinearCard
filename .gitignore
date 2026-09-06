@@ -10,3 +10,6 @@ GEMINI.md
 docs/
 plans/
 .superpowers/
+.agent/
+.claude/
+next-env.d.ts

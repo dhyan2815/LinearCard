@@ -27,12 +27,21 @@ LinearCard enables brands to issue, manage, and dynamically update digital passe
 
 ## 🛠 Tech Stack
 
-- **Framework:** Next.js 16 (App Router) + React 19
-- **Language:** TypeScript / Node.js (ES Modules)
-- **Styling:** Tailwind CSS v4 (with Semantic Theming)
-- **Database:** Supabase (PostgreSQL)
-- **Authentication:** `google-auth-library` (Google API), Custom HTTP-only JWTs (Admin).
-- **UI Libraries:** `lucide-react`, `qrcode.react`, `canvas-confetti`, `motion` (Framer Motion)
+### Frontend
+- **Framework:** Next.js 16 (App Router)
+- **UI Library:** React 19 (TypeScript enabled)
+- **Styling:** Tailwind CSS v4 (with PostCSS)
+- **Component System:** shadcn/ui (Radix UI primitives, `class-variance-authority`, `clsx`, `tailwind-merge`)
+- **Animations:** Motion (Framer Motion 13) & `canvas-confetti`
+- **Icons & Fonts:** `lucide-react`, Geist
+- **Utilities:** `qrcode.react` (QR generation), `@yudiel/react-qr-scanner` (live QR scanning)
+
+### Backend
+- **Runtime & API:** Node.js (ES Modules) via Next.js API Routes
+- **Database / BaaS:** Supabase (PostgreSQL) for multi-tenant data, templates, and audit logs
+- **Google Wallet Integration:** `google-auth-library` to securely interact with the Wallet REST API
+- **Cryptography & Security:** `jsonwebtoken` (for JWTs) and native Node.js `crypto` (for SHA-256 OTP hashing)
+- **Environment:** `dotenv`
 
 ## 🚀 Getting Started
 
@@ -79,7 +88,7 @@ LinearCard enables brands to issue, manage, and dynamically update digital passe
 - `supabase/` - SQL schemas and database setup scripts.
 - `tests/` - Standalone API validation scripts (`smoke-test.mjs`, `schema-check.mjs`, etc.).
 
-## 🛡 Security & Compliance
+## Security & Compliance
 
 - Rate-limited and SHA-256 hashed OTPs for consumer protection.
 - Strict multi-tenant data segregation.
