@@ -2,6 +2,8 @@
 node_modules/
 .agents/
 .next/
+.turbo/
+dist/
 /generated/prisma
 
 .vercel

@@ -4,7 +4,7 @@ import path from "path";
 const nextConfig = {
 
   turbopack: {
-    root: path.resolve(),
+    root: path.resolve(import.meta.dirname, "../../"),
   },
 };
 
