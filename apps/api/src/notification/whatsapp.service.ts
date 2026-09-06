@@ -1,15 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotifyService } from './notify.service';
-import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
 
-  constructor(
-    private readonly notifyService: NotifyService,
-    private readonly supabaseService: SupabaseService,
-  ) {}
+  constructor(private readonly notifyService: NotifyService) {}
 
   private toWahaId(phone: string): string {
     // Convert E.164 (+919876543210) -> Waha format (919876543210@c.us)
@@ -117,7 +113,6 @@ export class WhatsappService {
         text,
       });
       await this.notifyService.logNotification({
-        supabase: this.supabaseService.client,
         tenantId: opts.tenantId,
         memberId: opts.memberId,
         type: 'pass_link',
@@ -126,7 +121,6 @@ export class WhatsappService {
       });
     } catch (err: any) {
       await this.notifyService.logNotification({
-        supabase: this.supabaseService.client,
         tenantId: opts.tenantId,
         memberId: opts.memberId,
         type: 'pass_link',
@@ -151,7 +145,6 @@ export class WhatsappService {
         text,
       });
       await this.notifyService.logNotification({
-        supabase: this.supabaseService.client,
         tenantId: opts.tenantId,
         memberId: opts.memberId,
         type: 'receipt',
@@ -160,7 +153,6 @@ export class WhatsappService {
       });
     } catch (err: any) {
       await this.notifyService.logNotification({
-        supabase: this.supabaseService.client,
         tenantId: opts.tenantId,
         memberId: opts.memberId,
         type: 'receipt',

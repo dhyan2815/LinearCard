@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseService } from '../supabase/supabase.service';
 
 export interface LogNotificationOpts {
-  supabase: SupabaseClient;
   tenantId: string;
   memberId?: string;
   type: string;
@@ -15,19 +14,22 @@ export interface LogNotificationOpts {
 export class NotifyService {
   private readonly logger = new Logger(NotifyService.name);
 
+  constructor(private readonly supabaseService: SupabaseService) {}
+
   /** Never throws — logging failures must not crash the main request. */
   async logNotification(opts: LogNotificationOpts): Promise<void> {
-    const { supabase, tenantId, memberId, type, channel, status, errorReason } =
-      opts;
+    const { tenantId, memberId, type, channel, status, errorReason } = opts;
     try {
-      const { error } = await supabase.from('NotificationLog').insert({
-        tenantId,
-        memberId: memberId || null,
-        type,
-        channel,
-        status,
-        error: errorReason || null,
-      });
+      const { error } = await this.supabaseService.client
+        .from('NotificationLog')
+        .insert({
+          tenantId,
+          memberId: memberId || null,
+          type,
+          channel,
+          status,
+          error: errorReason || null,
+        });
       if (error) {
         this.logger.error('[notify] Failed to write NotificationLog:', error);
       }
