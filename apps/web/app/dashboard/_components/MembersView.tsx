@@ -26,7 +26,7 @@ export function MembersView({ initialTenantId = 'all' }: { initialTenantId?: str
       .catch(() => setLoading(false));
 
     // Fetch tenants
-    apiClient('/tenants')
+    apiClient('/tenant/tenants')
       .then(data => {
         if (data.success && data.tenants) {
           setTenants(data.tenants);
