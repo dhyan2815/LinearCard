@@ -155,7 +155,7 @@ export class WalletService {
             data: patchPayload,
           });
           return updateRes.data;
-        } catch (e) {
+        } catch {
           return { id: classId, existing: true, updated: false };
         }
       }

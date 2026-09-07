@@ -25,7 +25,7 @@ import { NotificationModule } from './notification/notification.module';
     PassesModule,
     DashboardModule,
     SettingsModule,
-    NotificationsModule
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

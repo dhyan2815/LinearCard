@@ -8,9 +8,17 @@ export class DashboardController {
   @Get('stats')
   async getstats() {
     try {
-      const [{ count: memberCount }, { count: passCount }, { data: passTiers }] = await Promise.all([
-        this.supabaseService.client.from('Member').select('*', { count: 'exact', head: true }),
-        this.supabaseService.client.from('Pass').select('*', { count: 'exact', head: true }),
+      const [
+        { count: memberCount },
+        { count: passCount },
+        { data: passTiers },
+      ] = await Promise.all([
+        this.supabaseService.client
+          .from('Member')
+          .select('*', { count: 'exact', head: true }),
+        this.supabaseService.client
+          .from('Pass')
+          .select('*', { count: 'exact', head: true }),
         this.supabaseService.client.from('Pass').select('tier'),
       ]);
 
@@ -20,20 +28,24 @@ export class DashboardController {
         tierDistribution[t] = (tierDistribution[t] || 0) + 1;
       });
 
-      const googleConnected = !!(process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY && process.env.ISSUER_ID);
+      const googleConnected = !!(
+        process.env.GOOGLE_CLIENT_EMAIL &&
+        process.env.GOOGLE_PRIVATE_KEY &&
+        process.env.ISSUER_ID
+      );
 
       return {
         success: true,
         memberCount: memberCount || 0,
-        passCount:   passCount   || 0,
+        passCount: passCount || 0,
         tierDistribution,
         walletStatus: {
-          google:  googleConnected ? 'connected' : 'not_configured',
-          apple:   'not_configured',
+          google: googleConnected ? 'connected' : 'not_configured',
+          apple: 'not_configured',
           samsung: 'pending_approval',
         },
       };
-    } catch (error: any) {
+    } catch {
       return { success: false, error: 'Failed to fetch stats' };
     }
   }

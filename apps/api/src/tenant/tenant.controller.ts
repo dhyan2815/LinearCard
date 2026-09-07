@@ -1,4 +1,10 @@
-import { Controller, Get, Param, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 
 @Controller('tenant')
@@ -17,8 +23,11 @@ export class TenantController {
         throw new Error(`DB Error: ${error.message}`);
       }
       return { success: true, tenants };
-    } catch (error: any) {
-      throw new HttpException({ success: false, error: 'Failed to fetch tenants' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    } catch {
+      throw new HttpException(
+        { success: false, error: 'Failed to fetch tenants' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -31,7 +40,7 @@ export class TenantController {
           .select('*')
           .eq('classSuffix', 'linearcard_demo')
           .single();
-        
+
         if (demoTenant) {
           return {
             tenantId: demoTenant.id,
@@ -39,17 +48,17 @@ export class TenantController {
             brandHexColor: demoTenant.brandHexColor,
             logoUrl: demoTenant.logoUrl,
             heroUrl: demoTenant.heroUrl,
-            classSuffix: demoTenant.classSuffix
+            classSuffix: demoTenant.classSuffix,
           };
         }
-        
+
         return {
           tenantId: 'demo-tenant-123',
           name: 'LinearCard Demo Pass',
           brandHexColor: '#F97316',
           logoUrl: '/logo-linearcard.png',
           heroUrl: '/hero-linearcard.png',
-          classSuffix: 'linearcard_demo'
+          classSuffix: 'linearcard_demo',
         };
       }
 
@@ -60,7 +69,10 @@ export class TenantController {
         .single();
 
       if (error || !tenant) {
-        throw new HttpException({ error: 'Tenant not found' }, HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          { error: 'Tenant not found' },
+          HttpStatus.NOT_FOUND,
+        );
       }
 
       return {
@@ -69,11 +81,14 @@ export class TenantController {
         brandHexColor: tenant.brandHexColor,
         logoUrl: tenant.logoUrl,
         heroUrl: tenant.heroUrl,
-        classSuffix: tenant.classSuffix
+        classSuffix: tenant.classSuffix,
       };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
-      throw new HttpException({ error: 'Failed to fetch tenant' }, HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        { error: 'Failed to fetch tenant' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }
