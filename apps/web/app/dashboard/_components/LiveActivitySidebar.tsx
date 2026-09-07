@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Activity, ArrowRight, Zap, RefreshCw } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 function formatTimeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -33,8 +34,7 @@ export function LiveActivitySidebar({
   const [logs, setLogs] = useState<any[]>([]);
   useEffect(() => {
     if (!tenantId) return;
-    fetch(`/api/notifications/log?tenantId=${tenantId}&limit=50`)
-      .then(r => r.json())
+    apiClient(`/notifications/log?tenantId=${tenantId}&limit=50`)
       .then(d => { if (d.success) setLogs(d.logs); })
       .catch(err => console.error('Error fetching logs:', err));
   }, [tenantId, successMsg]);

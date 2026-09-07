@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Activity, ArrowRight, Zap } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 function formatTimeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -34,8 +35,7 @@ export function LiveManageView({
   
   useEffect(() => {
     if (!tenantId) return;
-    fetch(`/api/notifications/log?tenantId=${tenantId}&limit=20`)
-      .then(r => r.json())
+    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20`)
       .then(d => { if (d.success) setLogs(d.logs); })
       .catch(err => console.error('Error fetching logs:', err));
   }, [tenantId, successMsg]);

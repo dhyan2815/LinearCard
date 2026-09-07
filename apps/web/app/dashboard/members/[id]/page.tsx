@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import Link from 'next/link';
+import { apiClient } from '@/lib/api-client';
 
 export default function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,20 +23,24 @@ export default function MemberDetailPage() {
 
   const loadMember = async () => {
     const previousPassId = selectedPassId; // capture before async fetch resets state
-    const data = await (await fetch(`/api/members/${id}`)).json();
-    if (data.success) {
-      setMember(data.member);
-      if (data.member.passes?.length > 0) {
-        // Preserve the admin's current selection; fall back to passes[0] on initial load
-        const passStillExists = data.member.passes.some((p: any) => p.id === previousPassId);
-        const targetPass = passStillExists
-          ? data.member.passes.find((p: any) => p.id === previousPassId)!
-          : data.member.passes[0];
-        setSelectedPassId(targetPass.id);
-        setNewBalance(String(targetPass.balance));
-        setNewTier(targetPass.tier || '');
-      }
-    } else setError(data.error || 'Failed to load member');
+    try {
+      const data = await apiClient(`/members/${id}`);
+      if (data.success) {
+        setMember(data.member);
+        if (data.member.passes?.length > 0) {
+          // Preserve the admin's current selection; fall back to passes[0] on initial load
+          const passStillExists = data.member.passes.some((p: any) => p.id === previousPassId);
+          const targetPass = passStillExists
+            ? data.member.passes.find((p: any) => p.id === previousPassId)!
+            : data.member.passes[0];
+          setSelectedPassId(targetPass.id);
+          setNewBalance(String(targetPass.balance));
+          setNewTier(targetPass.tier || '');
+        }
+      } else setError(data.error || 'Failed to load member');
+    } catch (err: any) {
+      setError(err.message || 'Failed to load member');
+    }
     setLoading(false);
   };
 
@@ -49,12 +54,10 @@ export default function MemberDetailPage() {
     setIsAdjusting(true);
     setAdjustMsg('');
     try {
-      const res = await fetch(`/api/members/${id}/adjust-balance`, {
+      const data = await apiClient(`/members/${id}/adjust-balance`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passId: selectedPassId, newBalance: parseInt(newBalance, 10), newTier, note }),
       });
-      const data = await res.json();
       if (!data.success) throw new Error(data.error);
       setAdjustMsg('Balance adjusted. Wallet pass will update shortly.');
       await loadMember();
