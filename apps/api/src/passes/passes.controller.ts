@@ -391,8 +391,4 @@ export class PassesController {
 
   }
 
-  @Get('p/:id')
-  async getpid(@Req() req: Request, @Res() res: Response) {
-    // Could not parse GET logic
-  }
 }

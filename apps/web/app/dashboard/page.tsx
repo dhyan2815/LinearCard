@@ -1,4 +1,5 @@
 'use client';
+import { Tenant, Member } from '@linearcard/types';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Settings2, Zap, Menu, Palette, Bell, Users } from 'lucide-react';
@@ -35,7 +36,6 @@ function WalletStatusPill({ label, status }: { label: string; status: string }) 
   );
 }
 
-import { Tenant, Member } from '@linearcard/types';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'design' | 'manage' | 'notify' | 'members' | 'settings'>('design');
@@ -75,7 +75,7 @@ export default function Dashboard() {
     if (typeof window !== 'undefined') {
       setOrigin(window.location.origin);
     }
-    apiClient('/tenant/tenants')
+    apiClient('/tenants')
       .then(data => {
         if (data.success && data.tenants && data.tenants.length > 0) {
           setTenants(data.tenants);

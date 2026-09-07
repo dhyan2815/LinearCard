@@ -1,7 +1,7 @@
 import { Controller, Get, Param, HttpException, HttpStatus } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 
-@Controller('tenant')
+@Controller()
 export class TenantController {
   constructor(private readonly supabaseService: SupabaseService) {}
 
@@ -22,7 +22,7 @@ export class TenantController {
     }
   }
 
-  @Get(':slug')
+  @Get('tenant/:slug')
   async getTenantBySlug(@Param('slug') slug: string) {
     try {
       if (slug === 'default' || slug === 'linearcard_demo') {
