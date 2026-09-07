@@ -22,7 +22,7 @@ export function SettingsView() {
     }).catch(err => {
       if (err.message.includes('Unauthorized')) {
         setAuthError(true);
-        router.push('/admin/login');
+        router.push('/login');
       } else {
         console.error('Error fetching settings:', err);
       }
@@ -39,7 +39,7 @@ export function SettingsView() {
       if (!data.success) throw new Error(data.error || 'Failed to save webhook URL');
       setMsg('Webhook URL saved.');
     } catch (err: any) { 
-      if (err.message.includes('Unauthorized')) { setAuthError(true); router.push('/admin/login'); }
+      if (err.message.includes('Unauthorized')) { setAuthError(true); router.push('/login'); }
       else { setMsg(`Error: ${err.message}`); }
     }
     finally { setIsSaving(false); }
@@ -54,7 +54,7 @@ export function SettingsView() {
       setTenant((prev: any) => ({ ...prev, apiKey: data.apiKey }));
       setMsg('API key rotated.');
     } catch (err: any) { 
-      if (err.message.includes('Unauthorized')) { setAuthError(true); router.push('/admin/login'); }
+      if (err.message.includes('Unauthorized')) { setAuthError(true); router.push('/login'); }
       else { setMsg(`Error: ${err.message}`); }
     }
     finally { setIsRotating(false); }

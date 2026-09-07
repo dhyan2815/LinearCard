@@ -161,6 +161,10 @@ export default function LoginPage() {
                  });
                  if (!data.success) throw new Error(data.error);
                  
+                 if (data.token) {
+                   document.cookie = `admin_session=${data.token}; path=/; max-age=86400; SameSite=Lax`;
+                 }
+
                  router.push('/dashboard');
                } catch (err: any) {
                  setOtpError(err.message || "Invalid OTP");

@@ -4,12 +4,22 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
   // Allow passing endpoint with or without leading slash
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   
+  let authHeader: Record<string, string> = {};
+  if (typeof document !== 'undefined') {
+    const match = document.cookie.match(/(?:^|;\s*)admin_session=([^;]+)/);
+    if (match) {
+      authHeader['Authorization'] = `Bearer ${decodeURIComponent(match[1])}`;
+    }
+  }
+
   const response = await fetch(`${API_URL}${cleanEndpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeader,
       ...options.headers,
     },
+    credentials: 'include',
   });
   
   if (!response.ok) {
