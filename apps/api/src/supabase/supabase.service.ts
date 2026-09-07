@@ -1,3 +1,4 @@
+import '../env';
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
