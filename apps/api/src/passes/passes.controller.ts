@@ -8,7 +8,24 @@ import { NotifyService } from '../notification/notify.service';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
+
+function extractAdminToken(req: Request): string | null {
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  if (req.cookies?.admin_session) {
+    const c = req.cookies.admin_session;
+    return typeof c === 'object' && c?.value ? c.value : c;
+  }
+  const rawCookie = req.headers['cookie'];
+  if (rawCookie) {
+    const match = rawCookie.match(/(?:^|;\s*)admin_session=([^;]+)/);
+    if (match) return decodeURIComponent(match[1]);
+  }
+  return null;
+}
 
 @Controller('passes')
 export class PassesController {
@@ -148,11 +165,11 @@ export class PassesController {
          .order('createdAt', { ascending: false });
 
        if (phonePasses && phonePasses.length > 0) {
-         const cookie = req.cookies?.admin_session;
+         const token = extractAdminToken(req);
          let staffTenantId = null;
-         if (cookie?.value) {
+         if (token) {
             try {
-               const decoded: any = jwt.verify(cookie.value, JWT_SECRET);
+               const decoded: any = jwt.verify(token, JWT_SECRET);
                staffTenantId = decoded.tenantId;
             } catch (e) {
                // Ignore invalid session
@@ -227,23 +244,32 @@ export class PassesController {
       return res.status(400).json({ success: false, error: 'passId is required' });
     }
 
-    // API Key Validation: check if the req is authenticated via a session cookie or a Bearer token
-    const adminSession = req.cookies?.admin_session;
-    const authHeader = req.headers['authorization'] as string;
+    // API Key or Admin Session Validation
+    const rawToken = extractAdminToken(req);
     let authenticatedTenantId = null;
 
-    // If no session cookie exists, fallback to evaluating the Bearer token
-    if (!adminSession?.value) {
-      if (!authHeader?.startsWith('Bearer ')) {
-        return res.status(401).json({ success: false, error: 'Unauthorized: Missing API Key' });
+    if (rawToken) {
+      try {
+        const decoded: any = jwt.verify(rawToken, JWT_SECRET);
+        authenticatedTenantId = decoded.tenantId;
+      } catch {
+        // Fallback to evaluating as an API key if not a valid JWT
       }
-      const token = authHeader.substring(7);
-      const { data: tenant } = await this.supabaseService.client.from('Tenant').select('id').eq('apiKey', token).single();
-      // Ensure the provided token maps to a valid tenant in the database
-      if (!tenant) {
-        return res.status(401).json({ success: false, error: 'Invalid API Key' });
+    }
+
+    if (!authenticatedTenantId) {
+      const authHeader = req.headers['authorization'] as string;
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const { data: tenant } = await this.supabaseService.client.from('Tenant').select('id').eq('apiKey', token).single();
+        if (tenant) {
+          authenticatedTenantId = tenant.id;
+        }
       }
-      authenticatedTenantId = tenant.id;
+    }
+
+    if (!authenticatedTenantId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Missing or invalid authentication' });
     }
 
     const isUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(passId);
@@ -362,7 +388,6 @@ export class PassesController {
   async getcheckclass(@Req() req: Request, @Res() res: Response) {
     
   try {
-    const { searchParams } = new URL((req.url || ""));
     const classSuffix = (req.query["classSuffix"] as string);
     
     if (!classSuffix) {

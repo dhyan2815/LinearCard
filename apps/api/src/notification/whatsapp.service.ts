@@ -15,7 +15,7 @@ export class WhatsappService {
   private async wahaPost(endpoint: string, body: object) {
     // WAHA temporarily disabled per RM due to unstable sessions causing errors
     this.logger.log(
-      `[WAHA TEMPORARILY DISABLED] Skipping message to ${endpoint}`,
+      `[WAHA TEMPORARILY DISABLED] Skipping message to ${endpoint}. Payload: ${JSON.stringify(body)}`,
     );
     return { success: true };
 
@@ -69,6 +69,7 @@ export class WhatsappService {
 
   public async sendOtp(phone: string, otp: string, brandName?: string) {
     const brand = brandName || 'LinearCard';
+    this.logger.log(`[DEV OTP] Target: ${phone} | Code: ${otp}`);
     return this.wahaPost('/api/sendText', {
       chatId: this.toWahaId(phone),
       text: `🔐 Your ${brand} verification code is: *${otp}*\n\nThis code expires in 5 minutes. Do not share it with anyone.`,

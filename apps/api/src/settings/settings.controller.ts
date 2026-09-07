@@ -7,10 +7,22 @@ import * as crypto from 'crypto';
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
 
 function getTenantId(req: Request): string | null {
-  const cookie = req.cookies?.admin_session;
-  if (!cookie) return null;
+  const authHeader = req.headers['authorization'];
+  let token: string | null = null;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (req.cookies?.admin_session) {
+    const c = req.cookies.admin_session;
+    token = typeof c === 'object' && c?.value ? c.value : c;
+  } else if (req.headers['cookie']) {
+    const match = req.headers['cookie'].match(/(?:^|;\s*)admin_session=([^;]+)/);
+    if (match) token = decodeURIComponent(match[1]);
+  }
+
+  if (!token) return null;
   try {
-    const p: any = jwt.verify(cookie, JWT_SECRET);
+    const p: any = jwt.verify(token, JWT_SECRET);
     return p.tenantId || null;
   } catch {
     return null;

@@ -24,17 +24,15 @@ export class NotificationsController {
 
   @Get('log')
   async getnotificationslog(@Req() req: Request, @Res() res: Response) {
-    
-  try {
-    const params = new URL((req.url || "")).searchParams;
-    const tenantId = (req.query["tenantId"] as string);
-    const limit = parseInt((req.query["limit"] as string) || '50', 10);
+    try {
+      const tenantId = req.query["tenantId"] as string;
+      const limit = parseInt((req.query["limit"] as string) || '50', 10);
 
-    if (!tenantId) {
-      return res.status(400).json({ success: false, error: 'tenantId is required' });
-    }
+      if (!tenantId) {
+        return res.status(400).json({ success: false, error: 'tenantId is required' });
+      }
 
-    const { data: logs, error } = await this.supabaseService.client
+      const { data: logs, error } = await this.supabaseService.client
       .from('NotificationLog')
       .select('*, member:Member(name, phone)')
       .eq('tenantId', tenantId)
