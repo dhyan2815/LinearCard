@@ -4,11 +4,12 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Users, Search } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { Tenant, Member } from '@linearcard/types';
 
 export function MembersView({ initialTenantId = 'all' }: { initialTenantId?: string }) {
   const router = useRouter();
-  const [members, setMembers] = useState<any[]>([]);
-  const [tenants, setTenants] = useState<any[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>(initialTenantId);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');

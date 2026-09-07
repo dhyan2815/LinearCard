@@ -25,3 +25,31 @@ export interface GeneratePassRequest {
   balance?: string;
   tenantId?: string;
 }
+
+export interface Tenant {
+  id: string;
+  name: string;
+  classSuffix: string;
+  brandHexColor: string;
+  logoUrl?: string;
+  heroUrl?: string;
+  apiKey?: string;
+  webhookUrl?: string;
+}
+
+export interface Pass {
+  id: string;
+  fullPassId: string;
+  tier: string;
+  balance: string | number;
+}
+
+export interface Member {
+  id: string;
+  phone: string;
+  name?: string;
+  tenantId: string;
+  createdAt?: string;
+  passes?: Pass[];
+}
+

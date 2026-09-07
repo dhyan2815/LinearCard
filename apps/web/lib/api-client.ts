@@ -1,6 +1,6 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-export async function apiClient(endpoint: string, options: RequestInit = {}) {
+export async function apiClient<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   // Allow passing endpoint with or without leading slash
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   

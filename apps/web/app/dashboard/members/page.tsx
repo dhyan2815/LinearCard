@@ -8,11 +8,12 @@ import { Users, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api-client';
+import { Tenant, Member } from '@linearcard/types';
 
 export default function MembersPage() {
   const router = useRouter();
-  const [members, setMembers] = useState<any[]>([]);
-  const [tenants, setTenants] = useState<any[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');

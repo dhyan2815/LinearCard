@@ -35,11 +35,13 @@ function WalletStatusPill({ label, status }: { label: string; status: string }) 
   );
 }
 
+import { Tenant, Member } from '@linearcard/types';
+
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'design' | 'manage' | 'notify' | 'members' | 'settings'>('design');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  const [tenants, setTenants] = useState<any[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [origin, setOrigin] = useState<string>('');
   const [stats, setStats] = useState<{
