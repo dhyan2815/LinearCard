@@ -6,6 +6,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/api-client';
 
 export default function ScanPage() {
   const [passId, setPassId] = useState('');
@@ -36,14 +37,12 @@ export default function ScanPage() {
     }
     
     try {
-      const res = await fetch('/api/validate-pass', {
+      const data = await apiClient('/passes/validate-pass', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passId: finalId })
       });
       
-      const data = await res.json();
-      if (!res.ok || !data.valid) throw new Error(data.error || 'Invalid Pass');
+      if (!data.valid) throw new Error(data.error || 'Invalid Pass');
       
       setPassData(data);
     } catch (err: any) {
@@ -85,9 +84,8 @@ export default function ScanPage() {
       
       const demoPhone = passData.phone || '';
       
-      const res = await fetch('/api/update-pass', {
+      const data = await apiClient('/passes/update-pass', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           passId: passData.fullPassId, 
           balance: newBalance,
@@ -98,8 +96,7 @@ export default function ScanPage() {
         })
       });
       
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to process redemption');
+      if (!data.success) throw new Error(data.error || 'Failed to process redemption');
       
       setSuccessMsg(`Successfully redeemed ${redeemPts} points. New balance is ${newBalance}.`);
       setPassData(prev => prev ? { ...prev, balance: newBalance } : null);

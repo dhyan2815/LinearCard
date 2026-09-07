@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/api-client';
 
 export function SettingsView() {
   const router = useRouter();
@@ -16,30 +17,31 @@ export function SettingsView() {
   const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
-    fetch('/api/settings').then(async (r) => {
-      if (r.status === 401) {
+    apiClient('/settings').then(d => {
+      if (d.success) { setTenant(d.tenant); setWebhookUrl(d.tenant.webhookUrl || ''); }
+    }).catch(err => {
+      if (err.message.includes('Unauthorized')) {
         setAuthError(true);
         router.push('/admin/login');
-        return;
+      } else {
+        console.error('Error fetching settings:', err);
       }
-      const d = await r.json();
-      if (d.success) { setTenant(d.tenant); setWebhookUrl(d.tenant.webhookUrl || ''); }
-    }).catch(err => console.error('Error fetching settings:', err));
+    });
   }, []);
 
   const handleSaveWebhook = async () => {
     setIsSaving(true); setMsg('');
     try {
-      const res = await fetch('/api/settings', {
+      const data = await apiClient('/settings', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ webhookUrl }),
       });
-      if (res.status === 401) { setAuthError(true); router.push('/admin/login'); return; }
-      const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to save webhook URL');
       setMsg('Webhook URL saved.');
-    } catch (err: any) { setMsg(`Error: ${err.message}`); }
+    } catch (err: any) { 
+      if (err.message.includes('Unauthorized')) { setAuthError(true); router.push('/admin/login'); }
+      else { setMsg(`Error: ${err.message}`); }
+    }
     finally { setIsSaving(false); }
   };
 
@@ -47,13 +49,14 @@ export function SettingsView() {
     if (!confirm('Rotate API key? The old key stops working immediately.')) return;
     setIsRotating(true);
     try {
-      const res = await fetch('/api/admin/developer-settings', { method: 'POST' });
-      if (res.status === 401) { setAuthError(true); router.push('/admin/login'); return; }
-      const data = await res.json();
+      const data = await apiClient('/admin/developer-settings', { method: 'POST' });
       if (!data.success) throw new Error(data.error || 'Failed to rotate key');
       setTenant((prev: any) => ({ ...prev, apiKey: data.apiKey }));
       setMsg('API key rotated.');
-    } catch (err: any) { setMsg(`Error: ${err.message}`); }
+    } catch (err: any) { 
+      if (err.message.includes('Unauthorized')) { setAuthError(true); router.push('/admin/login'); }
+      else { setMsg(`Error: ${err.message}`); }
+    }
     finally { setIsRotating(false); }
   };
 

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Settings2, Zap, Menu, Palette, Bell, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PassPreviewCard from '@/components/PassPreviewCard';
+import { apiClient } from '@/lib/api-client';
 
 import { LiveManageView } from './_components/LiveManageView';
 import { TemplateWorkspace } from './_components/TemplateWorkspace';
@@ -72,8 +73,7 @@ export default function Dashboard() {
     if (typeof window !== 'undefined') {
       setOrigin(window.location.origin);
     }
-    fetch('/api/tenants')
-      .then(res => res.json())
+    apiClient('/tenant/tenants')
       .then(data => {
         if (data.success && data.tenants && data.tenants.length > 0) {
           setTenants(data.tenants);
@@ -86,16 +86,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (selectedTenantId) {
-      fetch(`/api/dashboard/stats?tenantId=${selectedTenantId}`)
-        .then(res => res.json())
+      apiClient(`/dashboard/stats?tenantId=${selectedTenantId}`)
         .then(data => {
            if (data.success) {
              setStats(data.stats);
            }
         });
         
-      fetch(`/api/members?tenantId=${selectedTenantId}`)
-        .then(res => res.json())
+      apiClient(`/members?tenantId=${selectedTenantId}`)
         .then(data => {
           if (data.success) {
              const allPasses = data.members?.flatMap((m: any) => m.passes?.map((p: any) => ({
@@ -139,8 +137,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (currentTenant) {
-      fetch(`/api/templates?tenantId=${currentTenant.id}`)
-        .then(res => res.json())
+      apiClient(`/templates?tenantId=${currentTenant.id}`)
         .then(data => {
           if (data.success && data.templates && data.templates.length > 0) {
             const t = data.templates[0];
@@ -192,11 +189,10 @@ export default function Dashboard() {
     e.preventDefault();
     setLoading(true); setError(null); setSuccessMsg(null);
     try {
-      const response = await fetch('/api/update-pass', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(manageData)
+      const data = await apiClient('/passes/update-pass', {
+        method: 'POST', body: JSON.stringify(manageData)
       });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to update pass');
+      if (!data.success) throw new Error(data.error || 'Failed to update pass');
       
       let msg = `Pass updated successfully! Changes pushed to your device.`;
       if (manageData.pushNotification) msg += ` Notification sent: "${manageData.pushNotification}"`;

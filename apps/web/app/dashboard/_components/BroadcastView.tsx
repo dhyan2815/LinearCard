@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Label } from '@/components/ui/Label';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/api-client';
 
 export function BroadcastView({ tenantId }: { tenantId: string }) {
   const [channel, setChannel] = useState<'whatsapp' | 'wallet_push'>('whatsapp');
@@ -14,8 +15,7 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
 
   useEffect(() => {
     if (!tenantId) return;
-    fetch(`/api/notifications/log?tenantId=${tenantId}&limit=20`)
-      .then(r => r.json())
+    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20`)
       .then(d => { if (d.success) setLogs(d.logs); })
       .catch(err => console.error('Error fetching logs:', err));
   }, [tenantId, result]);
@@ -24,11 +24,10 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
     if (!tenantId || !message.trim()) return;
     setIsSending(true); setResult(null); setSendError(null);
     try {
-      const res = await fetch('/api/notifications/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const data = await apiClient('/notifications/send', {
+        method: 'POST',
         body: JSON.stringify({ tenantId, channel, message }),
       });
-      const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to send');
       setResult({ sent: data.sent, failed: data.failed });
       setMessage('');

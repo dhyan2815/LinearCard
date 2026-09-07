@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Users, Search } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 export function MembersView({ initialTenantId = 'all' }: { initialTenantId?: string }) {
   const router = useRouter();
@@ -14,8 +15,7 @@ export function MembersView({ initialTenantId = 'all' }: { initialTenantId?: str
 
   useEffect(() => {
     // Fetch members
-    fetch('/api/members')
-      .then(res => res.json())
+    apiClient('/members')
       .then(data => {
         if (data.success) {
           setMembers(data.members || []);
@@ -25,8 +25,7 @@ export function MembersView({ initialTenantId = 'all' }: { initialTenantId?: str
       .catch(() => setLoading(false));
 
     // Fetch tenants
-    fetch('/api/tenants')
-      .then(res => res.json())
+    apiClient('/tenant/tenants')
       .then(data => {
         if (data.success && data.tenants) {
           setTenants(data.tenants);

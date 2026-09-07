@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Plus, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { apiClient } from '@/lib/api-client';
 
 const COLOR_PALETTE = [
   { name: 'Obsidian', hex: '#18181B' },
@@ -85,18 +86,16 @@ export function TemplateWorkspace({
   const handleSaveDraft = async () => {
     try {
       if (savedTemplateId) {
-        const res = await fetch(`/api/templates/${savedTemplateId}`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        const data = await apiClient(`/templates/${savedTemplateId}`, {
+          method: 'PATCH',
           body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
         });
-        const data = await res.json();
         if (data.success) { alert('Draft updated'); setTemplateStatus('draft'); }
       } else {
-        const res = await fetch('/api/templates', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        const data = await apiClient('/templates', {
+          method: 'POST',
           body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, classSuffix: designData.classSuffix, name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
         });
-        const data = await res.json();
         if (data.success) { setSavedTemplateId(data.template.id); setTemplateStatus('draft'); alert('Draft saved'); }
       }
     } catch (e) { console.error(e); alert('Error saving draft'); }
@@ -106,29 +105,26 @@ export function TemplateWorkspace({
     let tplId = savedTemplateId;
     if (!tplId) {
       try {
-        const res = await fetch('/api/templates', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        const data = await apiClient('/templates', {
+          method: 'POST',
           body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, name: designData.cardTitle || 'New Template', archetype: designData.archetype, classSuffix: designData.classSuffix, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
         });
-        const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to create template');
         tplId = data.template.id;
         setSavedTemplateId(tplId);
       } catch (err: any) { alert(`Failed: ${err.message}`); return; }
     } else {
       try {
-        const res = await fetch(`/api/templates/${tplId}`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        const data = await apiClient(`/templates/${tplId}`, {
+          method: 'PATCH',
           body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
         });
-        const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
         setTemplateStatus('draft');
       } catch (err: any) { alert(`Sync failed: ${err.message}`); return; }
     }
     try {
-      const res = await fetch(`/api/templates/${tplId}/publish`, { method: 'POST' });
-      const data = await res.json();
+      const data = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
       if (!data.success) throw new Error(data.error || 'Failed to publish');
       setTemplateStatus('published');
       alert('Published to Google Wallet API');

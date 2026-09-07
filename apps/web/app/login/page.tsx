@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
+import { apiClient } from '@/lib/api-client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -66,13 +67,11 @@ export default function LoginPage() {
                e.preventDefault();
                setIsMockLoading(true);
                try {
-                 const res = await fetch('/api/admin/send-otp', {
+                 const data = await apiClient('/auth/admin/send-otp', {
                    method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
                    body: JSON.stringify({ phone: `${countryCode}${onboardingPhone}` })
                  });
-                 const data = await res.json();
-                 if (!res.ok || !data.success) throw new Error(data.error);
+                 if (!data.success) throw new Error(data.error);
                  setCurrentScreen('admin_otp');
                } catch (err: any) {
                  alert(err.message || "Failed to send OTP");
@@ -156,13 +155,11 @@ export default function LoginPage() {
                if (!onboardingOtp) return;
                setIsMockLoading(true);
                try {
-                 const res = await fetch('/api/admin/verify-otp', {
+                 const data = await apiClient('/auth/admin/verify-otp', {
                    method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
                    body: JSON.stringify({ phone: `${countryCode}${onboardingPhone}`, otp: onboardingOtp })
                  });
-                 const data = await res.json();
-                 if (!res.ok || !data.success) throw new Error(data.error);
+                 if (!data.success) throw new Error(data.error);
                  
                  router.push('/dashboard');
                } catch (err: any) {

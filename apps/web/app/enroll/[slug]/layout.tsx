@@ -1,7 +1,7 @@
 import React from 'react';
 import { CreditCard, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
-import { supabase } from '@/lib/db';
+import { apiClient } from '@/lib/api-client';
 
 export default async function TenantLayout({ children, params }: { children: React.ReactNode, params: Promise<{ slug: string }> }) {
   const resolvedParams = await params;
@@ -10,10 +10,14 @@ export default async function TenantLayout({ children, params }: { children: Rea
   let logoUrl = '';
   
   if (slug !== 'default' && slug !== 'linearcard_demo') {
-    const { data: tenant } = await supabase.from('Tenant').select('*').eq('classSuffix', slug).single();
-    if (tenant) {
-      brandName = tenant.name;
-      logoUrl = tenant.logoUrl;
+    try {
+      const data = await apiClient(`/tenant/${slug}`);
+      if (data && !data.error) {
+        brandName = data.name;
+        logoUrl = data.logoUrl;
+      }
+    } catch (e) {
+      console.error('Failed to fetch tenant for layout', e);
     }
   }
 

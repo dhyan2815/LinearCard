@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Users, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
+import { apiClient } from '@/lib/api-client';
 
 export default function MembersPage() {
   const router = useRouter();
@@ -18,8 +19,7 @@ export default function MembersPage() {
 
   useEffect(() => {
     // Fetch members
-    fetch('/api/members')
-      .then(res => res.json())
+    apiClient('/members')
       .then(data => {
         if (data.success) {
           setMembers(data.members || []);
@@ -29,8 +29,7 @@ export default function MembersPage() {
       .catch(() => setLoading(false));
 
     // Fetch tenants
-    fetch('/api/tenants')
-      .then(res => res.json())
+    apiClient('/tenant/tenants')
       .then(data => {
         if (data.success && data.tenants) {
           setTenants(data.tenants);

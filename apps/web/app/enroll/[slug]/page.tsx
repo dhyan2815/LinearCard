@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
+import { apiClient } from '@/lib/api-client';
 
 export default function TenantEnrollPage() {
   const params = useParams();
@@ -31,10 +32,9 @@ export default function TenantEnrollPage() {
   useEffect(() => {
     async function fetchTenant() {
       try {
-        const res = await fetch(`/api/tenant/${slug}`);
-        const data = await res.json();
+        const data = await apiClient(`/tenant/${slug}`);
         // If the tenant isn't found or an error occurred, block the enrollment flow
-        if (!res.ok || data.error) {
+        if (data.error) {
           setTenantError('This enrollment link is invalid. Please ask the brand for their correct link.');
           setCurrentScreen('error');
         } else {
@@ -111,16 +111,14 @@ export default function TenantEnrollPage() {
                e.preventDefault();
                setIsMockLoading(true);
                try {
-                 const res = await fetch('/api/send-otp', {
+                 const data = await apiClient('/auth/send-otp', {
                    method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
                    body: JSON.stringify({ 
                      phone: `${countryCode}${onboardingPhone}`,
                      tenantId: tenantConfig.tenantId 
                    })
                  });
-                 const data = await res.json();
-                 if (!res.ok || !data.success) throw new Error(data.error);
+                 if (!data.success) throw new Error(data.error);
                  setCurrentScreen('consumer_otp');
                } catch (err: any) {
                  alert(err.message || "Failed to send OTP");
@@ -217,8 +215,8 @@ export default function TenantEnrollPage() {
                if (!consentGiven || !onboardingOtp) return;
                setIsMockLoading(true);
                try {
-                 const response = await fetch('/api/verify-otp', {
-                   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ 
+                 const data = await apiClient('/auth/verify-otp', {
+                   method: 'POST', body: JSON.stringify({ 
                      phone: `${countryCode}${onboardingPhone}`,
                      otp: onboardingOtp,
                      consentGiven,
@@ -228,8 +226,7 @@ export default function TenantEnrollPage() {
                      barcodeAltText: onboardingPhone.replace(/\D/g, '')
                    })
                  });
-                 const data = await response.json();
-                 if (!response.ok || !data.success) throw new Error(data.error);
+                 if (!data.success) throw new Error(data.error);
                  setGeneratedPassUrl(data.googleWalletUrl);
                  setCurrentScreen('consumer_success');
                } catch (err: any) {
