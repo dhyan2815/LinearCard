@@ -113,6 +113,9 @@ export class TemplatesController {
         rows: template.fieldRows,
         logoUrl,
         heroImageUrl,
+        // Pass the store coordinates to Google Wallet's proximity feature.
+        // Falls back to [] for older templates that predate this column.
+        locations: template.storeLocations ?? [],
       });
 
       const { data: updated, error: updateError } =
