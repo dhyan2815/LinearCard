@@ -114,6 +114,22 @@ export class WalletService {
       };
     }
 
+    // Attach store locations for Google Wallet OS-level proximity notifications.
+    // Max 10 allowed by the Google Wallet API — any extras are silently truncated.
+    if (
+      Array.isArray(templateData.locations) &&
+      templateData.locations.length > 0
+    ) {
+      classPayload.locations = templateData.locations
+        .slice(0, 10)
+        .map(
+          (loc: { latitude: number | string; longitude: number | string }) => ({
+            latitude: Number(loc.latitude),
+            longitude: Number(loc.longitude),
+          }),
+        );
+    }
+
     if (cardRowTemplateInfos.length > 0) {
       classPayload.classTemplateInfo = {
         cardTemplateOverride: {
