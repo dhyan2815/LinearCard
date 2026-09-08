@@ -90,8 +90,18 @@ export function TemplateWorkspace({
     if (current.length >= MAX_LOCATIONS) return;
     setDesignData({
       ...designData,
-      storeLocations: [...current, { latitude: '', longitude: '', label: '' }],
+      storeLocations: [...current, { id: crypto.randomUUID(), latitude: '', longitude: '', label: '' }],
     });
+  };
+
+  const formatStoreLocations = (locations: any[]) => {
+    return (locations || [])
+      .map((loc: any) => ({
+        latitude: parseFloat(loc.latitude),
+        longitude: parseFloat(loc.longitude),
+        label: loc.label || undefined,
+      }))
+      .filter((loc: any) => !isNaN(loc.latitude) && !isNaN(loc.longitude));
   };
 
   const updateLocation = (index: number, field: 'latitude' | 'longitude' | 'label', value: string) => {
@@ -108,13 +118,7 @@ export function TemplateWorkspace({
 
   const handleSaveDraft = async () => {
     try {
-      const formattedLocations = (designData.storeLocations || [])
-        .map((loc: any) => ({
-          latitude: parseFloat(loc.latitude),
-          longitude: parseFloat(loc.longitude),
-          label: loc.label || undefined,
-        }))
-        .filter((loc: any) => !isNaN(loc.latitude) && !isNaN(loc.longitude));
+      const formattedLocations = formatStoreLocations(designData.storeLocations);
 
       if (savedTemplateId) {
         const data = await apiClient(`/templates/${savedTemplateId}`, {
@@ -151,13 +155,7 @@ export function TemplateWorkspace({
   };
 
   const handlePublish = async () => {
-    const formattedLocations = (designData.storeLocations || [])
-      .map((loc: any) => ({
-        latitude: parseFloat(loc.latitude),
-        longitude: parseFloat(loc.longitude),
-        label: loc.label || undefined,
-      }))
-      .filter((loc: any) => !isNaN(loc.latitude) && !isNaN(loc.longitude));
+    const formattedLocations = formatStoreLocations(designData.storeLocations);
 
     let tplId = savedTemplateId;
     if (!tplId) {
@@ -352,7 +350,7 @@ export function TemplateWorkspace({
           )}
 
           {(designData.storeLocations || []).map((loc: any, i: number) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end p-3 bg-canvas rounded-lg border border-border-subtle">
+            <div key={loc.id || i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end p-3 bg-canvas rounded-lg border border-border-subtle">
               <div>
                 <Label className="text-xs">Latitude</Label>
                 <Input

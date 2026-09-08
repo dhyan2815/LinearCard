@@ -1,10 +1,17 @@
 import { WalletService } from './wallet.service';
 
 describe('WalletService.createGenericClass locations mapping', () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
+    process.env = { ...originalEnv };
     process.env.ISSUER_ID = 'test_issuer';
     process.env.GOOGLE_CLIENT_EMAIL = 'test@test.iam.gserviceaccount.com';
     process.env.GOOGLE_PRIVATE_KEY = 'dummy_key';
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   it('should include locations in payload when provided', async () => {
@@ -58,6 +65,29 @@ describe('WalletService.createGenericClass locations mapping', () => {
     await service.createGenericClass({
       classSuffix: 'test_class',
       cardTitle: 'Test Store',
+    });
+
+    const payload = capturedPayloads[0];
+    expect(payload.locations).toBeUndefined();
+  });
+
+  it('should NOT include locations in payload when empty array provided', async () => {
+    const service = new WalletService();
+    const capturedPayloads: any[] = [];
+    const fakeClient = {
+      request: jest.fn().mockImplementation((opts: any) => {
+        capturedPayloads.push(opts.data);
+        return Promise.resolve({ data: { id: 'test.class' } });
+      }),
+    };
+    jest
+      .spyOn(service, 'getGoogleAuthClient')
+      .mockResolvedValue(fakeClient as any);
+
+    await service.createGenericClass({
+      classSuffix: 'test_class',
+      cardTitle: 'Test Store',
+      locations: [],
     });
 
     const payload = capturedPayloads[0];

@@ -181,6 +181,12 @@ export class TemplatesController {
           );
         }
         for (const loc of body.storeLocations) {
+          if (!loc || typeof loc !== 'object') {
+            throw new HttpException(
+              'Each store location must be an object',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
           const lat = Number(loc.latitude);
           const lng = Number(loc.longitude);
           if (isNaN(lat) || lat < -90 || lat > 90) {
