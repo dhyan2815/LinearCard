@@ -83,18 +83,67 @@ export function TemplateWorkspace({
     setDesignData({ ...designData, rows: newRows });
   };
 
+  const MAX_LOCATIONS = 10;
+
+  const addLocation = () => {
+    const current = designData.storeLocations || [];
+    if (current.length >= MAX_LOCATIONS) return;
+    setDesignData({
+      ...designData,
+      storeLocations: [...current, { latitude: '', longitude: '', label: '' }],
+    });
+  };
+
+  const updateLocation = (index: number, field: 'latitude' | 'longitude' | 'label', value: string) => {
+    const updated = (designData.storeLocations || []).map((loc: any, i: number) =>
+      i === index ? { ...loc, [field]: value } : loc
+    );
+    setDesignData({ ...designData, storeLocations: updated });
+  };
+
+  const removeLocation = (index: number) => {
+    const updated = (designData.storeLocations || []).filter((_: any, i: number) => i !== index);
+    setDesignData({ ...designData, storeLocations: updated });
+  };
+
   const handleSaveDraft = async () => {
     try {
+      const formattedLocations = (designData.storeLocations || [])
+        .map((loc: any) => ({
+          latitude: parseFloat(loc.latitude),
+          longitude: parseFloat(loc.longitude),
+          label: loc.label || undefined,
+        }))
+        .filter((loc: any) => !isNaN(loc.latitude) && !isNaN(loc.longitude));
+
       if (savedTemplateId) {
         const data = await apiClient(`/templates/${savedTemplateId}`, {
           method: 'PATCH',
-          body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+          body: JSON.stringify({
+            name: designData.cardTitle,
+            archetype: designData.archetype,
+            fieldRows: designData.rows,
+            hexBackgroundColor: designData.hexBackgroundColor,
+            logoUrl: designData.logoUrl || null,
+            heroImageUrl: designData.heroImageUrl || null,
+            storeLocations: formattedLocations,
+          }),
         });
         if (data.success) { alert('Draft updated'); setTemplateStatus('draft'); }
       } else {
         const data = await apiClient('/templates', {
           method: 'POST',
-          body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, classSuffix: designData.classSuffix, name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+          body: JSON.stringify({
+            tenantId: currentTenant?.id || selectedTenantId,
+            classSuffix: designData.classSuffix,
+            name: designData.cardTitle,
+            archetype: designData.archetype,
+            fieldRows: designData.rows,
+            hexBackgroundColor: designData.hexBackgroundColor,
+            logoUrl: designData.logoUrl || null,
+            heroImageUrl: designData.heroImageUrl || null,
+            storeLocations: formattedLocations,
+          }),
         });
         if (data.success) { setSavedTemplateId(data.template.id); setTemplateStatus('draft'); alert('Draft saved'); }
       }
@@ -102,12 +151,30 @@ export function TemplateWorkspace({
   };
 
   const handlePublish = async () => {
+    const formattedLocations = (designData.storeLocations || [])
+      .map((loc: any) => ({
+        latitude: parseFloat(loc.latitude),
+        longitude: parseFloat(loc.longitude),
+        label: loc.label || undefined,
+      }))
+      .filter((loc: any) => !isNaN(loc.latitude) && !isNaN(loc.longitude));
+
     let tplId = savedTemplateId;
     if (!tplId) {
       try {
         const data = await apiClient('/templates', {
           method: 'POST',
-          body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, name: designData.cardTitle || 'New Template', archetype: designData.archetype, classSuffix: designData.classSuffix, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+          body: JSON.stringify({
+            tenantId: currentTenant?.id || selectedTenantId,
+            name: designData.cardTitle || 'New Template',
+            archetype: designData.archetype,
+            classSuffix: designData.classSuffix,
+            fieldRows: designData.rows,
+            hexBackgroundColor: designData.hexBackgroundColor,
+            logoUrl: designData.logoUrl || null,
+            heroImageUrl: designData.heroImageUrl || null,
+            storeLocations: formattedLocations,
+          }),
         });
         if (!data.success) throw new Error(data.error || 'Failed to create template');
         tplId = data.template.id;
@@ -117,7 +184,15 @@ export function TemplateWorkspace({
       try {
         const data = await apiClient(`/templates/${tplId}`, {
           method: 'PATCH',
-          body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+          body: JSON.stringify({
+            name: designData.cardTitle,
+            archetype: designData.archetype,
+            fieldRows: designData.rows,
+            hexBackgroundColor: designData.hexBackgroundColor,
+            logoUrl: designData.logoUrl || null,
+            heroImageUrl: designData.heroImageUrl || null,
+            storeLocations: formattedLocations,
+          }),
         });
         if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
         setTemplateStatus('draft');
@@ -253,6 +328,78 @@ export function TemplateWorkspace({
             </div>
           ))}
         </div>
+
+        {/* Store Proximity Locations */}
+        <Card className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-ink-dark">Store Locations</h3>
+              <p className="text-xs text-ink-muted mt-0.5">
+                Members will receive a lock-screen notification when within ~150m of these coordinates (via Google Wallet). Max 10.
+              </p>
+            </div>
+            {(designData.storeLocations?.length ?? 0) < MAX_LOCATIONS && (
+              <Button type="button" variant="ghost" size="sm" onClick={addLocation} className="gap-1 text-xs">
+                <Plus className="w-3 h-3" /> Add Location
+              </Button>
+            )}
+          </div>
+
+          {(designData.storeLocations || []).length === 0 && (
+            <p className="text-xs text-ink-muted italic text-center py-3 border border-dashed border-border-subtle rounded-lg">
+              No store locations added yet. Click &quot;Add Location&quot; to begin.
+            </p>
+          )}
+
+          {(designData.storeLocations || []).map((loc: any, i: number) => (
+            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end p-3 bg-canvas rounded-lg border border-border-subtle">
+              <div>
+                <Label className="text-xs">Latitude</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  min="-90"
+                  max="90"
+                  placeholder="e.g. 19.076"
+                  value={loc.latitude}
+                  onChange={(e) => updateLocation(i, 'latitude', e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Longitude</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  min="-180"
+                  max="180"
+                  placeholder="e.g. 72.877"
+                  value={loc.longitude}
+                  onChange={(e) => updateLocation(i, 'longitude', e.target.value)}
+                  required
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeLocation(i)}
+                className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+              <div className="col-span-2">
+                <Label className="text-xs">Label (optional)</Label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Mumbai Flagship"
+                  value={loc.label}
+                  onChange={(e) => updateLocation(i, 'label', e.target.value)}
+                />
+              </div>
+            </div>
+          ))}
+        </Card>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-6 border-t border-border-subtle gap-4">
           <div>
