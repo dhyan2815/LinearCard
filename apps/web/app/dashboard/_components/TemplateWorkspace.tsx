@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Plus, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
+import { StoreLocationEntry } from './StoreLocationEntry';
+import { toast } from 'sonner';
 
 const COLOR_PALETTE = [
   { name: 'Obsidian', hex: '#18181B' },
@@ -104,11 +106,22 @@ export function TemplateWorkspace({
       .filter((loc: any) => !isNaN(loc.latitude) && !isNaN(loc.longitude));
   };
 
-  const updateLocation = (index: number, field: 'latitude' | 'longitude' | 'label', value: string) => {
-    const updated = (designData.storeLocations || []).map((loc: any, i: number) =>
-      i === index ? { ...loc, [field]: value } : loc
-    );
-    setDesignData({ ...designData, storeLocations: updated });
+  const updateLocation = (
+    index: number,
+    fieldOrUpdates: 'latitude' | 'longitude' | 'label' | Record<string, string>,
+    value?: string
+  ) => {
+    setDesignData((prev: any) => {
+      const current = prev.storeLocations || [];
+      const updated = current.map((loc: any, i: number) => {
+        if (i !== index) return loc;
+        if (typeof fieldOrUpdates === 'object') {
+          return { ...loc, ...fieldOrUpdates };
+        }
+        return { ...loc, [fieldOrUpdates]: value };
+      });
+      return { ...prev, storeLocations: updated };
+    });
   };
 
   const removeLocation = (index: number) => {
@@ -117,9 +130,9 @@ export function TemplateWorkspace({
   };
 
   const handleSaveDraft = async () => {
-    try {
-      const formattedLocations = formatStoreLocations(designData.storeLocations);
+    const formattedLocations = formatStoreLocations(designData.storeLocations);
 
+    const savePromise = async () => {
       if (savedTemplateId) {
         const data = await apiClient(`/templates/${savedTemplateId}`, {
           method: 'PATCH',
@@ -133,7 +146,8 @@ export function TemplateWorkspace({
             storeLocations: formattedLocations,
           }),
         });
-        if (data.success) { alert('Draft updated'); setTemplateStatus('draft'); }
+        if (!data.success) throw new Error(data.error || 'Error saving draft');
+        setTemplateStatus('draft');
       } else {
         const data = await apiClient('/templates', {
           method: 'POST',
@@ -149,17 +163,25 @@ export function TemplateWorkspace({
             storeLocations: formattedLocations,
           }),
         });
-        if (data.success) { setSavedTemplateId(data.template.id); setTemplateStatus('draft'); alert('Draft saved'); }
+        if (!data.success) throw new Error(data.error || 'Error saving draft');
+        setSavedTemplateId(data.template.id);
+        setTemplateStatus('draft');
       }
-    } catch (e) { console.error(e); alert('Error saving draft'); }
+    };
+
+    toast.promise(savePromise(), {
+      loading: 'Saving draft...',
+      success: 'Draft saved successfully!',
+      error: (err: any) => err.message || 'Error saving draft'
+    });
   };
 
   const handlePublish = async () => {
     const formattedLocations = formatStoreLocations(designData.storeLocations);
 
-    let tplId = savedTemplateId;
-    if (!tplId) {
-      try {
+    const publishPromise = async () => {
+      let tplId = savedTemplateId;
+      if (!tplId) {
         const data = await apiClient('/templates', {
           method: 'POST',
           body: JSON.stringify({
@@ -177,9 +199,7 @@ export function TemplateWorkspace({
         if (!data.success) throw new Error(data.error || 'Failed to create template');
         tplId = data.template.id;
         setSavedTemplateId(tplId);
-      } catch (err: any) { alert(`Failed: ${err.message}`); return; }
-    } else {
-      try {
+      } else {
         const data = await apiClient(`/templates/${tplId}`, {
           method: 'PATCH',
           body: JSON.stringify({
@@ -194,14 +214,18 @@ export function TemplateWorkspace({
         });
         if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
         setTemplateStatus('draft');
-      } catch (err: any) { alert(`Sync failed: ${err.message}`); return; }
-    }
-    try {
-      const data = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
-      if (!data.success) throw new Error(data.error || 'Failed to publish');
+      }
+      
+      const publishData = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
+      if (!publishData.success) throw new Error(publishData.error || 'Failed to publish');
       setTemplateStatus('published');
-      alert('Published to Google Wallet API');
-    } catch (e: any) { console.error(e); alert(`Publish failed: ${e.message}`); }
+    };
+
+    toast.promise(publishPromise(), {
+      loading: 'Publishing to Google Wallet API...',
+      success: 'Published to Google Wallet API successfully!',
+      error: (err: any) => err.message || 'Publish failed'
+    });
   };
 
   return (
@@ -225,7 +249,7 @@ export function TemplateWorkspace({
                 className="shrink-0 h-9"
                 onClick={() => {
                   navigator.clipboard.writeText(`${origin}/enroll/${designData.classSuffix}`);
-                  alert('Enrollment link copied to clipboard!');
+                  toast.success('Enrollment link copied to clipboard!');
                 }}
               >
                 Copy Link
@@ -350,52 +374,13 @@ export function TemplateWorkspace({
           )}
 
           {(designData.storeLocations || []).map((loc: any, i: number) => (
-            <div key={loc.id || i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end p-3 bg-canvas rounded-lg border border-border-subtle">
-              <div>
-                <Label className="text-xs">Latitude</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  min="-90"
-                  max="90"
-                  placeholder="e.g. 19.076"
-                  value={loc.latitude}
-                  onChange={(e) => updateLocation(i, 'latitude', e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Longitude</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  min="-180"
-                  max="180"
-                  placeholder="e.g. 72.877"
-                  value={loc.longitude}
-                  onChange={(e) => updateLocation(i, 'longitude', e.target.value)}
-                  required
-                />
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => removeLocation(i)}
-                className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-              <div className="col-span-2">
-                <Label className="text-xs">Label (optional)</Label>
-                <Input
-                  type="text"
-                  placeholder="e.g. Mumbai Flagship"
-                  value={loc.label}
-                  onChange={(e) => updateLocation(i, 'label', e.target.value)}
-                />
-              </div>
-            </div>
+            <StoreLocationEntry 
+              key={loc.id || i}
+              location={loc}
+              index={i}
+              onUpdate={updateLocation}
+              onRemove={removeLocation}
+            />
           ))}
         </Card>
 
