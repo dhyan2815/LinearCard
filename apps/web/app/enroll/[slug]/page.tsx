@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
 import { apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
 
 export default function TenantEnrollPage() {
   const params = useParams();
@@ -110,21 +111,26 @@ export default function TenantEnrollPage() {
              <form onSubmit={async (e) => {
                e.preventDefault();
                setIsMockLoading(true);
-               try {
-                 const data = await apiClient('/auth/send-otp', {
+
+               toast.promise(
+                 apiClient('/auth/send-otp', {
                    method: 'POST',
                    body: JSON.stringify({ 
                      phone: `${countryCode}${onboardingPhone}`,
                      tenantId: tenantConfig.tenantId 
                    })
-                 });
-                 if (!data.success) throw new Error(data.error);
-                 setCurrentScreen('consumer_otp');
-               } catch (err: any) {
-                 alert(err.message || "Failed to send OTP");
-               } finally {
-                 setIsMockLoading(false);
-               }
+                 }).then((data) => {
+                   if (!data.success) throw new Error(data.error);
+                   setCurrentScreen('consumer_otp');
+                   return data;
+                 }),
+                 {
+                   loading: 'Sending OTP via WhatsApp...',
+                   success: 'OTP sent successfully!',
+                   error: (err: any) => err.message || "Failed to send OTP",
+                   finally: () => setIsMockLoading(false)
+                 }
+               );
              }} className="space-y-6">
                <div className="space-y-1">
                  <Label>Full Name</Label>
@@ -214,8 +220,9 @@ export default function TenantEnrollPage() {
                // Prevent submission if consent is missing or OTP input is empty
                if (!consentGiven || !onboardingOtp) return;
                setIsMockLoading(true);
-               try {
-                 const data = await apiClient('/auth/verify-otp', {
+
+               toast.promise(
+                 apiClient('/auth/verify-otp', {
                    method: 'POST', body: JSON.stringify({ 
                      phone: `${countryCode}${onboardingPhone}`,
                      otp: onboardingOtp,
@@ -225,16 +232,22 @@ export default function TenantEnrollPage() {
                      barcodeValue: `https://linearcard.vercel.app/m/${onboardingPhone.replace(/\D/g, '')}`,
                      barcodeAltText: onboardingPhone.replace(/\D/g, '')
                    })
-                 });
-                 if (!data.success) throw new Error(data.error);
-                 setGeneratedPassUrl(data.googleWalletUrl);
-                 setCurrentScreen('consumer_success');
-               } catch (err: any) {
-                 setOtpError(err.message || "Demo API error");
-                 console.error(err);
-               } finally {
-                 setIsMockLoading(false);
-               }
+                 }).then((data) => {
+                   if (!data.success) throw new Error(data.error);
+                   setGeneratedPassUrl(data.googleWalletUrl);
+                   setCurrentScreen('consumer_success');
+                   return data;
+                 }),
+                 {
+                   loading: 'Verifying and generating pass...',
+                   success: 'Pass generated successfully!',
+                   error: (err: any) => {
+                     setOtpError(err.message || "Demo API error");
+                     return err.message || "Demo API error";
+                   },
+                   finally: () => setIsMockLoading(false)
+                 }
+               );
              }} className="space-y-6">
                 <div className="space-y-2">
                   <Input type="text" inputMode="numeric" pattern="[0-9]*" value={onboardingOtp} onChange={(e) => {
@@ -311,7 +324,7 @@ export default function TenantEnrollPage() {
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(getWalletUrl());
-                    alert('Pass Link Copied!');
+                    toast.success('Pass Link Copied!');
                   }}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium text-ink-secondary hover:text-ink-dark transition-colors rounded-xl hover:bg-surface-bone"
                 >
