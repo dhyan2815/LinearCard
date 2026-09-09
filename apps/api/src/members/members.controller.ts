@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   Body,
   HttpException,
@@ -55,7 +56,7 @@ export class MembersController {
           HttpStatus.NOT_FOUND,
         );
 
-      const [{ data: passes }, { data: auditLog }, { data: consentLog }] =
+      let [{ data: passes }, { data: auditLog }, { data: consentLog }] =
         await Promise.all([
           this.supabaseService.client
             .from('Pass')
@@ -74,6 +75,39 @@ export class MembersController {
             .eq('memberId', id)
             .order('consentedAt', { ascending: false }),
         ]);
+
+      // Check Google Wallet synchronization
+      if (passes && passes.length > 0) {
+        let deletedPassesCount = 0;
+        const passesToKeep = [];
+        
+        for (const pass of passes) {
+          if (pass.fullPassId) {
+            try {
+              const googlePass = await this.walletService.getGenericObject(pass.fullPassId);
+              if (googlePass && googlePass.hasUsers === false) {
+                // Pass was deleted from wallet app
+                await this.supabaseService.client.from('Pass').delete().eq('id', pass.id);
+                deletedPassesCount++;
+                continue;
+              }
+            } catch (err) {
+              // Ignore errors and assume pass is active if wallet API fails
+            }
+          }
+          passesToKeep.push(pass);
+        }
+
+        if (deletedPassesCount > 0 && passesToKeep.length === 0) {
+          // All passes were deleted, eliminate member completely
+          await this.deleteMemberData(id);
+          throw new HttpException(
+            { success: false, error: 'Member has deleted their pass from Google Wallet and was removed from the system' },
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        passes = passesToKeep;
+      }
 
       const formattedAuditLog = (auditLog || []).map((entry: any) => ({
         ...entry,
@@ -98,6 +132,34 @@ export class MembersController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  @Delete(':id')
+  async deleteMember(@Param('id') id: string) {
+    try {
+      await this.deleteMemberData(id);
+      return { success: true };
+    } catch (error: any) {
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  private async deleteMemberData(memberId: string) {
+    // Delete related records manually to ensure they're removed if no CASCADE is set
+    await this.supabaseService.client.from('Pass').delete().eq('memberId', memberId);
+    await this.supabaseService.client.from('AuditLog').delete().eq('memberId', memberId);
+    await this.supabaseService.client.from('ConsentLog').delete().eq('memberId', memberId);
+    await this.supabaseService.client.from('NotificationLog').delete().eq('memberId', memberId);
+    
+    const { error } = await this.supabaseService.client
+      .from('Member')
+      .delete()
+      .eq('id', memberId);
+      
+    if (error) throw error;
   }
 
   @Post(':id/adjust-balance')

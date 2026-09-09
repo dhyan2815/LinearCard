@@ -179,6 +179,24 @@ export class WalletService {
     }
   }
 
+  public async getGenericObject(passId: string) {
+    const client = await this.getGoogleAuthClient();
+    const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${passId}`;
+    try {
+      const res = await client.request({
+        url,
+        method: 'GET',
+      });
+      return res.data as any;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      this.logger.error(`Error fetching genericObject ${passId}:`, error.message);
+      throw error;
+    }
+  }
+
   public async updateGenericObject(passId: string, updateData: any) {
     const client = await this.getGoogleAuthClient();
     const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${passId}`;
