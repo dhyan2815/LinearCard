@@ -94,6 +94,7 @@ export function TemplateWorkspace({
       ...designData,
       storeLocations: [...current, { id: crypto.randomUUID(), latitude: '', longitude: '', label: '' }],
     });
+    setTemplateStatus('draft');
   };
 
   const formatStoreLocations = (locations: any[]) => {
@@ -122,11 +123,13 @@ export function TemplateWorkspace({
       });
       return { ...prev, storeLocations: updated };
     });
+    setTemplateStatus('draft');
   };
 
   const removeLocation = (index: number) => {
     const updated = (designData.storeLocations || []).filter((_: any, i: number) => i !== index);
     setDesignData({ ...designData, storeLocations: updated });
+    setTemplateStatus('draft');
   };
 
   const handleSaveDraft = async () => {

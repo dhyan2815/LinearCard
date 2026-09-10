@@ -40,10 +40,12 @@ describe('WalletService.createGenericClass locations mapping', () => {
     const payload = capturedPayloads[0];
     expect(payload.locations).toHaveLength(2);
     expect(payload.locations[0]).toEqual({
+      kind: 'walletobjects#latLongPoint',
       latitude: 19.076,
       longitude: 72.8777,
     });
     expect(payload.locations[1]).toEqual({
+      kind: 'walletobjects#latLongPoint',
       latitude: 28.6139,
       longitude: 77.209,
     });

@@ -82,7 +82,8 @@ export default function Dashboard() {
           setTenants(data.tenants);
           setSelectedTenantId(data.tenants[0].id);
         }
-      });
+      })
+      .catch(err => console.error('Failed to fetch tenants:', err));
   }, []);
 
   const currentTenant = tenants.find(t => t.id === selectedTenantId);
@@ -94,7 +95,8 @@ export default function Dashboard() {
            if (data.success) {
              setStats(data.stats);
            }
-        });
+        })
+        .catch(err => console.error('Failed to fetch stats:', err));
         
       apiClient(`/members?tenantId=${selectedTenantId}`)
         .then(data => {
@@ -107,7 +109,8 @@ export default function Dashboard() {
              })) || []) || [];
              setPassHistory(allPasses);
           }
-        });
+        })
+        .catch(err => console.error('Failed to fetch members:', err));
     }
   }, [selectedTenantId]);
 

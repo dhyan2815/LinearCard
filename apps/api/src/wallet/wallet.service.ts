@@ -124,6 +124,7 @@ export class WalletService {
         .slice(0, 10)
         .map(
           (loc: { latitude: number | string; longitude: number | string }) => ({
+            kind: 'walletobjects#latLongPoint',
             latitude: Number(loc.latitude),
             longitude: Number(loc.longitude),
           }),
