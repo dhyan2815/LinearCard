@@ -28,6 +28,24 @@ const ARCHETYPES = [
   { value: 'access_badge', label: 'Access Badge' },
 ] as const;
 
+const ARCHETYPE_PRESETS: Record<string, any[]> = {
+  loyalty: [
+    { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
+  ],
+  membership: [
+    { id: 'row1', columns: [{ header: 'Member ID', body: '100492' }, { header: 'Status', body: 'Active' }] },
+    { id: 'row2', columns: [{ header: 'Home Club', body: 'YMCA' }, { header: 'Expires', body: '12/2026' }] }
+  ],
+  id_card: [
+    { id: 'row1', columns: [{ header: 'Employee ID', body: 'EMP-992' }, { header: 'Role', body: 'Developer' }] },
+    { id: 'row2', columns: [{ header: 'Department', body: 'Engineering' }, { header: 'Valid Thru', body: '12/2026' }] }
+  ],
+  access_badge: [
+    { id: 'row1', columns: [{ header: 'Event', body: 'VIP Access' }, { header: 'Date', body: 'Oct 31' }] },
+    { id: 'row2', columns: [{ header: 'Gate', body: 'A1' }, { header: 'Section', body: '10' }, { header: 'Seat', body: '5F' }] }
+  ]
+};
+
 export function TemplateWorkspace({
   designData,
   setDesignData,
@@ -267,13 +285,15 @@ export function TemplateWorkspace({
 
       <div className="space-y-6">
         <div>
-          <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Program Title</Label>
+          <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide flex items-center gap-2">
+            Program Title
+            {designData.classSuffix && (
+              <span className="text-ink-muted normal-case tracking-normal font-normal">
+                ({designData.classSuffix})
+              </span>
+            )}
+          </Label>
           <Input type="text" value={designData.cardTitle} onChange={(e) => setDesignData({...designData, cardTitle: e.target.value})} className="mt-2" required/>
-        </div>
-
-        <div>
-          <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Class Suffix (URL ID)</Label>
-          <Input type="text" value={designData.classSuffix} onChange={(e) => setDesignData({...designData, classSuffix: e.target.value})} className="mt-2 font-mono" required/>
         </div>
 
         <div className="space-y-2">
@@ -281,7 +301,14 @@ export function TemplateWorkspace({
           <div className="grid grid-cols-2 gap-2 mt-2">
             {ARCHETYPES.map((arch) => (
               <button key={arch.value} type="button"
-                onClick={() => setDesignData((prev: any) => ({ ...prev, archetype: arch.value }))}
+                onClick={() => {
+                  setDesignData((prev: any) => ({
+                    ...prev,
+                    archetype: arch.value,
+                    rows: ARCHETYPE_PRESETS[arch.value] || prev.rows
+                  }));
+                  setTemplateStatus('draft');
+                }}
                 className={`py-2.5 px-3 rounded-lg text-sm font-medium border transition-all ${
                   designData.archetype === arch.value
                     ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'

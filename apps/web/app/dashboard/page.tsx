@@ -334,6 +334,7 @@ export default function Dashboard() {
                           manageTier={manageData.tier}
                           manageBalance={manageData.balance}
                           isManageTab={!!manageData.passId}
+                          archetype={designData.archetype}
                         />
                       </motion.div>
                     </div>
