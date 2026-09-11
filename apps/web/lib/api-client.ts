@@ -1,8 +1,10 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Strip any trailing slashes from the base URL
+const API_URL = rawApiUrl.replace(/\/+$/, '');
 
 export async function apiClient<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  // Allow passing endpoint with or without leading slash
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  // Ensure exactly one leading slash on endpoint
+  const cleanEndpoint = '/' + endpoint.replace(/^\/+/, '');
   
   let authHeader: Record<string, string> = {};
   if (typeof document !== 'undefined') {
