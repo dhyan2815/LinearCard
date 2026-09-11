@@ -12,7 +12,10 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
     }
   }
 
-  const response = await fetch(`${API_URL}${cleanEndpoint}`, {
+  const fullUrl = `${API_URL}${cleanEndpoint}`.replace('localhost', '127.0.0.1');
+  console.log(`[apiClient] Fetching: ${fullUrl}`);
+
+  const response = await fetch(fullUrl, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

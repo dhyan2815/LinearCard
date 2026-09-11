@@ -63,6 +63,7 @@ export default function Dashboard() {
     hexBackgroundColor: '#1A365D',
     logoUrl: '',
     heroImageUrl: '',
+    storeLocations: [] as Array<{ latitude: string; longitude: string; label: string }>,
     rows: [
       { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
     ]
@@ -81,7 +82,8 @@ export default function Dashboard() {
           setTenants(data.tenants);
           setSelectedTenantId(data.tenants[0].id);
         }
-      });
+      })
+      .catch(err => console.error('Failed to fetch tenants:', err));
   }, []);
 
   const currentTenant = tenants.find(t => t.id === selectedTenantId);
@@ -93,7 +95,8 @@ export default function Dashboard() {
            if (data.success) {
              setStats(data.stats);
            }
-        });
+        })
+        .catch(err => console.error('Failed to fetch stats:', err));
         
       apiClient(`/members?tenantId=${selectedTenantId}`)
         .then(data => {
@@ -106,7 +109,8 @@ export default function Dashboard() {
              })) || []) || [];
              setPassHistory(allPasses);
           }
-        });
+        })
+        .catch(err => console.error('Failed to fetch members:', err));
     }
   }, [selectedTenantId]);
 
@@ -122,6 +126,7 @@ export default function Dashboard() {
       hexBackgroundColor: t?.brandHexColor || '#1A365D',
       logoUrl: t?.logoUrl || '',
       heroImageUrl: t?.heroUrl || '',
+      storeLocations: [],
       rows: [
         { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
       ]
@@ -152,6 +157,11 @@ export default function Dashboard() {
               hexBackgroundColor: t.hexBackgroundColor,
               logoUrl: t.logoUrl || '',
               heroImageUrl: t.heroImageUrl || '',
+              storeLocations: (t.storeLocations || []).map((loc: any) => ({
+                latitude: String(loc.latitude ?? ''),
+                longitude: String(loc.longitude ?? ''),
+                label: loc.label || '',
+              })),
               rows: t.fieldRows || [{ id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }]
             });
           } else {
@@ -164,6 +174,7 @@ export default function Dashboard() {
               hexBackgroundColor: currentTenant.brandHexColor || '#1A365D',
               logoUrl: currentTenant.logoUrl || '',
               heroImageUrl: currentTenant.heroUrl || '',
+              storeLocations: [],
               rows: [
                 { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
               ]
@@ -323,6 +334,7 @@ export default function Dashboard() {
                           manageTier={manageData.tier}
                           manageBalance={manageData.balance}
                           isManageTab={!!manageData.passId}
+                          archetype={designData.archetype}
                         />
                       </motion.div>
                     </div>

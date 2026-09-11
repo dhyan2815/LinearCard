@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Plus, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
+import { StoreLocationEntry } from './StoreLocationEntry';
+import { toast } from 'sonner';
 
 const COLOR_PALETTE = [
   { name: 'Obsidian', hex: '#18181B' },
@@ -25,6 +27,24 @@ const ARCHETYPES = [
   { value: 'id_card',      label: 'ID Card' },
   { value: 'access_badge', label: 'Access Badge' },
 ] as const;
+
+const ARCHETYPE_PRESETS: Record<string, any[]> = {
+  loyalty: [
+    { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
+  ],
+  membership: [
+    { id: 'row1', columns: [{ header: 'Member ID', body: '100492' }, { header: 'Status', body: 'Active' }] },
+    { id: 'row2', columns: [{ header: 'Home Club', body: 'YMCA' }, { header: 'Expires', body: '12/2026' }] }
+  ],
+  id_card: [
+    { id: 'row1', columns: [{ header: 'Employee ID', body: 'EMP-992' }, { header: 'Role', body: 'Developer' }] },
+    { id: 'row2', columns: [{ header: 'Department', body: 'Engineering' }, { header: 'Valid Thru', body: '12/2026' }] }
+  ],
+  access_badge: [
+    { id: 'row1', columns: [{ header: 'Event', body: 'VIP Access' }, { header: 'Date', body: 'Oct 31' }] },
+    { id: 'row2', columns: [{ header: 'Gate', body: 'A1' }, { header: 'Section', body: '10' }, { header: 'Seat', body: '5F' }] }
+  ]
+};
 
 export function TemplateWorkspace({
   designData,
@@ -83,52 +103,150 @@ export function TemplateWorkspace({
     setDesignData({ ...designData, rows: newRows });
   };
 
+  const MAX_LOCATIONS = 10;
+
+  const addLocation = () => {
+    const current = designData.storeLocations || [];
+    if (current.length >= MAX_LOCATIONS) return;
+    setDesignData({
+      ...designData,
+      storeLocations: [...current, { id: crypto.randomUUID(), latitude: '', longitude: '', label: '' }],
+    });
+    setTemplateStatus('draft');
+  };
+
+  const formatStoreLocations = (locations: any[]) => {
+    return (locations || [])
+      .map((loc: any) => ({
+        latitude: parseFloat(loc.latitude),
+        longitude: parseFloat(loc.longitude),
+        label: loc.label || undefined,
+      }))
+      .filter((loc: any) => !isNaN(loc.latitude) && !isNaN(loc.longitude));
+  };
+
+  const updateLocation = (
+    index: number,
+    fieldOrUpdates: 'latitude' | 'longitude' | 'label' | Record<string, string>,
+    value?: string
+  ) => {
+    setDesignData((prev: any) => {
+      const current = prev.storeLocations || [];
+      const updated = current.map((loc: any, i: number) => {
+        if (i !== index) return loc;
+        if (typeof fieldOrUpdates === 'object') {
+          return { ...loc, ...fieldOrUpdates };
+        }
+        return { ...loc, [fieldOrUpdates]: value };
+      });
+      return { ...prev, storeLocations: updated };
+    });
+    setTemplateStatus('draft');
+  };
+
+  const removeLocation = (index: number) => {
+    const updated = (designData.storeLocations || []).filter((_: any, i: number) => i !== index);
+    setDesignData({ ...designData, storeLocations: updated });
+    setTemplateStatus('draft');
+  };
+
   const handleSaveDraft = async () => {
-    try {
+    const formattedLocations = formatStoreLocations(designData.storeLocations);
+
+    const savePromise = async () => {
       if (savedTemplateId) {
         const data = await apiClient(`/templates/${savedTemplateId}`, {
           method: 'PATCH',
-          body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+          body: JSON.stringify({
+            name: designData.cardTitle,
+            archetype: designData.archetype,
+            fieldRows: designData.rows,
+            hexBackgroundColor: designData.hexBackgroundColor,
+            logoUrl: designData.logoUrl || null,
+            heroImageUrl: designData.heroImageUrl || null,
+            storeLocations: formattedLocations,
+          }),
         });
-        if (data.success) { alert('Draft updated'); setTemplateStatus('draft'); }
+        if (!data.success) throw new Error(data.error || 'Error saving draft');
+        setTemplateStatus('draft');
       } else {
         const data = await apiClient('/templates', {
           method: 'POST',
-          body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, classSuffix: designData.classSuffix, name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+          body: JSON.stringify({
+            tenantId: currentTenant?.id || selectedTenantId,
+            classSuffix: designData.classSuffix,
+            name: designData.cardTitle,
+            archetype: designData.archetype,
+            fieldRows: designData.rows,
+            hexBackgroundColor: designData.hexBackgroundColor,
+            logoUrl: designData.logoUrl || null,
+            heroImageUrl: designData.heroImageUrl || null,
+            storeLocations: formattedLocations,
+          }),
         });
-        if (data.success) { setSavedTemplateId(data.template.id); setTemplateStatus('draft'); alert('Draft saved'); }
+        if (!data.success) throw new Error(data.error || 'Error saving draft');
+        setSavedTemplateId(data.template.id);
+        setTemplateStatus('draft');
       }
-    } catch (e) { console.error(e); alert('Error saving draft'); }
+    };
+
+    toast.promise(savePromise(), {
+      loading: 'Saving draft...',
+      success: 'Draft saved successfully!',
+      error: (err: any) => err.message || 'Error saving draft'
+    });
   };
 
   const handlePublish = async () => {
-    let tplId = savedTemplateId;
-    if (!tplId) {
-      try {
+    const formattedLocations = formatStoreLocations(designData.storeLocations);
+
+    const publishPromise = async () => {
+      let tplId = savedTemplateId;
+      if (!tplId) {
         const data = await apiClient('/templates', {
           method: 'POST',
-          body: JSON.stringify({ tenantId: currentTenant?.id || selectedTenantId, name: designData.cardTitle || 'New Template', archetype: designData.archetype, classSuffix: designData.classSuffix, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+          body: JSON.stringify({
+            tenantId: currentTenant?.id || selectedTenantId,
+            name: designData.cardTitle || 'New Template',
+            archetype: designData.archetype,
+            classSuffix: designData.classSuffix,
+            fieldRows: designData.rows,
+            hexBackgroundColor: designData.hexBackgroundColor,
+            logoUrl: designData.logoUrl || null,
+            heroImageUrl: designData.heroImageUrl || null,
+            storeLocations: formattedLocations,
+          }),
         });
         if (!data.success) throw new Error(data.error || 'Failed to create template');
         tplId = data.template.id;
         setSavedTemplateId(tplId);
-      } catch (err: any) { alert(`Failed: ${err.message}`); return; }
-    } else {
-      try {
+      } else {
         const data = await apiClient(`/templates/${tplId}`, {
           method: 'PATCH',
-          body: JSON.stringify({ name: designData.cardTitle, archetype: designData.archetype, fieldRows: designData.rows, hexBackgroundColor: designData.hexBackgroundColor, logoUrl: designData.logoUrl || null, heroImageUrl: designData.heroImageUrl || null }),
+          body: JSON.stringify({
+            name: designData.cardTitle,
+            archetype: designData.archetype,
+            fieldRows: designData.rows,
+            hexBackgroundColor: designData.hexBackgroundColor,
+            logoUrl: designData.logoUrl || null,
+            heroImageUrl: designData.heroImageUrl || null,
+            storeLocations: formattedLocations,
+          }),
         });
         if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
         setTemplateStatus('draft');
-      } catch (err: any) { alert(`Sync failed: ${err.message}`); return; }
-    }
-    try {
-      const data = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
-      if (!data.success) throw new Error(data.error || 'Failed to publish');
+      }
+      
+      const publishData = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
+      if (!publishData.success) throw new Error(publishData.error || 'Failed to publish');
       setTemplateStatus('published');
-      alert('Published to Google Wallet API');
-    } catch (e: any) { console.error(e); alert(`Publish failed: ${e.message}`); }
+    };
+
+    toast.promise(publishPromise(), {
+      loading: 'Publishing to Google Wallet API...',
+      success: 'Published to Google Wallet API successfully!',
+      error: (err: any) => err.message || 'Publish failed'
+    });
   };
 
   return (
@@ -152,7 +270,7 @@ export function TemplateWorkspace({
                 className="shrink-0 h-9"
                 onClick={() => {
                   navigator.clipboard.writeText(`${origin}/enroll/${designData.classSuffix}`);
-                  alert('Enrollment link copied to clipboard!');
+                  toast.success('Enrollment link copied to clipboard!');
                 }}
               >
                 Copy Link
@@ -167,13 +285,15 @@ export function TemplateWorkspace({
 
       <div className="space-y-6">
         <div>
-          <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Program Title</Label>
+          <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide flex items-center gap-2">
+            Program Title
+            {designData.classSuffix && (
+              <span className="text-ink-muted normal-case tracking-normal font-normal">
+                ({designData.classSuffix})
+              </span>
+            )}
+          </Label>
           <Input type="text" value={designData.cardTitle} onChange={(e) => setDesignData({...designData, cardTitle: e.target.value})} className="mt-2" required/>
-        </div>
-
-        <div>
-          <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Class Suffix (URL ID)</Label>
-          <Input type="text" value={designData.classSuffix} onChange={(e) => setDesignData({...designData, classSuffix: e.target.value})} className="mt-2 font-mono" required/>
         </div>
 
         <div className="space-y-2">
@@ -181,7 +301,14 @@ export function TemplateWorkspace({
           <div className="grid grid-cols-2 gap-2 mt-2">
             {ARCHETYPES.map((arch) => (
               <button key={arch.value} type="button"
-                onClick={() => setDesignData((prev: any) => ({ ...prev, archetype: arch.value }))}
+                onClick={() => {
+                  setDesignData((prev: any) => ({
+                    ...prev,
+                    archetype: arch.value,
+                    rows: ARCHETYPE_PRESETS[arch.value] || prev.rows
+                  }));
+                  setTemplateStatus('draft');
+                }}
                 className={`py-2.5 px-3 rounded-lg text-sm font-medium border transition-all ${
                   designData.archetype === arch.value
                     ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
@@ -253,6 +380,39 @@ export function TemplateWorkspace({
             </div>
           ))}
         </div>
+
+        {/* Store Proximity Locations */}
+        <Card className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-ink-dark">Store Locations</h3>
+              <p className="text-xs text-ink-muted mt-0.5">
+                Members will receive a lock-screen notification when within ~150m of these coordinates (via Google Wallet). Max 10.
+              </p>
+            </div>
+            {(designData.storeLocations?.length ?? 0) < MAX_LOCATIONS && (
+              <Button type="button" variant="ghost" size="sm" onClick={addLocation} className="gap-1 text-xs">
+                <Plus className="w-3 h-3" /> Add Location
+              </Button>
+            )}
+          </div>
+
+          {(designData.storeLocations || []).length === 0 && (
+            <p className="text-xs text-ink-muted italic text-center py-3 border border-dashed border-border-subtle rounded-lg">
+              No store locations added yet. Click &quot;Add Location&quot; to begin.
+            </p>
+          )}
+
+          {(designData.storeLocations || []).map((loc: any, i: number) => (
+            <StoreLocationEntry 
+              key={loc.id || i}
+              location={loc}
+              index={i}
+              onUpdate={updateLocation}
+              onRemove={removeLocation}
+            />
+          ))}
+        </Card>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-6 border-t border-border-subtle gap-4">
           <div>

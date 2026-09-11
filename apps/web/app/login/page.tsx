@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
 import { apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -66,18 +67,23 @@ export default function LoginPage() {
              <form onSubmit={async (e) => {
                e.preventDefault();
                setIsMockLoading(true);
-               try {
-                 const data = await apiClient('/auth/admin/send-otp', {
+               
+               toast.promise(
+                 apiClient('/auth/admin/send-otp', {
                    method: 'POST',
                    body: JSON.stringify({ phone: `${countryCode}${onboardingPhone}` })
-                 });
-                 if (!data.success) throw new Error(data.error);
-                 setCurrentScreen('admin_otp');
-               } catch (err: any) {
-                 alert(err.message || "Failed to send OTP");
-               } finally {
-                 setIsMockLoading(false);
-               }
+                 }).then((data) => {
+                   if (!data.success) throw new Error(data.error);
+                   setCurrentScreen('admin_otp');
+                   return data;
+                 }),
+                 {
+                   loading: 'Sending OTP via WhatsApp...',
+                   success: 'OTP sent successfully!',
+                   error: (err: any) => err.message || "Failed to send OTP",
+                   finally: () => setIsMockLoading(false)
+                 }
+               );
              }} className="space-y-6">
                <div className="flex flex-col sm:flex-row gap-3 relative">
                  <div className="w-full sm:w-1/3">

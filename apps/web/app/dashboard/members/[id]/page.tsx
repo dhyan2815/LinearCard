@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { ArrowLeft, ShieldCheck, History, Edit3 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft, ShieldCheck, History, Edit3, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -20,6 +20,8 @@ export default function MemberDetailPage() {
   const [note, setNote] = useState('');
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [adjustMsg, setAdjustMsg] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const router = useRouter();
 
   const loadMember = async () => {
     const previousPassId = selectedPassId; // capture before async fetch resets state
@@ -68,6 +70,19 @@ export default function MemberDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this member? All associated data will be removed.')) return;
+    setIsDeleting(true);
+    try {
+      const data = await apiClient(`/members/${id}`, { method: 'DELETE' });
+      if (!data.success) throw new Error(data.error);
+      router.push('/dashboard/members');
+    } catch (err: any) {
+      alert(`Error deleting member: ${err.message}`);
+      setIsDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <main className="flex-1 flex items-center justify-center py-20">
@@ -78,17 +93,21 @@ export default function MemberDetailPage() {
 
   if (error) {
     return (
-      <main className="flex-1 flex items-center justify-center py-20">
-        <p className="text-red-500 font-medium">{error}</p>
+      <main className="flex-1 flex flex-col items-center justify-center py-20 space-y-4">
+        <p className="text-red-500 font-medium text-center max-w-md">{error}</p>
+        <Link href="/dashboard/members">
+          <Button variant="outline">Back to Members</Button>
+        </Link>
       </main>
     );
   }
 
   return (
-    <main className="flex-1 max-w-4xl w-full mx-auto px-6 py-8 space-y-6">
-      <Link href="/dashboard/members" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-ink-dark transition-colors font-medium">
-        <ArrowLeft className="w-4 h-4" /> Back to Members
-      </Link>
+    <div className="flex-1 w-full overflow-y-auto bg-canvas">
+      <main className="max-w-4xl w-full mx-auto px-6 py-8 space-y-6 pb-20">
+        <Link href="/dashboard/members" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-ink-dark transition-colors font-medium">
+          <ArrowLeft className="w-4 h-4" /> Back to Members
+        </Link>
 
       <Card className="p-6">
         <div className="flex items-start justify-between">
@@ -103,11 +122,16 @@ export default function MemberDetailPage() {
               )}
             </p>
           </div>
-          {member.consentedAt && (
-            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
-              <ShieldCheck className="w-3.5 h-3.5" /> DPDP Consented
-            </div>
-          )}
+          <div className="flex flex-col items-end gap-2">
+            {member.consentedAt && (
+              <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                <ShieldCheck className="w-3.5 h-3.5" /> DPDP Consented
+              </div>
+            )}
+            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isDeleting} className="w-full">
+              <Trash2 className="w-4 h-4 mr-2" /> {isDeleting ? 'Deleting...' : 'Delete Member'}
+            </Button>
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div className="bg-canvas p-3 rounded-xl border border-border-subtle">
@@ -222,6 +246,7 @@ export default function MemberDetailPage() {
           </div>
         </Card>
       )}
-    </main>
+      </main>
+    </div>
   );
 }

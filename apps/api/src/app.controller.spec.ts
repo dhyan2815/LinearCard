@@ -15,8 +15,8 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return "LinearCard Backend Working!"', () => {
+      expect(appController.getHello()).toBe('LinearCard Backend Working!');
     });
   });
 });

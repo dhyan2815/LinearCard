@@ -19,13 +19,17 @@ export const viewport = {
 };
 
 import { ThemeToggle } from '../components/ThemeToggle';
+import { Toaster } from 'sonner';
+import NextTopLoader from 'nextjs-toploader';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`light ${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="antialiased bg-canvas text-ink-dark selection:bg-brand-blue selection:text-white overflow-x-hidden">
+        <NextTopLoader color="#6366f1" showSpinner={false} height={3} />
         {children}
         <ThemeToggle />
+        <Toaster position="top-right" theme="dark" richColors />
       </body>
     </html>
   );

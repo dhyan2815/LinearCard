@@ -114,6 +114,23 @@ export class WalletService {
       };
     }
 
+    // Attach store locations for Google Wallet OS-level proximity notifications.
+    // Max 10 allowed by the Google Wallet API — any extras are silently truncated.
+    if (
+      Array.isArray(templateData.locations) &&
+      templateData.locations.length > 0
+    ) {
+      classPayload.locations = templateData.locations
+        .slice(0, 10)
+        .map(
+          (loc: { latitude: number | string; longitude: number | string }) => ({
+            kind: 'walletobjects#latLongPoint',
+            latitude: Number(loc.latitude),
+            longitude: Number(loc.longitude),
+          }),
+        );
+    }
+
     if (cardRowTemplateInfos.length > 0) {
       classPayload.classTemplateInfo = {
         cardTemplateOverride: {
@@ -159,6 +176,24 @@ export class WalletService {
           return { id: classId, existing: true, updated: false };
         }
       }
+      throw error;
+    }
+  }
+
+  public async getGenericObject(passId: string) {
+    const client = await this.getGoogleAuthClient();
+    const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${passId}`;
+    try {
+      const res = await client.request({
+        url,
+        method: 'GET',
+      });
+      return res.data as any;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      this.logger.error(`Error fetching genericObject ${passId}:`, error.message);
       throw error;
     }
   }
