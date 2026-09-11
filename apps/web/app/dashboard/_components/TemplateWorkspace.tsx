@@ -302,11 +302,14 @@ export function TemplateWorkspace({
             {ARCHETYPES.map((arch) => (
               <button key={arch.value} type="button"
                 onClick={() => {
-                  setDesignData((prev: any) => ({
-                    ...prev,
-                    archetype: arch.value,
-                    rows: ARCHETYPE_PRESETS[arch.value] || prev.rows
-                  }));
+                  setDesignData((prev: any) => {
+                    if (prev.archetype === arch.value) return prev; // Do nothing if already active
+                    return {
+                      ...prev,
+                      archetype: arch.value,
+                      rows: ARCHETYPE_PRESETS[arch.value] || prev.rows
+                    };
+                  });
                   setTemplateStatus('draft');
                 }}
                 className={`py-2.5 px-3 rounded-lg text-sm font-medium border transition-all ${
