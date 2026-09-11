@@ -1,6 +1,8 @@
 # LinearCard
 
-![LinearCard Architecture](https://img.shields.io/badge/Next.js-16%20(App%20Router)-black?style=flat-square&logo=next.js)
+![Turborepo](https://img.shields.io/badge/Turborepo-Monorepo-EF4444?style=flat-square&logo=turborepo)
+![Next.js](https://img.shields.io/badge/Next.js-16%20(App%20Router)-black?style=flat-square&logo=next.js)
+![NestJS](https://img.shields.io/badge/NestJS-10-E0234E?style=flat-square&logo=nestjs)
 ![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?style=flat-square&logo=tailwind-css)
 ![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?style=flat-square&logo=supabase)
@@ -27,29 +29,46 @@ LinearCard enables brands to issue, manage, and dynamically update digital passe
 
 ## 🛠 Tech Stack
 
-### Frontend
-- **Framework:** Next.js 16 (App Router)
+### Monorepo & Tooling
+- **Build System:** [Turborepo](https://turbo.build/) for task pipeline orchestration, caching, and concurrent development
+- **Workspaces:** npm workspaces (`apps/*`, `packages/*`)
+- **Shared Packages:** `@linearcard/types` (`packages/types`) providing shared TypeScript data models (User, Tenant, Member, Pass) across apps
+
+### Frontend (`apps/web`)
+- **Framework:** Next.js 16 (App Router, Port `3000`)
 - **UI Library:** React 19 (TypeScript enabled)
 - **Styling:** Tailwind CSS v4 (with PostCSS)
 - **Component System:** shadcn/ui (Radix UI primitives, `class-variance-authority`, `clsx`, `tailwind-merge`)
 - **Animations:** Motion (Framer Motion 13) & `canvas-confetti`
 - **Icons & Fonts:** `lucide-react`, Geist
 - **Utilities:** `qrcode.react` (QR generation), `@yudiel/react-qr-scanner` (live QR scanning)
+- **API Client:** Type-safe HTTP client (`lib/api-client.ts`) communicating with the NestJS backend via `NEXT_PUBLIC_API_URL`
 
-### Backend
-- **Runtime & API:** Node.js (ES Modules) via Next.js API Routes
+### Backend (`apps/api`)
+- **Framework:** NestJS 10 (Port `3001`)
+- **Modular Architecture:**
+  - `AuthModule`: OTP generation, SHA-256 verification, and authentication
+  - `DashboardModule`: Tenant dashboard metrics, analytics, and overview data
+  - `MembersModule`: CRM member profiles, balances, and pass associations
+  - `NotificationsModule`: Multi-channel marketing (WhatsApp & Google Wallet push notifications)
+  - `PassesModule`: Pass issuance, live pass updates, and PassTemplate CRUD
+  - `TenantModule`: Tenant profiles and webhook management
+  - `WalletModule`: Google Wallet REST API integration and cryptographic RS256 JWT signing
 - **Database / BaaS:** Supabase (PostgreSQL) for multi-tenant data, templates, and audit logs
 - **Google Wallet Integration:** `google-auth-library` to securely interact with the Wallet REST API
 - **Cryptography & Security:** `jsonwebtoken` (for JWTs) and native Node.js `crypto` (for SHA-256 OTP hashing)
 - **Environment:** `dotenv`
+
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
 - Node.js v18 or later
+- npm v10 or later (with workspace support)
 - Supabase Project (Database)
-- Google Cloud Service Account (with Wallet API access)
+- Google Cloud Service Account (with Google Wallet API access)
 
 ### Installation
 
@@ -65,28 +84,66 @@ LinearCard enables brands to issue, manage, and dynamically update digital passe
    ```
 
 3. **Configure Environment Variables:**
-   Ensure you have a `.env` file in the root directory with the necessary Google Cloud credentials, Supabase keys, and JWT secrets.
+   - **Frontend (`apps/web/.env`):**
+     ```env
+     NEXT_PUBLIC_API_URL=http://localhost:3001
+     ```
+   - **Backend (`apps/api/.env`):**
+     Ensure Google Cloud credentials (`GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_ISSUER_ID`), Supabase keys (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`), and `JWT_SECRET` are configured.
 
-4. **Run the development server:**
+4. **Run the development servers:**
+   Launch both Next.js frontend and NestJS backend concurrently via Turborepo:
    ```bash
    npm run dev
    ```
 
-5. **Open the App:**
-   Navigate to `http://localhost:3000` to view the app in your browser.
+5. **Access the Applications:**
+   - **Frontend Dashboard & Web App:** `http://localhost:3000`
+   - **Backend NestJS API:** `http://localhost:3001`
+
+### Available Monorepo Scripts
+
+Run from the root directory:
+- `npm run dev` — Concurrently starts `apps/web` (Next.js on Port 3000) and `apps/api` (NestJS on Port 3001) in watch mode.
+- `npm run build` — Compiles all applications and shared packages using Turborepo caching.
+- `npm run start` — Starts production servers.
+- `npm run lint` — Runs linters across workspaces.
+
+---
 
 ## 🗂 Project Structure
 
-- `app/` - Next.js App Router endpoints, layouts, and pages (Dashboard, Scanner, Enrollment).
-- `components/` - Reusable UI components (PassPreviewCard, ThemeToggle, WalletModal, etc.).
-- `docs/` - Product requirement documents, E2E testing guides, and competitor research.
-- `lib/` - Core business logic:
-  - `google-wallet.ts` - Cryptographic pass generation & API sync.
-  - `otp.ts` - Secure SHA-256 OTP generation, validation, and rate limiting.
-  - `notify.ts` - Delivery ledger and push notification logic.
-  - `whatsapp.ts` - WhatsApp integration for pass distribution.
-- `supabase/` - SQL schemas and database setup scripts.
-- `tests/` - Standalone API validation scripts (`smoke-test.mjs`, `schema-check.mjs`, etc.).
+```
+linearcard/
+├── apps/
+│   ├── api/                   # NestJS Backend Application (Port 3001)
+│   │   ├── src/
+│   │   │   ├── auth/          # OTP generation, verification & auth controllers
+│   │   │   ├── dashboard/     # Tenant dashboard stats and analytics
+│   │   │   ├── members/       # CRM member management & pass lookup
+│   │   │   ├── notifications/ # Push & WhatsApp delivery services
+│   │   │   ├── passes/        # Pass generation, updates & template management
+│   │   │   ├── tenant/        # Tenant configuration & webhook controllers
+│   │   │   ├── wallet/        # Google Wallet cryptographic JWT signing
+│   │   │   ├── app.module.ts  # Root application module
+│   │   │   └── main.ts        # Entry point (Port 3001, CORS enabled)
+│   │   ├── test/              # NestJS e2e test suite
+│   │   └── package.json
+│   └── web/                   # Next.js Frontend Application (Port 3000)
+│       ├── app/               # App Router pages (Dashboard, Scanner, Enrollment, Login)
+│       ├── components/        # Reusable UI components (HeroPass, ThemeToggle, etc.)
+│       ├── lib/               # Typed apiClient & frontend helpers
+│       ├── public/            # Static assets and tenant branding
+│       └── package.json
+├── packages/
+│   └── types/                 # Shared TypeScript types (@linearcard/types)
+│       ├── index.ts           # Shared data models (User, Tenant, Member, Pass)
+│       └── package.json
+├── docs/                      # PRDs, architecture briefing, and testing guides
+├── turbo.json                 # Turborepo task pipeline configuration
+├── package.json               # Root monorepo configuration & scripts
+└── README.md
+```
 
 ## Security & Compliance
 
