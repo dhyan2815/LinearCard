@@ -15,5 +15,8 @@
   "devDependencies": {
     "turbo": "latest",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "googleapis": "^180.0.0"
   }
 }

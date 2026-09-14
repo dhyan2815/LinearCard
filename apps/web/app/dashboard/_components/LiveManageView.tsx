@@ -49,7 +49,7 @@ export function LiveManageView({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Live Update (Manage) */}
-        <Card className="flex flex-col border-border-subtle shadow-sm bg-surface-card overflow-hidden">
+        <Card className="flex flex-col border-border-subtle shadow-sm bg-surface-card overflow-hidden h-full max-h-125">
           <div className="p-4 border-b border-border-subtle bg-canvas/50 flex justify-between items-center">
             <h2 className="text-[14px] font-semibold text-ink-dark flex items-center gap-2">
               <Zap className="w-4 h-4 text-brand-blue" /> Pass Patcher
@@ -58,7 +58,7 @@ export function LiveManageView({
               <button onClick={() => setManageData({...manageData, passId: ''})} className="text-xs text-ink-muted hover:text-ink-dark">Cancel</button>
             )}
           </div>
-          <div className="p-5 space-y-4 flex-1">
+          <div className="p-5 flex-1 flex flex-col min-h-0">
              {manageData.passId ? (
                <form onSubmit={handleUpdatePass} className="space-y-4">
                  <div>
@@ -80,7 +80,7 @@ export function LiveManageView({
                   {successMsg && <p className="text-emerald-500 text-xs">{successMsg}</p>}
                </form>
              ) : (
-               <div className="space-y-5 h-full flex flex-col">
+               <div className="space-y-5 flex-1 flex flex-col min-h-0">
                  <div>
                    <Label className="text-xs text-ink-secondary uppercase tracking-wide">Enter Pass ID Manually</Label>
                    <div className="flex gap-2 mt-1.5">
@@ -107,9 +107,9 @@ export function LiveManageView({
                      </Button>
                    </div>
                  </div>
-                 <div className="space-y-3 flex-1 flex flex-col">
+                 <div className="space-y-3 flex-1 flex flex-col min-h-0">
                    <p className="text-xs text-ink-secondary uppercase tracking-wide">Or select from history</p>
-                   <div className="space-y-2 overflow-y-auto flex-1 pr-2 max-h-48">
+                   <div className="space-y-2 overflow-y-auto flex-1 min-h-0 pr-2 pb-1">
                      {passHistory.length === 0 && <p className="text-sm text-ink-muted italic">No passes issued yet.</p>}
                      {passHistory.map((item: any, idx: number) => (
                         <div
