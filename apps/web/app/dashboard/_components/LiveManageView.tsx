@@ -32,12 +32,20 @@ export function LiveManageView({
   selectPassForManage
 }: any) {
   const [logs, setLogs] = useState<any[]>([]);
+  const [logFetchError, setLogFetchError] = useState<string | null>(null);
   
   useEffect(() => {
     if (!tenantId) return;
-    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20`)
-      .then(d => { if (d.success) setLogs(d.logs); })
-      .catch(err => console.error('Error fetching logs:', err));
+    setLogFetchError(null);
+    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20&_t=${Date.now()}`)
+      .then(d => { 
+        if (d.success) setLogs(d.logs); 
+        else setLogFetchError(d.error || 'Unknown API error');
+      })
+      .catch(err => {
+        console.error('Error fetching logs:', err);
+        setLogFetchError(err.message || String(err));
+      });
   }, [tenantId, successMsg]);
 
   return (
@@ -148,8 +156,13 @@ export function LiveManageView({
               <Activity className="w-4 h-4 text-emerald-500" /> Activity Ledger
             </h2>
           </div>
-          <div className="flex-1 overflow-y-auto p-5 space-y-3">
-            {logs.length === 0 && <p className="text-sm text-ink-muted py-4">No recent activity.</p>}
+          <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-3">
+            {logFetchError && (
+              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm">
+                Error: {logFetchError}
+              </div>
+            )}
+            {logs.length === 0 && !logFetchError && <p className="text-sm text-ink-muted py-4">No recent activity.</p>}
             {logs.map((log: any) => (
               <div key={log.id} className="p-3 rounded-xl border border-border-subtle/50 bg-canvas transition-colors flex gap-3 items-start">
                 <div className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${log.status === 'sent' ? 'bg-emerald-500' : 'bg-red-500'}`} />

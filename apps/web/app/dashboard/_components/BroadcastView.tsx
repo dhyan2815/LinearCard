@@ -15,7 +15,7 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
 
   useEffect(() => {
     if (!tenantId) return;
-    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20`)
+    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20&_t=${Date.now()}`)
       .then(d => { if (d.success) setLogs(d.logs); })
       .catch(err => console.error('Error fetching logs:', err));
   }, [tenantId, result]);

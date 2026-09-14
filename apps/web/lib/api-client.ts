@@ -33,6 +33,7 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
 
 
   const fetchOptions: RequestInit = {
+    cache: 'no-store',
     ...options,
     headers: {
       'Content-Type': 'application/json',
