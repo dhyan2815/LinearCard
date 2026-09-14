@@ -61,20 +61,23 @@ export function LiveManageView({
           <div className="p-5 flex-1 flex flex-col min-h-0">
              {manageData.passId ? (
                <form onSubmit={handleUpdatePass} className="space-y-4">
-                 <div>
-                    <Label className="text-xs text-ink-secondary uppercase tracking-wide">Update Tier</Label>
-                    <Input type="text" value={manageData.tier} onChange={(e: any) => setManageData({...manageData, tier: e.target.value})} required className="h-10 text-sm mt-1.5"/>
+                   <div>
+                    <Label className="text-xs text-ink-secondary uppercase tracking-wide">Update Tier (Optional)</Label>
+                    <Input type="text" value={manageData.tier} onChange={(e: any) => setManageData({...manageData, tier: e.target.value})} className="h-10 text-sm mt-1.5"/>
                   </div>
                   <div>
-                    <Label className="text-xs text-ink-secondary uppercase tracking-wide">Update Balance</Label>
-                    <Input type="text" value={manageData.balance} onChange={(e: any) => setManageData({...manageData, balance: e.target.value})} required className="h-10 text-sm mt-1.5"/>
+                    <Label className="text-xs text-ink-secondary uppercase tracking-wide">Update Balance (Optional)</Label>
+                    <Input type="text" value={manageData.balance} onChange={(e: any) => setManageData({...manageData, balance: e.target.value})} className="h-10 text-sm mt-1.5"/>
                   </div>
-                  <div>
-                    <Label className="text-xs text-ink-secondary uppercase tracking-wide">Push Notification (Optional)</Label>
-                    <Input type="text" value={manageData.pushNotification} onChange={(e: any) => setManageData({...manageData, pushNotification: e.target.value})} placeholder="Message" className="h-10 text-sm mt-1.5"/>
+                  <div className="pt-2 border-t border-border-subtle">
+                    <Label className="text-xs text-ink-secondary uppercase tracking-wide font-semibold">Promotional Message (Optional)</Label>
+                    <div className="space-y-3 mt-2">
+                      <Input type="text" value={manageData.promoHeader} onChange={(e: any) => setManageData({...manageData, promoHeader: e.target.value})} placeholder="Message Header (e.g. 20% Off!)" className="h-10 text-sm"/>
+                      <Input type="text" value={manageData.promoBody} onChange={(e: any) => setManageData({...manageData, promoBody: e.target.value})} placeholder="Message Body (e.g. Visit us today to claim...)" className="h-10 text-sm"/>
+                    </div>
                   </div>
-                  <Button type="submit" disabled={loading} className="w-full h-10 mt-2">
-                    {loading ? 'Patching...' : 'Push Live Update'}
+                  <Button type="submit" disabled={loading} className="w-full h-10 mt-4">
+                    {loading ? 'Processing...' : 'Push Live Update'}
                   </Button>
                   {error && <p className="text-red-500 text-xs">{error}</p>}
                   {successMsg && <p className="text-emerald-500 text-xs">{successMsg}</p>}
@@ -91,7 +94,7 @@ export function LiveManageView({
                         onKeyDown={(e: any) => {
                           if (e.key === 'Enter' && e.target.value) {
                              e.preventDefault();
-                             setManageData({...manageData, passId: e.target.value, balance: '', tier: '', pushNotification: ''});
+                             setManageData({...manageData, passId: e.target.value, balance: '', tier: '', promoHeader: '', promoBody: ''});
                           }
                         }}
                      />
@@ -99,7 +102,7 @@ export function LiveManageView({
                         type="button"
                         onClick={() => {
                           const val = (document.getElementById('manual-pass-id') as HTMLInputElement)?.value;
-                          if (val) setManageData({...manageData, passId: val, balance: '', tier: '', pushNotification: ''});
+                          if (val) setManageData({...manageData, passId: val, balance: '', tier: '', promoHeader: '', promoBody: ''});
                         }} 
                         className="h-10"
                      >

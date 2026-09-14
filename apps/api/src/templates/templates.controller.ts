@@ -42,6 +42,46 @@ export class TemplatesController {
     }
   }
 
+  @Post()
+  async createTemplate(@Body() body: any) {
+    try {
+      if (!body.tenantId) {
+        throw new HttpException('tenantId is required', HttpStatus.BAD_REQUEST);
+      }
+
+      const insertPayload: Record<string, any> = {
+        tenantId: body.tenantId,
+        title: body.name || 'New Template',
+        archetype: body.archetype || 'loyalty',
+        subtitle: body.name || 'New Template',
+        status: 'draft',
+        classSuffix: body.classSuffix,
+      };
+
+      if (body.fieldRows !== undefined) insertPayload.fieldRows = body.fieldRows;
+      if (body.hexBackgroundColor !== undefined) insertPayload.hexBackgroundColor = body.hexBackgroundColor;
+      if (body.logoUrl !== undefined) insertPayload.logoUrl = body.logoUrl;
+      if (body.heroImageUrl !== undefined) insertPayload.heroImageUrl = body.heroImageUrl;
+      if (body.storeLocations !== undefined) insertPayload.storeLocations = body.storeLocations;
+
+      const { data: template, error } = await this.supabaseService.client
+        .from('PassTemplate')
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { success: true, template: { ...template, name: template.title } };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get(':id')
   async getTemplateById(@Param('id') id: string) {
     try {
@@ -97,15 +137,25 @@ export class TemplatesController {
           HttpStatus.NOT_FOUND,
         );
 
-      const origin = 'http://localhost:3000';
+      function resolveImageUrl(url?: string): string | undefined {
+        if (!url) return undefined;
+        if (url.includes('localhost') || url.includes('127.0.0.1')) {
+          return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
+        }
+        if (url.startsWith('/')) {
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+          if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
+            return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
+          }
+          return `${baseUrl}${url}`;
+        }
+        return url;
+      }
+
       const rawLogoUrl = template.logoUrl || template.tenant?.logoUrl;
       const rawHeroImageUrl = template.heroImageUrl || template.tenant?.heroUrl;
-      const logoUrl = rawLogoUrl?.startsWith('/')
-        ? `${origin}${rawLogoUrl}`
-        : rawLogoUrl;
-      const heroImageUrl = rawHeroImageUrl?.startsWith('/')
-        ? `${origin}${rawHeroImageUrl}`
-        : rawHeroImageUrl;
+      const logoUrl = resolveImageUrl(rawLogoUrl);
+      const heroImageUrl = resolveImageUrl(rawHeroImageUrl);
 
       const classData: any = await this.walletService.createGenericClass({
         classSuffix: template.classSuffix || template.tenant?.classSuffix,

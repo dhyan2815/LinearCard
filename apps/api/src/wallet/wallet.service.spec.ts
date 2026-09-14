@@ -15,7 +15,9 @@ describe('WalletService.createGenericClass locations mapping', () => {
   });
 
   it('should include locations in payload when provided', async () => {
-    const service = new WalletService();
+    const mockSupabase = {} as any;
+    const mockNotify = {} as any;
+    const service = new WalletService(mockSupabase, mockNotify);
     // Spy on the private method to capture the payload before it's sent
     const capturedPayloads: any[] = [];
     const fakeClient = {
@@ -52,7 +54,9 @@ describe('WalletService.createGenericClass locations mapping', () => {
   });
 
   it('should NOT include locations in payload when none provided', async () => {
-    const service = new WalletService();
+    const mockSupabase = {} as any;
+    const mockNotify = {} as any;
+    const service = new WalletService(mockSupabase, mockNotify);
     const capturedPayloads: any[] = [];
     const fakeClient = {
       request: jest.fn().mockImplementation((opts: any) => {
@@ -74,7 +78,9 @@ describe('WalletService.createGenericClass locations mapping', () => {
   });
 
   it('should NOT include locations in payload when empty array provided', async () => {
-    const service = new WalletService();
+    const mockSupabase = {} as any;
+    const mockNotify = {} as any;
+    const service = new WalletService(mockSupabase, mockNotify);
     const capturedPayloads: any[] = [];
     const fakeClient = {
       request: jest.fn().mockImplementation((opts: any) => {
@@ -97,7 +103,9 @@ describe('WalletService.createGenericClass locations mapping', () => {
   });
 
   it('should cap locations at 10 even if more are supplied', async () => {
-    const service = new WalletService();
+    const mockSupabase = {} as any;
+    const mockNotify = {} as any;
+    const service = new WalletService(mockSupabase, mockNotify);
     const capturedPayloads: any[] = [];
     const fakeClient = {
       request: jest.fn().mockImplementation((opts: any) => {
@@ -121,5 +129,89 @@ describe('WalletService.createGenericClass locations mapping', () => {
     });
 
     expect(capturedPayloads[0].locations).toHaveLength(10);
+  });
+});
+
+describe('WalletService.sendPromoMessageWithAudit', () => {
+  let service: WalletService;
+  let mockSupabaseService: any;
+  let mockNotifyService: any;
+
+  beforeEach(() => {
+    mockSupabaseService = {
+      client: {
+        from: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        not: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        single: jest.fn(),
+        gte: jest.fn(),
+      },
+    };
+    mockNotifyService = {
+      logNotification: jest.fn(),
+    };
+    service = new WalletService(mockSupabaseService, mockNotifyService);
+  });
+
+  it('should reject member without consent', async () => {
+    mockSupabaseService.client.single.mockResolvedValue({ data: null }); // No consent
+
+    await expect(
+      service.sendPromoMessageWithAudit('pass-1', 'mem-1', 'tenant-1', 'Header', 'Body'),
+    ).rejects.toThrow('Member has not consented');
+  });
+
+  it('should reject on rate limit (3+ messages in 24h)', async () => {
+    // Consent check passes
+    mockSupabaseService.client.single.mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } });
+    // Quota check returns count = 3
+    mockSupabaseService.client.gte.mockResolvedValueOnce({ count: 3 });
+
+    await expect(
+      service.sendPromoMessageWithAudit('pass-1', 'mem-1', 'tenant-1', 'Header', 'Body'),
+    ).rejects.toThrow('Rate limit reached');
+  });
+
+  it('should log success after Google API succeeds', async () => {
+    mockSupabaseService.client.single.mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } });
+    mockSupabaseService.client.gte.mockResolvedValueOnce({ count: 1 });
+
+    const fakeClient = {
+      request: jest.fn().mockResolvedValue({ data: { success: true } }),
+    };
+    jest.spyOn(service, 'getGoogleAuthClient').mockResolvedValue(fakeClient as any);
+
+    const result = await service.sendPromoMessageWithAudit('pass-1', 'mem-1', 'tenant-1', 'Header', 'Body');
+
+    expect(result.success).toBe(true);
+    expect(mockNotifyService.logNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'sent',
+        type: 'promo_message',
+      }),
+    );
+  });
+
+  it('should log failure if Google API fails', async () => {
+    mockSupabaseService.client.single.mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } });
+    mockSupabaseService.client.gte.mockResolvedValueOnce({ count: 1 });
+
+    const fakeClient = {
+      request: jest.fn().mockRejectedValue(new Error('Google API Error')),
+    };
+    jest.spyOn(service, 'getGoogleAuthClient').mockResolvedValue(fakeClient as any);
+
+    await expect(
+      service.sendPromoMessageWithAudit('pass-1', 'mem-1', 'tenant-1', 'Header', 'Body'),
+    ).rejects.toThrow();
+
+    expect(mockNotifyService.logNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        errorReason: 'Google Wallet addMessage failed',
+      }),
+    );
   });
 });

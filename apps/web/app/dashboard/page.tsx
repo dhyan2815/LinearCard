@@ -117,7 +117,7 @@ export default function Dashboard() {
   const handleTenantChange = (newTenantId: string) => {
     setSelectedTenantId(newTenantId);
     setActiveTab('design');
-    setManageData({ passId: '', balance: '', tier: '', pushNotification: '', phone: '', brandName: '' });
+    setManageData({ passId: '', balance: '', tier: '', promoHeader: '', promoBody: '', phone: '', brandName: '' });
     const t = tenants.find(tenant => tenant.id === newTenantId);
     setDesignData({
       classSuffix: t?.classSuffix || '',
@@ -190,7 +190,7 @@ export default function Dashboard() {
   }, [currentTenant]);
 
   const [manageData, setManageData] = useState({
-    passId: '', balance: '', tier: '', pushNotification: '', phone: '', brandName: ''
+    passId: '', balance: '', tier: '', promoHeader: '', promoBody: '', phone: '', brandName: ''
   });
 
   const [loading, setLoading] = useState(false);
@@ -202,21 +202,50 @@ export default function Dashboard() {
     e.preventDefault();
     setLoading(true); setError(null); setSuccessMsg(null);
     try {
-      const data = await apiClient('/passes/update-pass', {
-        method: 'POST', body: JSON.stringify(manageData)
-      });
-      if (!data.success) throw new Error(data.error || 'Failed to update pass');
+      let msg = '';
+      const shouldUpdateData = Boolean(manageData.balance || manageData.tier);
+      const shouldSendPromo = Boolean(manageData.promoHeader || manageData.promoBody);
       
-      let msg = `Pass updated successfully! Changes pushed to your device.`;
-      if (manageData.pushNotification) msg += ` Notification sent: "${manageData.pushNotification}"`;
-      setSuccessMsg(msg);
+      if (!shouldUpdateData && !shouldSendPromo) {
+        throw new Error('Please provide Tier/Balance to update, or Header/Body for a promo message.');
+      }
+
+      if (shouldSendPromo && (!manageData.promoHeader || !manageData.promoBody)) {
+        throw new Error('Both Message Header and Body are required to send a promotional message.');
+      }
+
+      if (shouldUpdateData) {
+        const data = await apiClient('/passes/update-pass', {
+          method: 'POST', body: JSON.stringify({
+            passId: manageData.passId,
+            balance: manageData.balance,
+            tier: manageData.tier
+          })
+        });
+        if (!data.success && data.error !== 'Duplicate') throw new Error(data.error || 'Failed to update pass');
+        msg += `Pass data updated. `;
+        
+        setPassHistory(prev => prev.map(p => {
+          if (p.passId === manageData.passId || p.fullPassId === manageData.passId) {
+            return { ...p, passData: { ...p.passData, balance: manageData.balance, tier: manageData.tier }};
+          }
+          return p;
+        }));
+      }
+
+      if (shouldSendPromo) {
+        const promoData = await apiClient('/passes/send-promo-message', {
+          method: 'POST', body: JSON.stringify({
+            passId: manageData.passId,
+            header: manageData.promoHeader,
+            body: manageData.promoBody
+          })
+        });
+        if (!promoData.success) throw new Error(promoData.error || 'Failed to send promo message');
+        msg += `Promotional message sent!`;
+      }
       
-      setPassHistory(prev => prev.map(p => {
-        if (p.passId === manageData.passId || p.fullPassId === manageData.passId) {
-          return { ...p, passData: { ...p.passData, balance: manageData.balance, tier: manageData.tier }};
-        }
-        return p;
-      }));
+      setSuccessMsg(msg.trim());
     } catch (err: any) { setError(err.message); } finally { setLoading(false); }
   };
 
@@ -226,7 +255,8 @@ export default function Dashboard() {
       passId: pass.fullPassId || pass.passId,
       balance: pass.passData?.balance || '',
       tier: pass.passData?.tier || '',
-      pushNotification: ''
+      promoHeader: '',
+      promoBody: ''
     }));
     setSuccessMsg(null); setError(null);
   };
