@@ -113,7 +113,7 @@ export function LiveActivitySidebar({
       </Card>
 
       {/* Live Update (Manage) */}
-      <Card className="flex flex-col border-zinc-200 dark:border-zinc-800 shadow-sm bg-white dark:bg-zinc-900 overflow-hidden">
+      <Card className="flex flex-col flex-1 min-h-75 border-zinc-200 dark:border-zinc-800 shadow-sm bg-white dark:bg-zinc-900 overflow-hidden">
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex justify-between items-center">
           <h2 className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             <Zap className="w-4 h-4 text-brand-blue" /> Pass Patcher
@@ -122,7 +122,7 @@ export function LiveActivitySidebar({
             <button onClick={() => setManageData({...manageData, passId: ''})} className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">Cancel</button>
           )}
         </div>
-        <div className="p-4 space-y-4">
+        <div className="p-4 flex-1 flex flex-col min-h-0">
            {manageData.passId ? (
              <form onSubmit={handleUpdatePass} className="space-y-4">
                <div>
@@ -144,7 +144,7 @@ export function LiveActivitySidebar({
                 {successMsg && <p className="text-emerald-500 text-[11px]">{successMsg}</p>}
              </form>
            ) : (
-             <div className="space-y-4 flex flex-col">
+             <div className="space-y-4 flex-1 flex flex-col min-h-0">
                <div>
                  <Label className="text-xs text-zinc-500 dark:text-zinc-400">Enter Pass ID Manually</Label>
                  <div className="flex gap-2 mt-1.5">
@@ -172,9 +172,9 @@ export function LiveActivitySidebar({
                  </div>
                </div>
                
-               <div className="space-y-2">
+               <div className="space-y-2 flex-1 flex flex-col min-h-0">
                  <p className="text-[11px] text-zinc-500 uppercase tracking-wide">Or select from history</p>
-                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                 <div className="space-y-1.5 overflow-y-auto flex-1 min-h-0 pr-1 pb-1">
                    {passHistory.length === 0 && <p className="text-xs text-zinc-400 italic">No passes issued yet.</p>}
                    {passHistory.map((item: any, idx: number) => (
                       <div
