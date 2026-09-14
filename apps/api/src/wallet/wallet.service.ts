@@ -518,7 +518,17 @@ export class WalletService {
     }
   }
 
-  public async checkNotificationQuota(memberId: string): Promise<void> {
+  public async checkNotificationQuota(memberId: string, bypassQuota = false): Promise<void> {
+    if (
+      process.env.BYPASS_NOTIFICATION_QUOTA === 'true' ||
+      (process.env.NODE_ENV !== 'production' && bypassQuota)
+    ) {
+      this.logger.warn(
+        `[DEV] Bypassing notification quota check for member ${memberId}`,
+      );
+      return;
+    }
+
     const twentyFourHoursAgo = new Date(
       Date.now() - 24 * 60 * 60 * 1000,
     ).toISOString();
@@ -585,6 +595,7 @@ export class WalletService {
     tenantId: string,
     header: string,
     body: string,
+    bypassQuota = false,
   ): Promise<{ success: boolean; messageId: string }> {
     const messageId = `msg_${Date.now()}`;
     const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID || '3388000000023177673';
@@ -597,7 +608,7 @@ export class WalletService {
       await this.verifyMarketingConsent(memberId);
 
       // 2. Check quota
-      await this.checkNotificationQuota(memberId);
+      await this.checkNotificationQuota(memberId, bypassQuota);
 
       // 3. Send to Google Wallet
       await this.sendOfferMessage(resourceId, messageId, header, body);

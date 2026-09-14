@@ -500,7 +500,7 @@ export class PassesController {
   @Post('send-promo-message')
   async postsendpromomessage(@Req() req: Request, @Res() res: Response) {
     try {
-      const { passId, header, body } = req.body;
+      const { passId, header, body, bypassQuota } = req.body;
 
       if (!passId || !header || !body) {
         return res
@@ -592,6 +592,7 @@ export class PassesController {
         pass.tenantId,
         header,
         body,
+        bypassQuota === true || bypassQuota === 'true',
       );
 
       return res.status(200).json({
