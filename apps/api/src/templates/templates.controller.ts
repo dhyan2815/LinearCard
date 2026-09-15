@@ -62,7 +62,6 @@ export class TemplatesController {
       if (body.hexBackgroundColor !== undefined) insertPayload.hexBackgroundColor = body.hexBackgroundColor;
       if (body.logoUrl !== undefined) insertPayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined) insertPayload.heroImageUrl = body.heroImageUrl;
-      if (body.storeLocations !== undefined) insertPayload.storeLocations = body.storeLocations;
 
       const { data: template, error } = await this.supabaseService.client
         .from('PassTemplate')
@@ -165,9 +164,6 @@ export class TemplatesController {
         rows: template.fieldRows,
         logoUrl,
         heroImageUrl,
-        // Pass the store coordinates to Google Wallet's proximity feature.
-        // Falls back to [] for older templates that predate this column.
-        locations: template.storeLocations ?? [],
       });
 
       const { data: updated, error: updateError } =
@@ -216,44 +212,6 @@ export class TemplatesController {
       if (body.heroImageUrl !== undefined)
         updatePayload.heroImageUrl = body.heroImageUrl;
 
-      // Validate and apply storeLocations
-      if (body.storeLocations !== undefined) {
-        if (!Array.isArray(body.storeLocations)) {
-          throw new HttpException(
-            'storeLocations must be an array',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-        if (body.storeLocations.length > 10) {
-          throw new HttpException(
-            'storeLocations must contain at most 10 entries',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-        for (const loc of body.storeLocations) {
-          if (!loc || typeof loc !== 'object') {
-            throw new HttpException(
-              'Each store location must be an object',
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-          const lat = Number(loc.latitude);
-          const lng = Number(loc.longitude);
-          if (isNaN(lat) || lat < -90 || lat > 90) {
-            throw new HttpException(
-              `Invalid latitude: ${loc.latitude}`,
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-          if (isNaN(lng) || lng < -180 || lng > 180) {
-            throw new HttpException(
-              `Invalid longitude: ${loc.longitude}`,
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-        }
-        updatePayload.storeLocations = body.storeLocations;
-      }
 
       const { data: updated, error } = await this.supabaseService.client
         .from('PassTemplate')
