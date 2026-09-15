@@ -53,14 +53,6 @@ export default function MembersPage() {
 
   return (
     <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
-      <div className="mb-8 flex justify-between items-center">
-        <Button asChild variant="secondary" size="sm">
-          <Link href="/dashboard">
-            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-          </Link>
-        </Button>
-      </div>
-
       <div className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-ink-dark tracking-tight mb-2 flex items-center gap-3">

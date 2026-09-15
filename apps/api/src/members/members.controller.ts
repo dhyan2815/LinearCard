@@ -26,7 +26,7 @@ export class MembersController {
       const { data: members, error } = await this.supabaseService.client
         .from('Member')
         .select(
-          'id, name, phone, tenantId, createdAt, passes:Pass(id, fullPassId, tier, balance)',
+          'id, name, phone, tenantId, createdAt, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
         )
         .order('createdAt', { ascending: false });
 

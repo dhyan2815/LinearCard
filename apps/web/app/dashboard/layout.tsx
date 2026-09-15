@@ -1,6 +1,8 @@
 import React from 'react';
 import { CreditCard, QrCode } from 'lucide-react';
 import Link from 'next/link';
+import { DashboardProvider } from './_components/DashboardContext';
+import { DashboardSidebar } from './_components/DashboardSidebar';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -26,16 +28,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <QrCode className="w-3.5 h-3.5" />
               Scanner
             </Link>
-             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              API Connected
-            </div>
+
           </div>
         </div>
       </header>
 
       <div className="relative z-10 flex-1 flex flex-col min-h-0">
-        {children}
+        <DashboardProvider>
+          <div className="flex flex-1 overflow-hidden bg-canvas min-h-0">
+            <DashboardSidebar />
+            <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-canvas">
+              <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+                {children}
+              </main>
+            </div>
+          </div>
+        </DashboardProvider>
       </div>
     </div>
   );

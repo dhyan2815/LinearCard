@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/api-client';
 
-export function BroadcastView({ tenantId }: { tenantId: string }) {
+export function PushCampaignsView({ tenantId }: { tenantId: string }) {
   const [channel, setChannel] = useState<'whatsapp' | 'wallet_push'>('whatsapp');
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -15,7 +15,7 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
 
   useEffect(() => {
     if (!tenantId) return;
-    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20`)
+    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20&_t=${Date.now()}`)
       .then(d => { if (d.success) setLogs(d.logs); })
       .catch(err => console.error('Error fetching logs:', err));
   }, [tenantId, result]);
@@ -41,7 +41,7 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
   return (
     <div className="max-w-4xl space-y-6">
       <div className="border-b border-border-subtle pb-4 mb-4">
-        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Broadcast</h2>
+        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Push Campaigns</h2>
         <p className="text-sm text-ink-secondary mt-1">Broadcast marketing updates or pass notifications across WhatsApp and Wallet Push.</p>
       </div>
 
@@ -87,15 +87,21 @@ export function BroadcastView({ tenantId }: { tenantId: string }) {
                   <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${log.status === 'sent' ? 'bg-emerald-500' : 'bg-red-500'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-ink-dark font-medium truncate capitalize">{log.type}</p>
+                      <p className="text-ink-dark font-medium truncate capitalize">{log.type.replace('_', ' ')}</p>
                       <span className="text-[10px] text-ink-muted font-mono shrink-0">
                         {new Date(log.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     <p className="text-ink-secondary text-xs truncate">
-                      {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown'}
+                      {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown User'}
                     </p>
-                    {log.error && <p className="text-red-400 text-xs mt-0.5 break-all">{log.error}</p>}
+                   {(log.header || log.body) && (
+                     <div className="mt-2 p-2.5 rounded-lg bg-surface/50 border border-border-subtle/30 text-xs">
+                       {log.header && <p className="font-semibold text-ink-dark mb-0.5">{log.header}</p>}
+                       {log.body && <p className="text-ink-secondary whitespace-pre-wrap">{log.body}</p>}
+                     </div>
+                   )}
+                    {log.error && <p className="text-red-400 text-xs mt-1.5 bg-red-400/10 p-2 rounded-md break-all">{log.error}</p>}
                   </div>
                 </div>
               ))}

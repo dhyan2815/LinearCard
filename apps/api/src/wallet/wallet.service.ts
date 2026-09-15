@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus, ForbiddenException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
+import { SupabaseService } from '../supabase/supabase.service';
+import { NotifyService } from '../notification/notify.service';
+
 
 export interface GoogleWalletPassOptions {
   passId: string;
@@ -20,6 +23,11 @@ export interface GoogleWalletPassOptions {
 @Injectable()
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
+
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly notifyService: NotifyService,
+  ) {}
 
   /**
    * Formats private key handling newline escapes and PEM headers
@@ -114,23 +122,6 @@ export class WalletService {
       };
     }
 
-    // Attach store locations for Google Wallet OS-level proximity notifications.
-    // Max 10 allowed by the Google Wallet API — any extras are silently truncated.
-    if (
-      Array.isArray(templateData.locations) &&
-      templateData.locations.length > 0
-    ) {
-      classPayload.locations = templateData.locations
-        .slice(0, 10)
-        .map(
-          (loc: { latitude: number | string; longitude: number | string }) => ({
-            kind: 'walletobjects#latLongPoint',
-            latitude: Number(loc.latitude),
-            longitude: Number(loc.longitude),
-          }),
-        );
-    }
-
     if (cardRowTemplateInfos.length > 0) {
       classPayload.classTemplateInfo = {
         cardTemplateOverride: {
@@ -209,7 +200,9 @@ export class WalletService {
       });
       const genericObject: any = getRes.data;
 
-      const patchPayload: any = {};
+      const patchPayload: any = {
+        notifyPreference: 'notifyOnUpdate'
+      };
 
       const formattedBalance =
         updateData.balance !== undefined
@@ -490,5 +483,124 @@ export class WalletService {
       token,
       passData,
     };
+  }
+
+  public async verifyMarketingConsent(memberId: string): Promise<void> {
+    const { data, error } = await this.supabaseService.client
+      .from('ConsentLog')
+      .select('consentedAt')
+      .eq('memberId', memberId)
+      .not('consentedAt', 'is', null)
+      .limit(1)
+      .single();
+
+    if (error || !data?.consentedAt) {
+      throw new ForbiddenException(
+        'Member has not consented to promotional notifications.',
+      );
+    }
+  }
+
+  public async checkNotificationQuota(memberId: string, bypassQuota = false): Promise<void> {
+    // Note: The 3 wallet notifications per 24hr limit has been permanently removed.
+    return;
+  }
+
+  public async sendOfferMessage(
+    resourceId: string,
+    messageId: string,
+    header: string,
+    body: string,
+  ): Promise<{ success: boolean; messageId: string; data?: any }> {
+    try {
+      const client = await this.getGoogleAuthClient();
+      const response = await client.request({
+        url: `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${resourceId}/addMessage`,
+        method: 'POST',
+        data: {
+          message: {
+            id: messageId,
+            header,
+            body,
+            messageType: 'TEXT_AND_NOTIFY',
+          },
+        },
+      });
+
+      this.logger.log(`Message sent: ${messageId} to ${resourceId}`);
+
+      return {
+        success: true,
+        messageId,
+        data: response.data,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `sendOfferMessage failed for ${resourceId}: ${error.message}`,
+      );
+
+      throw new HttpException(
+        error.response?.data?.error?.message ||
+          'Google Wallet addMessage failed',
+        error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  public async sendPromoMessageWithAudit(
+    passId: string,
+    memberId: string,
+    tenantId: string,
+    header: string,
+    body: string,
+    bypassQuota = false,
+  ): Promise<{ success: boolean; messageId: string }> {
+    const messageId = `msg_${Date.now()}`;
+    const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID || '3388000000023177673';
+    
+    // Support both short ID and full ID formats
+    const resourceId = passId.includes('.') ? passId : `${issuerId}.${passId}`;
+
+    try {
+      // 1. Check consent
+      await this.verifyMarketingConsent(memberId);
+
+      // 2. Check quota
+      await this.checkNotificationQuota(memberId, bypassQuota);
+
+      // 3. Send to Google Wallet
+      await this.sendOfferMessage(resourceId, messageId, header, body);
+
+      // 4. Log success
+      await this.notifyService.logNotification({
+        tenantId,
+        memberId,
+        type: 'promo_message',
+        channel: 'wallet_push',
+        status: 'sent',
+        header,
+        body,
+      });
+
+      return {
+        success: true,
+        messageId,
+      };
+    } catch (error: any) {
+      // 5. Log failure
+      await this.notifyService.logNotification({
+        tenantId,
+        memberId,
+        type: 'promo_message',
+        channel: 'wallet_push',
+        status: 'failed',
+        errorReason: error.message,
+        header,
+        body,
+      });
+
+      // Re-throw so controller handles it
+      throw error;
+    }
   }
 }
