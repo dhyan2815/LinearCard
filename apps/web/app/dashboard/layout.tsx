@@ -26,10 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <QrCode className="w-3.5 h-3.5" />
               Scanner
             </Link>
-             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              API Connected
-            </div>
+
           </div>
         </div>
       </header>

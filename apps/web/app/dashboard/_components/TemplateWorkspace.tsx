@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/Button';
 import { Plus, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
-import { StoreLocationEntry } from './StoreLocationEntry';
 import { toast } from 'sonner';
 
 const COLOR_PALETTE = [
@@ -103,55 +102,9 @@ export function TemplateWorkspace({
     setDesignData({ ...designData, rows: newRows });
   };
 
-  const MAX_LOCATIONS = 10;
 
-  const addLocation = () => {
-    const current = designData.storeLocations || [];
-    if (current.length >= MAX_LOCATIONS) return;
-    setDesignData({
-      ...designData,
-      storeLocations: [...current, { id: crypto.randomUUID(), latitude: '', longitude: '', label: '' }],
-    });
-    setTemplateStatus('draft');
-  };
-
-  const formatStoreLocations = (locations: any[]) => {
-    return (locations || [])
-      .map((loc: any) => ({
-        latitude: parseFloat(loc.latitude),
-        longitude: parseFloat(loc.longitude),
-        label: loc.label || undefined,
-      }))
-      .filter((loc: any) => !isNaN(loc.latitude) && !isNaN(loc.longitude));
-  };
-
-  const updateLocation = (
-    index: number,
-    fieldOrUpdates: 'latitude' | 'longitude' | 'label' | Record<string, string>,
-    value?: string
-  ) => {
-    setDesignData((prev: any) => {
-      const current = prev.storeLocations || [];
-      const updated = current.map((loc: any, i: number) => {
-        if (i !== index) return loc;
-        if (typeof fieldOrUpdates === 'object') {
-          return { ...loc, ...fieldOrUpdates };
-        }
-        return { ...loc, [fieldOrUpdates]: value };
-      });
-      return { ...prev, storeLocations: updated };
-    });
-    setTemplateStatus('draft');
-  };
-
-  const removeLocation = (index: number) => {
-    const updated = (designData.storeLocations || []).filter((_: any, i: number) => i !== index);
-    setDesignData({ ...designData, storeLocations: updated });
-    setTemplateStatus('draft');
-  };
 
   const handleSaveDraft = async () => {
-    const formattedLocations = formatStoreLocations(designData.storeLocations);
 
     const savePromise = async () => {
       if (savedTemplateId) {
@@ -164,7 +117,6 @@ export function TemplateWorkspace({
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
-            storeLocations: formattedLocations,
           }),
         });
         if (!data.success) throw new Error(data.error || 'Error saving draft');
@@ -181,7 +133,6 @@ export function TemplateWorkspace({
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
-            storeLocations: formattedLocations,
           }),
         });
         if (!data.success) throw new Error(data.error || 'Error saving draft');
@@ -198,7 +149,6 @@ export function TemplateWorkspace({
   };
 
   const handlePublish = async () => {
-    const formattedLocations = formatStoreLocations(designData.storeLocations);
 
     const publishPromise = async () => {
       let tplId = savedTemplateId;
@@ -214,7 +164,6 @@ export function TemplateWorkspace({
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
-            storeLocations: formattedLocations,
           }),
         });
         if (!data.success) throw new Error(data.error || 'Failed to create template');
@@ -230,7 +179,6 @@ export function TemplateWorkspace({
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
-            storeLocations: formattedLocations,
           }),
         });
         if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
@@ -345,6 +293,24 @@ export function TemplateWorkspace({
                 style={{backgroundColor: c.hex}}
               />
             ))}
+            <div 
+              className={`relative w-8 h-8 rounded-full border-2 overflow-hidden transition-all flex items-center justify-center bg-canvas shadow-sm ${!COLOR_PALETTE.find(c => c.hex === designData.hexBackgroundColor) ? 'border-white dark:border-zinc-300 scale-110 shadow-sm' : 'border-border-subtle opacity-60 hover:opacity-100 hover:scale-105 hover:border-border-strong'}`}
+              title="Custom Color"
+            >
+              <input 
+                type="color" 
+                value={designData.hexBackgroundColor}
+                onChange={(e) => setDesignData({...designData, hexBackgroundColor: e.target.value})}
+                className="absolute -inset-2 w-12 h-12 cursor-pointer opacity-0 z-10"
+              />
+              <div 
+                className="absolute inset-0 pointer-events-none" 
+                style={{ backgroundColor: !COLOR_PALETTE.find(c => c.hex === designData.hexBackgroundColor) ? designData.hexBackgroundColor : 'transparent' }} 
+              />
+              {COLOR_PALETTE.find(c => c.hex === designData.hexBackgroundColor) && (
+                <Plus className="w-4 h-4 text-ink-muted pointer-events-none z-0" />
+              )}
+            </div>
           </div>
         </div>
 
@@ -384,38 +350,6 @@ export function TemplateWorkspace({
           ))}
         </div>
 
-        {/* Store Proximity Locations */}
-        <Card className="p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-ink-dark">Store Locations</h3>
-              <p className="text-xs text-ink-muted mt-0.5">
-                Members will receive a lock-screen notification when within ~150m of these coordinates (via Google Wallet). Max 10.
-              </p>
-            </div>
-            {(designData.storeLocations?.length ?? 0) < MAX_LOCATIONS && (
-              <Button type="button" variant="ghost" size="sm" onClick={addLocation} className="gap-1 text-xs">
-                <Plus className="w-3 h-3" /> Add Location
-              </Button>
-            )}
-          </div>
-
-          {(designData.storeLocations || []).length === 0 && (
-            <p className="text-xs text-ink-muted italic text-center py-3 border border-dashed border-border-subtle rounded-lg">
-              No store locations added yet. Click &quot;Add Location&quot; to begin.
-            </p>
-          )}
-
-          {(designData.storeLocations || []).map((loc: any, i: number) => (
-            <StoreLocationEntry 
-              key={loc.id || i}
-              location={loc}
-              index={i}
-              onUpdate={updateLocation}
-              onRemove={removeLocation}
-            />
-          ))}
-        </Card>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-6 border-t border-border-subtle gap-4">
           <div>

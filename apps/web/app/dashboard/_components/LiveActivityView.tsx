@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Activity, ArrowRight, Zap } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { apiClient } from '@/lib/api-client';
 
 function formatTimeAgo(dateString: string) {
@@ -66,9 +67,18 @@ export function LiveActivityView({
               <button onClick={() => setManageData({...manageData, passId: ''})} className="text-xs text-ink-muted hover:text-ink-dark">Cancel</button>
             )}
           </div>
-          <div className="p-5 flex-1 flex flex-col min-h-0">
-             {manageData.passId ? (
-               <form onSubmit={handleUpdatePass} className="space-y-4">
+          <div className="p-5 flex-1 flex flex-col min-h-0 overflow-x-hidden">
+             <AnimatePresence mode="wait">
+               {manageData.passId ? (
+                 <motion.form 
+                   key="form"
+                   initial={{ opacity: 0, x: 20 }}
+                   animate={{ opacity: 1, x: 0 }}
+                   exit={{ opacity: 0, x: -20 }}
+                   transition={{ duration: 0.2 }}
+                   onSubmit={handleUpdatePass} 
+                   className="space-y-4"
+                 >
                    <div>
                     <Label className="text-xs text-ink-secondary uppercase tracking-wide">Update Tier (Optional)</Label>
                     <Input type="text" value={manageData.tier} onChange={(e: any) => setManageData({...manageData, tier: e.target.value})} className="h-10 text-sm mt-1.5"/>
@@ -89,9 +99,16 @@ export function LiveActivityView({
                   </Button>
                   {error && <p className="text-red-500 text-xs">{error}</p>}
                   {successMsg && <p className="text-emerald-500 text-xs">{successMsg}</p>}
-               </form>
-             ) : (
-               <div className="space-y-5 flex-1 flex flex-col min-h-0">
+                </motion.form>
+              ) : (
+                <motion.div 
+                  key="list"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-5 flex-1 flex flex-col min-h-0"
+                >
                  <div>
                    <Label className="text-xs text-ink-secondary uppercase tracking-wide">Enter Pass ID Manually</Label>
                    <div className="flex gap-2 mt-1.5">
@@ -135,7 +152,7 @@ export function LiveActivityView({
                                 {item.passData?.memberName}
                               </p>
                               <p className="text-xs text-ink-muted font-mono truncate mt-0.5">
-                                {item.fullPassId || item.passId}
+                                {item.tenantName}
                               </p>
                             </div>
                           </div>
@@ -144,8 +161,9 @@ export function LiveActivityView({
                       ))}
                    </div>
                  </div>
-               </div>
-             )}
+                </motion.div>
+              )}
+             </AnimatePresence>
           </div>
         </Card>
 

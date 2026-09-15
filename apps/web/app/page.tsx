@@ -33,20 +33,17 @@ export default function Home() {
               className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle hover:bg-surface-hover transition-colors text-xs font-medium text-ink-dark"
             >
               <QrCode className="w-3.5 h-3.5" />
-              Scanner
+              Staff Scanner
             </Link>
-             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              API Connected
-            </div>
+
           </div>
         </div>
       </header>
 
       <div className="relative z-10 flex-1 flex flex-col">
         <AnimatePresence mode="wait">
-          <motion.main key="landing" initial="hidden" animate="visible" exit="hidden" variants={fadeUp} className="flex-1 max-w-5xl w-full mx-auto px-6 py-20 flex flex-col justify-center min-h-[80vh]">
-             <div className="max-w-3xl space-y-8">
+          <motion.main key="landing" initial="hidden" animate="visible" exit="hidden" variants={fadeUp} className="flex-1 max-w-5xl w-full mx-auto px-6 py-10 flex flex-col justify-center min-h-[80vh]">
+             <div className="max-w-3xl space-y-6">
                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-brand-blue/10 text-brand-blue text-xs font-medium border border-brand-blue/20">
                  <Sparkles className="w-3.5 h-3.5" /> Next-generation digital identity
                </div>
@@ -57,12 +54,12 @@ export default function Home() {
                <p className="text-lg text-ink-secondary max-w-xl leading-relaxed">
                  LinearCard is a wallet-native loyalty and digital-identity platform for brands in India. Issue real passes to Apple, Google, and Samsung Wallets without developer accounts, and engage members directly via WhatsApp.
                </p>
-               <div className="pt-4 flex flex-col sm:flex-row items-center gap-4">
+               <div className="pt-2 flex flex-col sm:flex-row items-center gap-4">
                  <Link href="/enroll" className={`${btnPrimaryClass} px-8 py-3.5 text-base`}>
                    Enroll Now <ArrowRight className="w-4 h-4"/>
                  </Link>
                </div>
-               <div className="pt-16 flex items-center gap-6">
+               <div className="pt-8 flex items-center gap-6">
                  <Link href="/login" className="text-sm font-medium text-ink-muted hover:text-ink-dark transition-colors">
                    Developer Login &rarr;
                  </Link>
