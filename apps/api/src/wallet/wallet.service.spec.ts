@@ -163,32 +163,10 @@ describe('WalletService.sendPromoMessageWithAudit', () => {
     ).rejects.toThrow('Member has not consented');
   });
 
-  it('should reject on rate limit (3+ messages in 24h)', async () => {
-    // Consent check passes
-    mockSupabaseService.client.single.mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } });
-    // Quota check returns count = 3
-    mockSupabaseService.client.gte.mockResolvedValueOnce({ count: 3 });
 
-    await expect(
-      service.sendPromoMessageWithAudit('pass-1', 'mem-1', 'tenant-1', 'Header', 'Body'),
-    ).rejects.toThrow('Rate limit reached');
-  });
-
-  it('should allow sending when bypassQuota is true even if rate limit is reached', async () => {
-    mockSupabaseService.client.single.mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } });
-    // Note: gte for quota is not even called or if called ignored
-    const fakeClient = {
-      request: jest.fn().mockResolvedValue({ data: { success: true } }),
-    };
-    jest.spyOn(service, 'getGoogleAuthClient').mockResolvedValue(fakeClient as any);
-
-    const result = await service.sendPromoMessageWithAudit('pass-1', 'mem-1', 'tenant-1', 'Header', 'Body', true);
-    expect(result.success).toBe(true);
-  });
 
   it('should log success after Google API succeeds', async () => {
     mockSupabaseService.client.single.mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } });
-    mockSupabaseService.client.gte.mockResolvedValueOnce({ count: 1 });
 
     const fakeClient = {
       request: jest.fn().mockResolvedValue({ data: { success: true } }),

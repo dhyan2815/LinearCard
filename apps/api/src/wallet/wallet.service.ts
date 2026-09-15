@@ -519,33 +519,8 @@ export class WalletService {
   }
 
   public async checkNotificationQuota(memberId: string, bypassQuota = false): Promise<void> {
-    if (
-      process.env.BYPASS_NOTIFICATION_QUOTA === 'true' ||
-      (process.env.NODE_ENV !== 'production' && bypassQuota)
-    ) {
-      this.logger.warn(
-        `[DEV] Bypassing notification quota check for member ${memberId}`,
-      );
-      return;
-    }
-
-    const twentyFourHoursAgo = new Date(
-      Date.now() - 24 * 60 * 60 * 1000,
-    ).toISOString();
-
-    const { count } = await this.supabaseService.client
-      .from('NotificationLog')
-      .select('*', { count: 'exact', head: true })
-      .eq('channel', 'wallet_push')
-      .eq('memberId', memberId)
-      .gte('sentAt', twentyFourHoursAgo);
-
-    if (count !== null && count >= 3) {
-      throw new HttpException(
-        'Rate limit reached: Maximum 3 wallet notifications per 24 hours.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
+    // Note: The 3 wallet notifications per 24hr limit has been permanently removed.
+    return;
   }
 
   public async sendOfferMessage(
@@ -620,6 +595,8 @@ export class WalletService {
         type: 'promo_message',
         channel: 'wallet_push',
         status: 'sent',
+        header,
+        body,
       });
 
       return {
@@ -635,6 +612,8 @@ export class WalletService {
         channel: 'wallet_push',
         status: 'failed',
         errorReason: error.message,
+        header,
+        body,
       });
 
       // Re-throw so controller handles it

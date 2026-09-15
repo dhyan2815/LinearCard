@@ -5,9 +5,11 @@ export interface LogNotificationOpts {
   tenantId: string;
   memberId?: string;
   type: string;
-  channel: 'whatsapp' | 'wallet_push';
+  channel: string;
   status: 'sent' | 'failed';
   errorReason?: string;
+  header?: string;
+  body?: string;
 }
 
 @Injectable()
@@ -18,7 +20,7 @@ export class NotifyService {
 
   /** Never throws — logging failures must not crash the main request. */
   async logNotification(opts: LogNotificationOpts): Promise<void> {
-    const { tenantId, memberId, type, channel, status, errorReason } = opts;
+    const { tenantId, memberId, type, channel, status, errorReason, header, body } = opts;
     try {
       const { error } = await this.supabaseService.client
         .from('NotificationLog')
@@ -29,6 +31,8 @@ export class NotifyService {
           channel,
           status,
           error: errorReason || null,
+          header: header || null,
+          body: body || null,
         });
       if (error) {
         this.logger.error('[notify] Failed to write NotificationLog:', error);
