@@ -6,7 +6,7 @@ import { Users, Search } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { Tenant, Member } from '@linearcard/types';
 
-export function MembersView({ initialTenantId = 'all' }: { initialTenantId?: string }) {
+export function PassholdersView({ initialTenantId = 'all' }: { initialTenantId?: string }) {
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);

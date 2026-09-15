@@ -6,11 +6,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import PassPreviewCard from '@/components/PassPreviewCard';
 import { apiClient } from '@/lib/api-client';
 
-import { LiveManageView } from './_components/LiveManageView';
+import { LiveActivityView } from './_components/LiveActivityView';
 import { TemplateWorkspace } from './_components/TemplateWorkspace';
-import { BroadcastView } from './_components/BroadcastView';
+import { PushCampaignsView } from './_components/PushCampaignsView';
 import { SettingsView } from './_components/SettingsView';
-import { MembersView } from './_components/MembersView';
+import { PassholdersView } from './_components/PassholdersView';
 
 type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
 
@@ -263,9 +263,9 @@ export default function Dashboard() {
 
   const tabs = [
     { id: 'design', label: 'Template Designer', icon: <Palette className="w-4 h-4" /> },
-    { id: 'manage', label: 'Live Updates', icon: <Zap className="w-4 h-4" /> },
-    { id: 'notify', label: 'Broadcasts', icon: <Bell className="w-4 h-4" /> },
-    { id: 'members', label: 'Members', icon: <Users className="w-4 h-4" /> },
+    { id: 'manage', label: 'Live Activity', icon: <Zap className="w-4 h-4" /> },
+    { id: 'notify', label: 'Push Campaigns', icon: <Bell className="w-4 h-4" /> },
+    { id: 'members', label: 'Passholders', icon: <Users className="w-4 h-4" /> },
     { id: 'settings', label: 'Settings', icon: <Settings2 className="w-4 h-4" /> },
   ] as const;
 
@@ -373,7 +373,7 @@ export default function Dashboard() {
 
                {activeTab === 'manage' && (
                  <div className="max-w-[1600px] mx-auto">
-                   <LiveManageView 
+                   <LiveActivityView 
                       tenantId={selectedTenantId}
                       manageData={manageData}
                       setManageData={setManageData}
@@ -389,13 +389,13 @@ export default function Dashboard() {
 
                {activeTab === 'notify' && (
                  <div className="max-w-[1600px] mx-auto">
-                    <BroadcastView tenantId={selectedTenantId} />
+                    <PushCampaignsView tenantId={selectedTenantId} />
                  </div>
                )}
 
                {activeTab === 'members' && (
                  <div className="max-w-[1600px] mx-auto">
-                    <MembersView initialTenantId={selectedTenantId} />
+                    <PassholdersView initialTenantId={selectedTenantId} />
                  </div>
                )}
 

@@ -297,7 +297,7 @@ export function TemplateWorkspace({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Pass Archetype</Label>
+          <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Pass Template Type</Label>
           <div className="grid grid-cols-2 gap-2 mt-2">
             {ARCHETYPES.map((arch) => (
               <button key={arch.value} type="button"

@@ -20,7 +20,7 @@ function formatTimeAgo(dateString: string) {
   return date.toLocaleDateString();
 }
 
-export function LiveManageView({
+export function LiveActivityView({
   tenantId,
   manageData,
   setManageData,
@@ -60,7 +60,7 @@ export function LiveManageView({
         <Card className="flex flex-col border-border-subtle shadow-sm bg-surface-card overflow-hidden h-full max-h-125">
           <div className="p-4 border-b border-border-subtle bg-canvas/50 flex justify-between items-center">
             <h2 className="text-[14px] font-semibold text-ink-dark flex items-center gap-2">
-              <Zap className="w-4 h-4 text-brand-blue" /> Pass Patcher
+              <Zap className="w-4 h-4 text-emerald-500" /> Push Update Console
             </h2>
             {manageData.passId && (
               <button onClick={() => setManageData({...manageData, passId: ''})} className="text-xs text-ink-muted hover:text-ink-dark">Cancel</button>
@@ -153,30 +153,36 @@ export function LiveManageView({
         <Card className="flex flex-col border-border-subtle shadow-sm bg-surface-card overflow-hidden h-full max-h-125">
           <div className="p-4 border-b border-border-subtle bg-canvas/50">
             <h2 className="text-[14px] font-semibold text-ink-dark flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-500" /> Activity Ledger
+              <Activity className="w-4 h-4 text-emerald-500" /> Push History
             </h2>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-3">
+          <div className="p-5 flex-1 min-h-0 overflow-y-auto space-y-3">
             {logFetchError && (
               <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm">
                 Error: {logFetchError}
               </div>
             )}
-            {logs.length === 0 && !logFetchError && <p className="text-sm text-ink-muted py-4">No recent activity.</p>}
+            {logs.length === 0 && !logFetchError && <p className="text-sm text-ink-muted text-center py-8">No recent activity.</p>}
             {logs.map((log: any) => (
               <div key={log.id} className="p-3 rounded-xl border border-border-subtle/50 bg-canvas transition-colors flex gap-3 items-start">
                 <div className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${log.status === 'sent' ? 'bg-emerald-500' : 'bg-red-500'}`} />
                 <div className="flex-1 min-w-0">
                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-ink-dark capitalize truncate">{log.type}</p>
+                      <p className="text-sm font-medium text-ink-dark capitalize truncate">{log.type.replace('_', ' ')}</p>
                       <span className="text-xs text-ink-muted font-mono shrink-0">
                         {formatTimeAgo(log.sentAt)}
                       </span>
                    </div>
                    <p className="text-xs text-ink-secondary mt-1 truncate">
-                      {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown'}
+                      {log.channel === 'whatsapp' ? '💬 WhatsApp' : '🔔 Wallet Push'} • {log.member?.name || log.member?.phone || 'Unknown User'}
                    </p>
-                   {log.error && <p className="text-red-400 text-xs mt-1">Balance update failed: Connection disconnected.</p>}
+                   {(log.header || log.body) && (
+                     <div className="mt-2 p-2.5 rounded-lg bg-surface/50 border border-border-subtle/30 text-xs">
+                       {log.header && <p className="font-semibold text-ink-dark mb-0.5">{log.header}</p>}
+                       {log.body && <p className="text-ink-secondary whitespace-pre-wrap">{log.body}</p>}
+                     </div>
+                   )}
+                   {log.error && <p className="text-red-400 text-xs mt-1.5 bg-red-400/10 p-2 rounded-md">{log.error}</p>}
                 </div>
               </div>
             ))}
