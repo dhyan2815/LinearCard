@@ -50,8 +50,9 @@ export default function MembersPage() {
   });
 
   return (
-    <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-2">
-      <div className="border-b border-border-subtle pb-4 mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div className="min-h-full pb-12">
+      <div className="max-w-[1600px] mx-auto space-y-6">
+        <div className="border-b border-border-subtle pb-4 mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-medium text-ink-dark tracking-tight">Members</h2>
           <p className="text-sm text-ink-secondary mt-1">View and search through all enrolled members.</p>
@@ -136,6 +137,7 @@ export default function MembersPage() {
           </table>
         </div>
       </Card>
-    </main>
+      </div>
+    </div>
   );
 }

@@ -58,13 +58,13 @@ export class TemplatesController {
         classSuffix: body.classSuffix,
       };
 
-      if (body.fieldRows !== undefined) insertPayload.fieldRows = body.fieldRows;
-      if (body.hexBackgroundColor !== undefined) insertPayload.hexBackgroundColor = body.hexBackgroundColor;
+      if (body.fieldRows !== undefined)
+        insertPayload.fieldRows = body.fieldRows;
+      if (body.hexBackgroundColor !== undefined)
+        insertPayload.hexBackgroundColor = body.hexBackgroundColor;
       if (body.logoUrl !== undefined) insertPayload.logoUrl = body.logoUrl;
-      if (body.heroImageUrl !== undefined) insertPayload.heroImageUrl = body.heroImageUrl;
-      if (body.linksModuleData !== undefined) insertPayload.linksModuleData = body.linksModuleData;
-      if (body.imageModulesData !== undefined) insertPayload.imageModulesData = body.imageModulesData;
-      if (body.textModulesData !== undefined) insertPayload.textModulesData = body.textModulesData;
+      if (body.heroImageUrl !== undefined)
+        insertPayload.heroImageUrl = body.heroImageUrl;
 
       const { data: template, error } = await this.supabaseService.client
         .from('PassTemplate')
@@ -145,7 +145,8 @@ export class TemplatesController {
           return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
         }
         if (url.startsWith('/')) {
-          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+          const baseUrl =
+            process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
           if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
             return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
           }
@@ -167,9 +168,6 @@ export class TemplatesController {
         rows: template.fieldRows,
         logoUrl,
         heroImageUrl,
-        linksModuleData: template.linksModuleData || [],
-        imageModulesData: template.imageModulesData || [],
-        textModulesData: template.textModulesData || [],
       });
 
       const { data: updated, error: updateError } =
@@ -217,13 +215,6 @@ export class TemplatesController {
       if (body.logoUrl !== undefined) updatePayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         updatePayload.heroImageUrl = body.heroImageUrl;
-      if (body.linksModuleData !== undefined)
-        updatePayload.linksModuleData = body.linksModuleData;
-      if (body.imageModulesData !== undefined)
-        updatePayload.imageModulesData = body.imageModulesData;
-      if (body.textModulesData !== undefined)
-        updatePayload.textModulesData = body.textModulesData;
-
 
       const { data: updated, error } = await this.supabaseService.client
         .from('PassTemplate')

@@ -1,9 +1,14 @@
-import { Injectable, Logger, HttpException, HttpStatus, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  HttpException,
+  HttpStatus,
+  ForbiddenException,
+} from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import { SupabaseService } from '../supabase/supabase.service';
 import { NotifyService } from '../notification/notify.service';
-
 
 export interface GoogleWalletPassOptions {
   passId: string;
@@ -130,51 +135,6 @@ export class WalletService {
       };
     }
 
-    if (templateData.linksModuleData && Array.isArray(templateData.linksModuleData) && templateData.linksModuleData.length > 0) {
-      const validLinks = templateData.linksModuleData
-        .filter((l: any) => l && l.uri && typeof l.uri === 'string' && l.uri.trim() !== '')
-        .map((l: any, idx: number) => ({
-          id: l.id || `class_link_${idx}`,
-          uri: l.uri.trim(),
-          description: l.description || 'Link',
-        }));
-      if (validLinks.length > 0) {
-        classPayload.linksModuleData = {
-          uris: validLinks,
-        };
-      }
-    }
-
-    if (templateData.imageModulesData && Array.isArray(templateData.imageModulesData) && templateData.imageModulesData.length > 0) {
-      const validImages = templateData.imageModulesData
-        .filter((img: any) => img && (img.imageUrl || img.uri) && (img.imageUrl || img.uri).trim() !== '')
-        .map((img: any, idx: number) => ({
-          id: img.id || `class_img_${idx}`,
-          mainImage: {
-            sourceUri: {
-              uri: (img.imageUrl || img.uri).trim(),
-              description: img.description || 'Promotional Banner',
-            },
-          },
-        }));
-      if (validImages.length > 0) {
-        classPayload.imageModulesData = validImages;
-      }
-    }
-
-    if (templateData.textModulesData && Array.isArray(templateData.textModulesData) && templateData.textModulesData.length > 0) {
-      const validTexts = templateData.textModulesData
-        .filter((txt: any) => txt && txt.header && typeof txt.header === 'string' && txt.header.trim() !== '')
-        .map((txt: any, idx: number) => ({
-          id: txt.id || `class_text_${idx}`,
-          header: txt.header.trim(),
-          body: txt.body || '',
-        }));
-      if (validTexts.length > 0) {
-        classPayload.textModulesData = validTexts;
-      }
-    }
-
     const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass`;
 
     try {
@@ -229,7 +189,10 @@ export class WalletService {
       if (error.response?.status === 404) {
         return null;
       }
-      this.logger.error(`Error fetching genericObject ${passId}:`, error.message);
+      this.logger.error(
+        `Error fetching genericObject ${passId}:`,
+        error.message,
+      );
       throw error;
     }
   }
@@ -246,7 +209,7 @@ export class WalletService {
       const genericObject: any = getRes.data;
 
       const patchPayload: any = {
-        notifyPreference: 'notifyOnUpdate'
+        notifyPreference: 'notifyOnUpdate',
       };
 
       const formattedBalance =
@@ -546,7 +509,10 @@ export class WalletService {
     }
   }
 
-  public async checkNotificationQuota(memberId: string, bypassQuota = false): Promise<void> {
+  public async checkNotificationQuota(
+    memberId: string,
+    bypassQuota = false,
+  ): Promise<void> {
     // Note: The 3 wallet notifications per 24hr limit has been permanently removed.
     return;
   }
@@ -601,8 +567,11 @@ export class WalletService {
     bypassQuota = false,
   ): Promise<{ success: boolean; messageId: string }> {
     const messageId = `msg_${Date.now()}`;
-    const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID || '3388000000023177673';
-    
+    const issuerId =
+      process.env.GOOGLE_WALLET_ISSUER_ID ||
+      process.env.ISSUER_ID ||
+      '3388000000023177673';
+
     // Support both short ID and full ID formats
     const resourceId = passId.includes('.') ? passId : `${issuerId}.${passId}`;
 
@@ -684,7 +653,7 @@ export class WalletService {
       : `-${transaction.pointsChanged} pts redeemed on order${orderRef}. Balance: ${transaction.newBalance} Pts.`;
 
     let walletPushed = false;
-    let directNotified = false;
+    const directNotified = false;
     let warning: string | undefined;
 
     // 1. Google Wallet Pass Visual Refresh & OS Notification
@@ -697,8 +666,13 @@ export class WalletService {
 
       // 1b. Dispatch explicit Google Wallet system tray notification (TEXT_AND_NOTIFY)
       const messageId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID || '3388000000023177673';
-      const resourceId = pass.fullPassId.includes('.') ? pass.fullPassId : `${issuerId}.${pass.fullPassId}`;
+      const issuerId =
+        process.env.GOOGLE_WALLET_ISSUER_ID ||
+        process.env.ISSUER_ID ||
+        '3388000000023177673';
+      const resourceId = pass.fullPassId.includes('.')
+        ? pass.fullPassId
+        : `${issuerId}.${pass.fullPassId}`;
 
       await this.sendOfferMessage(resourceId, messageId, pushTitle, pushBody);
       walletPushed = true;
@@ -713,7 +687,9 @@ export class WalletService {
         body: pushBody,
       });
     } catch (err: any) {
-      this.logger.warn(`Google Wallet notification warning for ${pass.fullPassId}: ${err.message}`);
+      this.logger.warn(
+        `Google Wallet notification warning for ${pass.fullPassId}: ${err.message}`,
+      );
       warning = `Google Wallet notification sync delayed: ${err.message}`;
       await this.notifyService.logNotification({
         tenantId: pass.tenantId,
@@ -853,7 +829,7 @@ export class WalletService {
 
     if (transactionType === 'award') {
       // 10% Earning Rule
-      pointsChanged = Math.floor(amount * 0.10);
+      pointsChanged = Math.floor(amount * 0.1);
       newBalance = currentBalance + pointsChanged;
       discountApplied = 0;
       payableAmount = amount;
@@ -866,7 +842,7 @@ export class WalletService {
         );
       }
 
-      const maxDeductible = Math.floor(amount * 0.50);
+      const maxDeductible = Math.floor(amount * 0.5);
       if (maxDeductible <= 0) {
         throw new HttpException(
           'Order amount is too small for point redemption (minimum ₹2 order).',
@@ -887,7 +863,10 @@ export class WalletService {
       .eq('id', pass.id);
 
     if (dbError) {
-      this.logger.error(`Failed to update balance in database for pass ${pass.id}:`, dbError);
+      this.logger.error(
+        `Failed to update balance in database for pass ${pass.id}:`,
+        dbError,
+      );
       throw new HttpException(
         `Database error updating balance: ${dbError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -914,7 +893,9 @@ export class WalletService {
         },
       });
     } catch (auditErr: any) {
-      this.logger.warn(`AuditLog insertion warning for pass ${pass.id}: ${auditErr.message}`);
+      this.logger.warn(
+        `AuditLog insertion warning for pass ${pass.id}: ${auditErr.message}`,
+      );
     }
 
     // 3. Dispatch Google Wallet and device notification

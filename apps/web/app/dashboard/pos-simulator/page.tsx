@@ -182,18 +182,19 @@ export default function PosSimulatorPage() {
   };
 
   return (
-    <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6">
-      {/* Page Header */}
-      <div className="border-b border-border-subtle pb-4 mb-6">
-        <h2 className="text-xl font-medium text-ink-dark tracking-tight">POS Simulator</h2>
-        <p className="text-sm text-ink-secondary mt-1">
-          Simulate point-of-sale register checkouts, automated loyalty calculations, and real-time customer mobile receipts.
-        </p>
-      </div>
+    <div className="min-h-full pb-12">
+      <div className="max-w-[1600px] mx-auto space-y-6">
+        {/* Page Header */}
+        <div className="border-b border-border-subtle pb-4 mb-6">
+          <h2 className="text-xl font-medium text-ink-dark tracking-tight">POS Simulator</h2>
+          <p className="text-sm text-ink-secondary mt-1">
+            Simulate point-of-sale register checkouts, automated loyalty calculations, and real-time customer mobile receipts.
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Column (5 Cols): Register Checkout Input */}
-        <div className="lg:col-span-5 space-y-6">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12 items-start">
+          {/* Left Column (5 Cols): Register Checkout Input */}
+          <div className="xl:col-span-5 lg:col-span-5 space-y-6">
           <div className="bg-surface-card border border-border-subtle p-6 rounded-2xl shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-ink-secondary flex items-center gap-2">
@@ -409,7 +410,7 @@ export default function PosSimulatorPage() {
         </div>
 
         {/* Right Column (7 Cols): Digital Store Receipt & Customer Summary */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="xl:col-span-7 lg:col-span-7 space-y-6">
           {receiptData ? (
             /* Itemized Digital Store Receipt */
             <div className="bg-surface-card border border-border-subtle rounded-2xl shadow-sm overflow-hidden animate-in fade-in">
@@ -510,6 +511,7 @@ export default function PosSimulatorPage() {
           )}
         </div>
       </div>
-    </main>
+    </div>
+    </div>
   );
 }

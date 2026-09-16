@@ -53,24 +53,6 @@ export interface Member {
   passes?: Pass[];
 }
 
-export interface LinkModule {
-  id?: string;
-  uri: string;
-  description: string;
-}
-
-export interface ImageModule {
-  id?: string;
-  imageUrl: string;
-  description?: string;
-}
-
-export interface TextModule {
-  id?: string;
-  header: string;
-  body: string;
-}
-
 export interface PassTemplate {
   id: string;
   tenantId: string;
@@ -85,9 +67,6 @@ export interface PassTemplate {
   hexBackgroundColor?: string;
   logoUrl?: string;
   heroImageUrl?: string;
-  linksModuleData?: LinkModule[];
-  imageModulesData?: ImageModule[];
-  textModulesData?: TextModule[];
   createdAt?: string;
   updatedAt?: string;
 }

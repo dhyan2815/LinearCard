@@ -13,9 +13,6 @@ export interface DesignData {
   logoUrl: string;
   heroImageUrl: string;
   rows: Array<{ id: string; columns: Array<{ header: string; body: string }> }>;
-  linksModuleData: Array<{ id?: string; uri: string; description: string }>;
-  imageModulesData: Array<{ id?: string; imageUrl: string; description?: string }>;
-  textModulesData: Array<{ id?: string; header: string; body: string }>;
 }
 
 export interface StatsData {
@@ -83,10 +80,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     heroImageUrl: '',
     rows: [
       { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
-    ],
-    linksModuleData: [],
-    imageModulesData: [],
-    textModulesData: []
+    ]
   });
   
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
@@ -152,10 +146,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       heroImageUrl: t?.heroUrl || '',
       rows: [
         { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
-      ],
-      linksModuleData: [],
-      imageModulesData: [],
-      textModulesData: []
+      ]
     });
     setSavedTemplateId(null);
     setTemplateStatus('unsaved');
@@ -183,10 +174,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               hexBackgroundColor: t.hexBackgroundColor,
               logoUrl: t.logoUrl || '',
               heroImageUrl: t.heroImageUrl || '',
-              rows: t.fieldRows || [{ id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }],
-              linksModuleData: t.linksModuleData || [],
-              imageModulesData: t.imageModulesData || [],
-              textModulesData: t.textModulesData || []
+              rows: t.fieldRows || [{ id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }]
             });
           } else {
             setSavedTemplateId(null);
@@ -200,10 +188,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               heroImageUrl: currentTenant.heroUrl || '',
               rows: [
                 { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
-              ],
-              linksModuleData: [],
-              imageModulesData: [],
-              textModulesData: []
+              ]
             });
           }
         })

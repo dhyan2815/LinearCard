@@ -117,26 +117,27 @@ export default function MemberDetailPage() {
 
   if (loading) {
     return (
-      <main className="flex-1 flex items-center justify-center py-20">
+      <div className="min-h-full pb-12 flex items-center justify-center py-20">
         <div className="w-8 h-8 border-4 border-brand-blue/30 border-t-brand-blue rounded-full animate-spin" />
-      </main>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <main className="flex-1 flex flex-col items-center justify-center py-20 space-y-4">
+      <div className="min-h-full pb-12 flex flex-col items-center justify-center py-20 space-y-4">
         <p className="text-red-500 font-medium text-center max-w-md">{error}</p>
         <Link href="/dashboard/members">
           <Button variant="outline">Back to Members</Button>
         </Link>
-      </main>
+      </div>
     );
   }
 
   return (
-    <div className="flex-1 w-full overflow-y-auto bg-canvas">
-      <main className="max-w-4xl w-full mx-auto px-6 py-8 space-y-6 pb-20">
+    <div className="min-h-full pb-12">
+      <div className="max-w-[1600px] mx-auto space-y-6">
+        <div className="max-w-4xl space-y-6">
         <Link href="/dashboard/members" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-ink-dark transition-colors font-medium">
           <ArrowLeft className="w-4 h-4" /> Back to Members
         </Link>
@@ -322,7 +323,8 @@ export default function MemberDetailPage() {
           </p>
         </div>
       </ConfirmationDialog>
-      </main>
+        </div>
+      </div>
     </div>
   );
 }

@@ -364,7 +364,11 @@ export class PassesController {
       }
 
       // Security check: ensure the caller is authorized to modify passes for this specific tenant
-      if (authenticatedRole !== 'admin' && authenticatedTenantId && pass.tenantId !== authenticatedTenantId) {
+      if (
+        authenticatedRole !== 'admin' &&
+        authenticatedTenantId &&
+        pass.tenantId !== authenticatedTenantId
+      ) {
         return res
           .status(403)
           .json({ success: false, error: 'Unauthorized to modify this pass' });
@@ -504,9 +508,10 @@ export class PassesController {
       const { passId, header, body, bypassQuota } = req.body;
 
       if (!passId || !header || !body) {
-        return res
-          .status(400)
-          .json({ success: false, error: 'passId, header, and body are required' });
+        return res.status(400).json({
+          success: false,
+          error: 'passId, header, and body are required',
+        });
       }
 
       // API Key or Admin Session Validation
@@ -581,10 +586,14 @@ export class PassesController {
       }
 
       // Security check
-      if (authenticatedRole !== 'admin' && pass.tenantId !== authenticatedTenantId) {
-        return res
-          .status(403)
-          .json({ success: false, error: 'Unauthorized to send message to this pass' });
+      if (
+        authenticatedRole !== 'admin' &&
+        pass.tenantId !== authenticatedTenantId
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized to send message to this pass',
+        });
       }
 
       const result = await this.walletService.sendPromoMessageWithAudit(
@@ -603,7 +612,7 @@ export class PassesController {
       });
     } catch (error: any) {
       console.error('API Error sending promo message:', error);
-      
+
       const statusCode = error.status || 500;
       return res.status(statusCode).json({
         statusCode,
@@ -618,13 +627,27 @@ export class PassesController {
       const { passId, amount, action, orderId } = req.body;
 
       if (!passId) {
-        return res.status(400).json({ success: false, error: 'Pass ID is required to process transaction.' });
+        return res.status(400).json({
+          success: false,
+          error: 'Pass ID is required to process transaction.',
+        });
       }
-      if (amount === undefined || amount === null || isNaN(Number(amount)) || Number(amount) <= 0) {
-        return res.status(400).json({ success: false, error: 'Order amount must be greater than ₹0.' });
+      if (
+        amount === undefined ||
+        amount === null ||
+        isNaN(Number(amount)) ||
+        Number(amount) <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: 'Order amount must be greater than ₹0.',
+        });
       }
       if (action !== 'award' && action !== 'redeem') {
-        return res.status(400).json({ success: false, error: "Invalid action. Must be either 'award' or 'redeem'." });
+        return res.status(400).json({
+          success: false,
+          error: "Invalid action. Must be either 'award' or 'redeem'.",
+        });
       }
 
       // Admin authentication
@@ -659,7 +682,10 @@ export class PassesController {
         }
       }
 
-      const staffTenantId = authenticatedRole === 'admin' ? undefined : authenticatedTenantId || undefined;
+      const staffTenantId =
+        authenticatedRole === 'admin'
+          ? undefined
+          : authenticatedTenantId || undefined;
 
       const result = await this.walletService.processOrderTransaction(
         passId,
@@ -674,7 +700,9 @@ export class PassesController {
       return res.status(200).json(result);
     } catch (error: any) {
       console.error('API Error processing order transaction:', error);
-      const statusCode = error.status || (typeof error.getStatus === 'function' ? error.getStatus() : 500);
+      const statusCode =
+        error.status ||
+        (typeof error.getStatus === 'function' ? error.getStatus() : 500);
       return res.status(statusCode).json({
         success: false,
         error: error.message || 'Failed to process order transaction',
@@ -690,13 +718,26 @@ export class PassesController {
       const targetOrderId = order_id || orderId;
 
       if (!targetPassId) {
-        return res.status(400).json({ success: false, error: 'pass_id (or passId) is required' });
+        return res
+          .status(400)
+          .json({ success: false, error: 'pass_id (or passId) is required' });
       }
-      if (amount === undefined || amount === null || isNaN(Number(amount)) || Number(amount) <= 0) {
-        return res.status(400).json({ success: false, error: 'Order amount must be greater than ₹0.' });
+      if (
+        amount === undefined ||
+        amount === null ||
+        isNaN(Number(amount)) ||
+        Number(amount) <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: 'Order amount must be greater than ₹0.',
+        });
       }
       if (action !== 'award' && action !== 'redeem') {
-        return res.status(400).json({ success: false, error: "Action must be either 'award' or 'redeem'." });
+        return res.status(400).json({
+          success: false,
+          error: "Action must be either 'award' or 'redeem'.",
+        });
       }
 
       const result = await this.walletService.processOrderTransaction(
@@ -711,7 +752,9 @@ export class PassesController {
       return res.status(200).json(result);
     } catch (error: any) {
       console.error('API Error processing mock POS webhook:', error);
-      const statusCode = error.status || (typeof error.getStatus === 'function' ? error.getStatus() : 500);
+      const statusCode =
+        error.status ||
+        (typeof error.getStatus === 'function' ? error.getStatus() : 500);
       return res.status(statusCode).json({
         success: false,
         error: error.message || 'Failed to process POS webhook',

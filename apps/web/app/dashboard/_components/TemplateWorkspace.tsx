@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Plus, X, Link as LinkIcon, FileText, Image as ImageIcon } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
@@ -102,87 +102,6 @@ export function TemplateWorkspace({
     setDesignData({ ...designData, rows: newRows });
   };
 
-  // Links Module
-  const addLink = () => {
-    const current = designData.linksModuleData || [];
-    if (current.length >= 10) return;
-    setDesignData({
-      ...designData,
-      linksModuleData: [...current, { id: `link_${Date.now()}`, uri: '', description: '' }]
-    });
-    setTemplateStatus('draft');
-  };
-
-  const updateLink = (index: number, field: 'uri' | 'description', value: string) => {
-    const current = [...(designData.linksModuleData || [])];
-    if (current[index]) {
-      current[index] = { ...current[index], [field]: value };
-      setDesignData({ ...designData, linksModuleData: current });
-      setTemplateStatus('draft');
-    }
-  };
-
-  const removeLink = (index: number) => {
-    const current = [...(designData.linksModuleData || [])];
-    current.splice(index, 1);
-    setDesignData({ ...designData, linksModuleData: current });
-    setTemplateStatus('draft');
-  };
-
-  // Text Module (Info Blocks)
-  const addTextBlock = () => {
-    const current = designData.textModulesData || [];
-    if (current.length >= 10) return;
-    setDesignData({
-      ...designData,
-      textModulesData: [...current, { id: `text_${Date.now()}`, header: '', body: '' }]
-    });
-    setTemplateStatus('draft');
-  };
-
-  const updateTextBlock = (index: number, field: 'header' | 'body', value: string) => {
-    const current = [...(designData.textModulesData || [])];
-    if (current[index]) {
-      current[index] = { ...current[index], [field]: value };
-      setDesignData({ ...designData, textModulesData: current });
-      setTemplateStatus('draft');
-    }
-  };
-
-  const removeTextBlock = (index: number) => {
-    const current = [...(designData.textModulesData || [])];
-    current.splice(index, 1);
-    setDesignData({ ...designData, textModulesData: current });
-    setTemplateStatus('draft');
-  };
-
-  // Image Module (Promotional Banners)
-  const addImageBlock = () => {
-    const current = designData.imageModulesData || [];
-    if (current.length >= 5) return;
-    setDesignData({
-      ...designData,
-      imageModulesData: [...current, { id: `img_${Date.now()}`, imageUrl: '', description: '' }]
-    });
-    setTemplateStatus('draft');
-  };
-
-  const updateImageBlock = (index: number, field: 'imageUrl' | 'description', value: string) => {
-    const current = [...(designData.imageModulesData || [])];
-    if (current[index]) {
-      current[index] = { ...current[index], [field]: value };
-      setDesignData({ ...designData, imageModulesData: current });
-      setTemplateStatus('draft');
-    }
-  };
-
-  const removeImageBlock = (index: number) => {
-    const current = [...(designData.imageModulesData || [])];
-    current.splice(index, 1);
-    setDesignData({ ...designData, imageModulesData: current });
-    setTemplateStatus('draft');
-  };
-
   const handleSaveDraft = async () => {
     const savePromise = async () => {
       if (savedTemplateId) {
@@ -195,9 +114,6 @@ export function TemplateWorkspace({
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
-            linksModuleData: designData.linksModuleData || [],
-            imageModulesData: designData.imageModulesData || [],
-            textModulesData: designData.textModulesData || [],
           }),
         });
         if (!data.success) throw new Error(data.error || 'Error saving draft');
@@ -214,9 +130,6 @@ export function TemplateWorkspace({
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
-            linksModuleData: designData.linksModuleData || [],
-            imageModulesData: designData.imageModulesData || [],
-            textModulesData: designData.textModulesData || [],
           }),
         });
         if (!data.success) throw new Error(data.error || 'Error saving draft');
@@ -233,7 +146,6 @@ export function TemplateWorkspace({
   };
 
   const handlePublish = async () => {
-
     const publishPromise = async () => {
       let tplId = savedTemplateId;
       if (!tplId) {
@@ -248,9 +160,6 @@ export function TemplateWorkspace({
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
-            linksModuleData: designData.linksModuleData || [],
-            imageModulesData: designData.imageModulesData || [],
-            textModulesData: designData.textModulesData || [],
           }),
         });
         if (!data.success) throw new Error(data.error || 'Failed to create template');
@@ -266,9 +175,6 @@ export function TemplateWorkspace({
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
-            linksModuleData: designData.linksModuleData || [],
-            imageModulesData: designData.imageModulesData || [],
-            textModulesData: designData.textModulesData || [],
           }),
         });
         if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
@@ -439,194 +345,6 @@ export function TemplateWorkspace({
             </div>
           ))}
         </div>
-
-        {/* Advanced Pass Details Section */}
-        <div className="space-y-5">
-          <div className="border-b border-border-subtle pb-3">
-            <h3 className="text-sm font-semibold text-ink-dark uppercase tracking-wide">
-              Wallet Modules
-            </h3>
-            <p className="text-xs text-ink-muted mt-0.5">
-              Configure interactive action links, custom info & policies, and promotional banners for the Google Wallet pass.
-            </p>
-          </div>
-
-          {/* Quick Links and Actions (Links Module) */}
-          <div className="bg-surface-card p-5 rounded-xl border border-border-subtle shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <LinkIcon className="w-4 h-4 text-brand-blue" />
-                <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">
-                  Quick Links & Actions ({designData.linksModuleData?.length || 0}/10)
-                </Label>
-              </div>
-              <button
-                type="button"
-                onClick={addLink}
-                disabled={(designData.linksModuleData?.length || 0) >= 10}
-                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors flex items-center gap-1 disabled:opacity-50"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Link
-              </button>
-            </div>
-
-            {(!designData.linksModuleData || designData.linksModuleData.length === 0) ? (
-              <div className="py-4 px-3 text-center border border-dashed border-border-subtle rounded-lg">
-                <p className="text-xs text-ink-muted">No quick links added. Click &quot;Add Link&quot; to include website, booking, or support contact links.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {designData.linksModuleData.map((link: any, idx: number) => (
-                  <div key={link.id || idx} className="p-3 bg-canvas rounded-lg border border-border-subtle flex flex-col sm:flex-row items-stretch sm:items-center gap-3 group">
-                    <div className="w-full sm:w-1/3">
-                      <Input
-                        type="text"
-                        value={link.description}
-                        onChange={(e) => updateLink(idx, 'description', e.target.value)}
-                        placeholder="Label (e.g. Website, Reserve Table)"
-                        className="text-xs h-8"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <Input
-                        type="text"
-                        value={link.uri}
-                        onChange={(e) => updateLink(idx, 'uri', e.target.value)}
-                        placeholder="Destination (https://..., tel:..., mailto:...)"
-                        className="text-xs font-mono h-8"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeLink(idx)}
-                      className="text-ink-muted hover:text-red-500 p-1.5 self-end sm:self-center transition-colors"
-                      title="Remove link"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Custom Info & Policies (Text Module) */}
-          <div className="bg-surface-card p-5 rounded-xl border border-border-subtle shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-emerald-500" />
-                <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">
-                  Custom Info & Policies ({designData.textModulesData?.length || 0}/10)
-                </Label>
-              </div>
-              <button
-                type="button"
-                onClick={addTextBlock}
-                disabled={(designData.textModulesData?.length || 0) >= 10}
-                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors flex items-center gap-1 disabled:opacity-50"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Info Block
-              </button>
-            </div>
-
-            {(!designData.textModulesData || designData.textModulesData.length === 0) ? (
-              <div className="py-4 px-3 text-center border border-dashed border-border-subtle rounded-lg">
-                <p className="text-xs text-ink-muted">No info blocks added. Click &quot;Add Info Block&quot; to include store hours, return policies, or Wi-Fi guidelines.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {designData.textModulesData.map((item: any, idx: number) => (
-                  <div key={item.id || idx} className="p-3.5 bg-canvas rounded-lg border border-border-subtle space-y-2.5 relative group">
-                    <div className="flex items-center justify-between gap-2">
-                      <Input
-                        type="text"
-                        value={item.header}
-                        onChange={(e) => updateTextBlock(idx, 'header', e.target.value)}
-                        placeholder="Header (e.g. Operating Hours, Return Policy, Wi-Fi Access)"
-                        className="text-xs font-medium h-8"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeTextBlock(idx)}
-                        className="text-ink-muted hover:text-red-500 p-1 transition-colors shrink-0"
-                        title="Remove info block"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <textarea
-                      value={item.body}
-                      onChange={(e) => updateTextBlock(idx, 'body', e.target.value)}
-                      placeholder="Details / Policy content..."
-                      rows={2}
-                      className="w-full text-xs p-2 rounded-md bg-surface-card border border-border-subtle text-ink-dark placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-brand-blue resize-none"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Promotional Banners (Image Module) */}
-          <div className="bg-surface-card p-5 rounded-xl border border-border-subtle shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-purple-500" />
-                <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">
-                  Promotional Banners ({designData.imageModulesData?.length || 0}/5)
-                </Label>
-              </div>
-              <button
-                type="button"
-                onClick={addImageBlock}
-                disabled={(designData.imageModulesData?.length || 0) >= 5}
-                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors flex items-center gap-1 disabled:opacity-50"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Banner
-              </button>
-            </div>
-
-            {(!designData.imageModulesData || designData.imageModulesData.length === 0) ? (
-              <div className="py-4 px-3 text-center border border-dashed border-border-subtle rounded-lg">
-                <p className="text-xs text-ink-muted">No promotional banners added. Click &quot;Add Banner&quot; to showcase seasonal campaigns or featured imagery.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {designData.imageModulesData.map((img: any, idx: number) => (
-                  <div key={img.id || idx} className="p-3 bg-canvas rounded-lg border border-border-subtle flex flex-col sm:flex-row items-stretch sm:items-center gap-3 group">
-                    <div className="flex-1 min-w-0">
-                      <Input
-                        type="text"
-                        value={img.imageUrl}
-                        onChange={(e) => updateImageBlock(idx, 'imageUrl', e.target.value)}
-                        placeholder="Banner Image URL (https://...)"
-                        className="text-xs font-mono h-8"
-                      />
-                    </div>
-                    <div className="w-full sm:w-1/3">
-                      <Input
-                        type="text"
-                        value={img.description}
-                        onChange={(e) => updateImageBlock(idx, 'description', e.target.value)}
-                        placeholder="Alt / Caption Description"
-                        className="text-xs h-8"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeImageBlock(idx)}
-                      className="text-ink-muted hover:text-red-500 p-1.5 self-end sm:self-center transition-colors"
-                      title="Remove banner"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-6 border-t border-border-subtle gap-4">
           <div>

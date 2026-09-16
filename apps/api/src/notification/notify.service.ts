@@ -20,7 +20,16 @@ export class NotifyService {
 
   /** Never throws — logging failures must not crash the main request. */
   async logNotification(opts: LogNotificationOpts): Promise<void> {
-    const { tenantId, memberId, type, channel, status, errorReason, header, body } = opts;
+    const {
+      tenantId,
+      memberId,
+      type,
+      channel,
+      status,
+      errorReason,
+      header,
+      body,
+    } = opts;
     try {
       const { error } = await this.supabaseService.client
         .from('NotificationLog')
