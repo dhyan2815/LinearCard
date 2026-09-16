@@ -184,20 +184,11 @@ export default function PosSimulatorPage() {
   return (
     <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6">
       {/* Page Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-10 h-8 rounded-xl bg-brand-blue/10 border border-brand-blue/20 flex items-center justify-center text-brand-blue">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-ink-dark tracking-tight">
-              POS Simulator
-            </h1>
-            <p className="text-sm text-ink-secondary">
-              Simulate point-of-sale register checkouts, automated loyalty calculations, and real-time customer mobile receipts.
-            </p>
-          </div>
-        </div>
+      <div className="border-b border-border-subtle pb-4 mb-6">
+        <h2 className="text-xl font-medium text-ink-dark tracking-tight">POS Simulator</h2>
+        <p className="text-sm text-ink-secondary mt-1">
+          Simulate point-of-sale register checkouts, automated loyalty calculations, and real-time customer mobile receipts.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">

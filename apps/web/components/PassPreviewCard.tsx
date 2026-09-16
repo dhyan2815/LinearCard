@@ -17,6 +17,9 @@ export interface PassPreviewCardProps {
   isManageTab?: boolean;
   passId?: string;
   archetype?: string;
+  linksModuleData?: Array<{ id?: string; uri: string; description: string }>;
+  imageModulesData?: Array<{ id?: string; imageUrl: string; description?: string }>;
+  textModulesData?: Array<{ id?: string; header: string; body: string }>;
 }
 
   export default function PassPreviewCard({
@@ -32,7 +35,10 @@ export interface PassPreviewCardProps {
     manageBalance = '',
     isManageTab = false,
     passId = '',
-    archetype = 'membership'
+    archetype = 'membership',
+    linksModuleData = [],
+    imageModulesData = [],
+    textModulesData = []
   }: PassPreviewCardProps): React.JSX.Element {
     const [isDarkMode, setIsDarkMode] = useState(false);
 
@@ -153,9 +159,71 @@ export interface PassPreviewCardProps {
 
           {/* Hero Image: Only render if a URL is provided (Google Wallet renders this at the bottom of the pass) */}
           {heroImageUrl && (
-            <div className="w-full h-40 bg-neutral-200 overflow-hidden mt-auto shrink-0">
+            <div className="w-full h-40 bg-neutral-200 overflow-hidden shrink-0">
                {/* eslint-disable-next-line @next/next/no-img-element */}
                <img src={heroImageUrl} alt="Hero" className="w-full h-full object-cover transition-opacity duration-500" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            </div>
+          )}
+
+          {/* Details Section: Image Modules, Text Modules, and Link Modules */}
+          {((imageModulesData && imageModulesData.length > 0) ||
+            (textModulesData && textModulesData.length > 0) ||
+            (linksModuleData && linksModuleData.length > 0)) && (
+            <div className={`px-5 py-5 border-t ${cardBorder} space-y-4 transition-all duration-500`} style={{ backgroundColor: containerBg }}>
+              
+              {/* Promotional Banners (Image Modules) */}
+              {imageModulesData && imageModulesData.filter(img => img.imageUrl).map((img, idx) => (
+                <div key={img.id || idx} className="rounded-xl overflow-hidden border border-neutral-200 dark:border-neutral-800 shadow-sm">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.imageUrl}
+                    alt={img.description || 'Promotional Banner'}
+                    className="w-full h-28 object-cover"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                  {img.description && (
+                    <div className="p-2 text-[11px] text-neutral-600 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-900 truncate">
+                      {img.description}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Information Blocks (Text Modules) */}
+              {textModulesData && textModulesData.filter(txt => txt.header).map((txt, idx) => (
+                <div key={txt.id || idx} className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider block transition-colors duration-500" style={{ color: secondaryTextColor }}>
+                    {txt.header}
+                  </span>
+                  <p className="text-xs leading-relaxed whitespace-pre-wrap transition-colors duration-500" style={{ color: textColor }}>
+                    {txt.body || '-'}
+                  </p>
+                </div>
+              ))}
+
+              {/* Quick Links & Actions (Link Modules) */}
+              {linksModuleData && linksModuleData.filter(l => l.uri || l.description).length > 0 && (
+                <div className="pt-2 border-t border-neutral-200/60 dark:border-neutral-800/80">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider block mb-2 transition-colors duration-500" style={{ color: secondaryTextColor }}>
+                    Quick Links & Actions
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {linksModuleData.filter(l => l.uri || l.description).map((link, idx) => (
+                      <a
+                        key={link.id || idx}
+                        href={link.uri || '#'}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all shadow-sm border bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-blue-600 dark:text-blue-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 max-w-full truncate"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="truncate">{link.description || link.uri || 'Link'}</span>
+                        <span className="text-[10px] opacity-70">↗</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           

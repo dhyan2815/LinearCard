@@ -62,6 +62,9 @@ export class TemplatesController {
       if (body.hexBackgroundColor !== undefined) insertPayload.hexBackgroundColor = body.hexBackgroundColor;
       if (body.logoUrl !== undefined) insertPayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined) insertPayload.heroImageUrl = body.heroImageUrl;
+      if (body.linksModuleData !== undefined) insertPayload.linksModuleData = body.linksModuleData;
+      if (body.imageModulesData !== undefined) insertPayload.imageModulesData = body.imageModulesData;
+      if (body.textModulesData !== undefined) insertPayload.textModulesData = body.textModulesData;
 
       const { data: template, error } = await this.supabaseService.client
         .from('PassTemplate')
@@ -164,6 +167,9 @@ export class TemplatesController {
         rows: template.fieldRows,
         logoUrl,
         heroImageUrl,
+        linksModuleData: template.linksModuleData || [],
+        imageModulesData: template.imageModulesData || [],
+        textModulesData: template.textModulesData || [],
       });
 
       const { data: updated, error: updateError } =
@@ -211,6 +217,12 @@ export class TemplatesController {
       if (body.logoUrl !== undefined) updatePayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         updatePayload.heroImageUrl = body.heroImageUrl;
+      if (body.linksModuleData !== undefined)
+        updatePayload.linksModuleData = body.linksModuleData;
+      if (body.imageModulesData !== undefined)
+        updatePayload.imageModulesData = body.imageModulesData;
+      if (body.textModulesData !== undefined)
+        updatePayload.textModulesData = body.textModulesData;
 
 
       const { data: updated, error } = await this.supabaseService.client

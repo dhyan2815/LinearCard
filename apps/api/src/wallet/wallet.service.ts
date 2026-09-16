@@ -130,6 +130,51 @@ export class WalletService {
       };
     }
 
+    if (templateData.linksModuleData && Array.isArray(templateData.linksModuleData) && templateData.linksModuleData.length > 0) {
+      const validLinks = templateData.linksModuleData
+        .filter((l: any) => l && l.uri && typeof l.uri === 'string' && l.uri.trim() !== '')
+        .map((l: any, idx: number) => ({
+          id: l.id || `class_link_${idx}`,
+          uri: l.uri.trim(),
+          description: l.description || 'Link',
+        }));
+      if (validLinks.length > 0) {
+        classPayload.linksModuleData = {
+          uris: validLinks,
+        };
+      }
+    }
+
+    if (templateData.imageModulesData && Array.isArray(templateData.imageModulesData) && templateData.imageModulesData.length > 0) {
+      const validImages = templateData.imageModulesData
+        .filter((img: any) => img && (img.imageUrl || img.uri) && (img.imageUrl || img.uri).trim() !== '')
+        .map((img: any, idx: number) => ({
+          id: img.id || `class_img_${idx}`,
+          mainImage: {
+            sourceUri: {
+              uri: (img.imageUrl || img.uri).trim(),
+              description: img.description || 'Promotional Banner',
+            },
+          },
+        }));
+      if (validImages.length > 0) {
+        classPayload.imageModulesData = validImages;
+      }
+    }
+
+    if (templateData.textModulesData && Array.isArray(templateData.textModulesData) && templateData.textModulesData.length > 0) {
+      const validTexts = templateData.textModulesData
+        .filter((txt: any) => txt && txt.header && typeof txt.header === 'string' && txt.header.trim() !== '')
+        .map((txt: any, idx: number) => ({
+          id: txt.id || `class_text_${idx}`,
+          header: txt.header.trim(),
+          body: txt.body || '',
+        }));
+      if (validTexts.length > 0) {
+        classPayload.textModulesData = validTexts;
+      }
+    }
+
     const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass`;
 
     try {
