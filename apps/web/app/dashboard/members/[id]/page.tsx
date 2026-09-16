@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 
 export default function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +23,7 @@ export default function MemberDetailPage() {
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [adjustMsg, setAdjustMsg] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const router = useRouter();
 
   const loadMember = async () => {
@@ -55,32 +58,61 @@ export default function MemberDetailPage() {
     if (!selectedPassId) return;
     setIsAdjusting(true);
     setAdjustMsg('');
-    try {
-      const data = await apiClient(`/members/${id}/adjust-balance`, {
-        method: 'POST',
-        body: JSON.stringify({ passId: selectedPassId, newBalance: parseInt(newBalance, 10), newTier, note }),
-      });
-      if (!data.success) throw new Error(data.error);
-      setAdjustMsg('Balance adjusted. Wallet pass will update shortly.');
-      await loadMember();
-    } catch (err: any) {
-      setAdjustMsg(`Error: ${err.message}`);
-    } finally {
-      setIsAdjusting(false);
-    }
+    const adjustPromise = async () => {
+      try {
+        const data = await apiClient(`/members/${id}/adjust-balance`, {
+          method: 'POST',
+          body: JSON.stringify({ passId: selectedPassId, newBalance: parseInt(newBalance, 10), newTier, note }),
+        });
+        if (!data.success) throw new Error(data.error || 'Failed to adjust balance');
+        setAdjustMsg('Balance adjusted. Wallet pass will update shortly.');
+        await loadMember();
+        return data;
+      } finally {
+        setIsAdjusting(false);
+      }
+    };
+
+    toast.promise(adjustPromise(), {
+      loading: 'Updating balance & syncing wallet pass...',
+      success: 'Balance adjusted successfully!',
+      error: (err: any) => {
+        setAdjustMsg(`Error: ${err.message}`);
+        return `Error: ${err.message}`;
+      },
+    });
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this member? All associated data will be removed.')) return;
+  const handleDeleteClick = () => {
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleCancelDelete = () => {
+    if (isDeleting) return;
+    setIsDeleteDialogOpen(false);
+  };
+
+  const handleConfirmDelete = async () => {
     setIsDeleting(true);
-    try {
+
+    const deletePromise = async () => {
       const data = await apiClient(`/members/${id}`, { method: 'DELETE' });
-      if (!data.success) throw new Error(data.error);
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to delete member');
+      }
+      setIsDeleteDialogOpen(false);
       router.push('/dashboard/members');
-    } catch (err: any) {
-      alert(`Error deleting member: ${err.message}`);
-      setIsDeleting(false);
-    }
+      return data;
+    };
+
+    toast.promise(deletePromise(), {
+      loading: 'Deleting member and invalidating passes...',
+      success: `${member?.name || 'Member'} deleted successfully.`,
+      error: (err: any) => {
+        setIsDeleting(false);
+        return `Error deleting member: ${err.message || 'Unknown error'}`;
+      },
+    });
   };
 
   if (loading) {
@@ -128,7 +160,7 @@ export default function MemberDetailPage() {
                 <ShieldCheck className="w-3.5 h-3.5" /> DPDP Consented
               </div>
             )}
-            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isDeleting} className="w-full">
+            <Button variant="destructive" size="sm" onClick={handleDeleteClick} disabled={isDeleting} className="w-full">
               <Trash2 className="w-4 h-4 mr-2" /> {isDeleting ? 'Deleting...' : 'Delete Member'}
             </Button>
           </div>
@@ -181,7 +213,7 @@ export default function MemberDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label>New Balance (pts)</Label>
-                <Input type="number" min="0" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} required />
+                <Input type="number" min="0" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} onWheel={(e) => e.currentTarget.blur()} required />
               </div>
               <div className="space-y-1">
                 <Label>New Tier</Label>
@@ -246,6 +278,50 @@ export default function MemberDetailPage() {
           </div>
         </Card>
       )}
+
+      {/* Confirmation Dialog for Member Deletion */}
+      <ConfirmationDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        title="Delete Member"
+        confirmText="Delete Member"
+        cancelText="Cancel"
+        variant="destructive"
+        isLoading={isDeleting}
+        description={
+          <span>
+            Are you sure you want to permanently delete{' '}
+            <strong className="text-ink-dark font-semibold">{member.name || 'this member'}</strong>{' '}
+            (<span className="font-mono">{member.phone}</span>)? This action cannot be undone.
+          </span>
+        }
+      >
+        <div className="bg-canvas/70 border border-border-subtle rounded-xl p-3.5 text-xs text-ink-secondary space-y-2 mt-2">
+          <div className="flex justify-between items-center">
+            <span className="text-ink-muted">Active Passes</span>
+            <span className="font-medium text-ink-dark">{member.passes?.length ?? 0} pass{(member.passes?.length ?? 0) === 1 ? '' : 'es'}</span>
+          </div>
+          {member.passes?.[0] && (
+            <div className="flex justify-between items-center">
+              <span className="text-ink-muted">Loyalty Balance</span>
+              <span className="font-medium text-ink-dark">
+                {member.passes[0].balance} pts {member.passes[0].tier ? `• ${member.passes[0].tier}` : ''}
+              </span>
+            </div>
+          )}
+          {member.Tenant?.name && (
+            <div className="flex justify-between items-center">
+              <span className="text-ink-muted">Brand / Tenant</span>
+              <span className="font-medium text-ink-dark uppercase tracking-wider text-[11px]">{member.Tenant.name}</span>
+            </div>
+          )}
+          <p className="text-[11px] text-red-400/90 pt-2 border-t border-border-subtle/50 flex items-center gap-1.5">
+            <span>⚠️</span>
+            <span>All Google Wallet passes will be revoked, and all audit records will be purged.</span>
+          </p>
+        </div>
+      </ConfirmationDialog>
       </main>
     </div>
   );
