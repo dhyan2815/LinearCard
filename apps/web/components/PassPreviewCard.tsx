@@ -153,7 +153,7 @@ export interface PassPreviewCardProps {
 
           {/* Hero Image: Only render if a URL is provided (Google Wallet renders this at the bottom of the pass) */}
           {heroImageUrl && (
-            <div className="w-full h-40 bg-neutral-200 overflow-hidden mt-auto shrink-0">
+            <div className="w-full h-40 bg-neutral-200 overflow-hidden shrink-0">
                {/* eslint-disable-next-line @next/next/no-img-element */}
                <img src={heroImageUrl} alt="Hero" className="w-full h-full object-cover transition-opacity duration-500" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             </div>

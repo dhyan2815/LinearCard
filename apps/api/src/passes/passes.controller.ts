@@ -188,7 +188,7 @@ export class PassesController {
       if (/^\d{8,}$/.test(passId) || /^\+\d+$/.test(passId)) {
         const { data: phonePasses } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*)')
+          .select('*, Member!inner(*), Tenant(name)')
           .ilike('Member.phone', `%${passId}%`)
           .order('createdAt', { ascending: false });
 
@@ -222,7 +222,7 @@ export class PassesController {
           : `${process.env.ISSUER_ID}.${passId}`;
         const { data: exactPass } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*)')
+          .select('*, Member!inner(*), Tenant(name)')
           .eq('fullPassId', fullPassId)
           .single();
 
@@ -233,7 +233,7 @@ export class PassesController {
       if (!pass) {
         const { data: fallbackPass } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*)')
+          .select('*, Member!inner(*), Tenant(name)')
           .ilike('fullPassId', `%${passId}%`)
           .order('createdAt', { ascending: false })
           .limit(1)
@@ -256,6 +256,7 @@ export class PassesController {
         tier: pass.tier,
         fullPassId: pass.fullPassId,
         phone: member?.phone,
+        tenantName: pass.Tenant?.name || member?.Tenant?.name || null,
       });
     } catch (error: any) {
       console.error('API Error validating pass:', error);
@@ -363,7 +364,11 @@ export class PassesController {
       }
 
       // Security check: ensure the caller is authorized to modify passes for this specific tenant
-      if (authenticatedRole !== 'admin' && authenticatedTenantId && pass.tenantId !== authenticatedTenantId) {
+      if (
+        authenticatedRole !== 'admin' &&
+        authenticatedTenantId &&
+        pass.tenantId !== authenticatedTenantId
+      ) {
         return res
           .status(403)
           .json({ success: false, error: 'Unauthorized to modify this pass' });
@@ -503,9 +508,10 @@ export class PassesController {
       const { passId, header, body, bypassQuota } = req.body;
 
       if (!passId || !header || !body) {
-        return res
-          .status(400)
-          .json({ success: false, error: 'passId, header, and body are required' });
+        return res.status(400).json({
+          success: false,
+          error: 'passId, header, and body are required',
+        });
       }
 
       // API Key or Admin Session Validation
@@ -580,10 +586,14 @@ export class PassesController {
       }
 
       // Security check
-      if (authenticatedRole !== 'admin' && pass.tenantId !== authenticatedTenantId) {
-        return res
-          .status(403)
-          .json({ success: false, error: 'Unauthorized to send message to this pass' });
+      if (
+        authenticatedRole !== 'admin' &&
+        pass.tenantId !== authenticatedTenantId
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized to send message to this pass',
+        });
       }
 
       const result = await this.walletService.sendPromoMessageWithAudit(
@@ -602,11 +612,152 @@ export class PassesController {
       });
     } catch (error: any) {
       console.error('API Error sending promo message:', error);
-      
+
       const statusCode = error.status || 500;
       return res.status(statusCode).json({
         statusCode,
         error: error.message || 'Failed to send promotional message',
+      });
+    }
+  }
+
+  @Post('process-order')
+  async postProcessOrder(@Req() req: Request, @Res() res: Response) {
+    try {
+      const { passId, amount, action, orderId } = req.body;
+
+      if (!passId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Pass ID is required to process transaction.',
+        });
+      }
+      if (
+        amount === undefined ||
+        amount === null ||
+        isNaN(Number(amount)) ||
+        Number(amount) <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: 'Order amount must be greater than ₹0.',
+        });
+      }
+      if (action !== 'award' && action !== 'redeem') {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid action. Must be either 'award' or 'redeem'.",
+        });
+      }
+
+      // Admin authentication
+      const rawToken = extractAdminToken(req);
+      let authenticatedTenantId = null;
+      let authenticatedAdminId = 'system';
+      let authenticatedRole = null;
+
+      if (rawToken) {
+        try {
+          const decoded: any = jwt.verify(rawToken, JWT_SECRET);
+          authenticatedTenantId = decoded.tenantId;
+          authenticatedAdminId = decoded.sub || decoded.adminId || 'admin';
+          authenticatedRole = decoded.role;
+        } catch {
+          // Token verification fallback
+        }
+      }
+
+      if (!authenticatedTenantId) {
+        const authHeader = req.headers['authorization'] as string;
+        if (authHeader?.startsWith('Bearer ')) {
+          const token = authHeader.substring(7);
+          const { data: tenant } = await this.supabaseService.client
+            .from('Tenant')
+            .select('id')
+            .eq('apiKey', token)
+            .single();
+          if (tenant) {
+            authenticatedTenantId = tenant.id;
+          }
+        }
+      }
+
+      const staffTenantId =
+        authenticatedRole === 'admin'
+          ? undefined
+          : authenticatedTenantId || undefined;
+
+      const result = await this.walletService.processOrderTransaction(
+        passId,
+        amount,
+        action,
+        'manual',
+        orderId,
+        authenticatedAdminId,
+        staffTenantId,
+      );
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      console.error('API Error processing order transaction:', error);
+      const statusCode =
+        error.status ||
+        (typeof error.getStatus === 'function' ? error.getStatus() : 500);
+      return res.status(statusCode).json({
+        success: false,
+        error: error.message || 'Failed to process order transaction',
+      });
+    }
+  }
+
+  @Post('webhooks/mock')
+  async postMockWebhook(@Req() req: Request, @Res() res: Response) {
+    try {
+      const { pass_id, passId, amount, action, order_id, orderId } = req.body;
+      const targetPassId = pass_id || passId;
+      const targetOrderId = order_id || orderId;
+
+      if (!targetPassId) {
+        return res
+          .status(400)
+          .json({ success: false, error: 'pass_id (or passId) is required' });
+      }
+      if (
+        amount === undefined ||
+        amount === null ||
+        isNaN(Number(amount)) ||
+        Number(amount) <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: 'Order amount must be greater than ₹0.',
+        });
+      }
+      if (action !== 'award' && action !== 'redeem') {
+        return res.status(400).json({
+          success: false,
+          error: "Action must be either 'award' or 'redeem'.",
+        });
+      }
+
+      const result = await this.walletService.processOrderTransaction(
+        targetPassId,
+        amount,
+        action,
+        'webhook',
+        targetOrderId,
+        'pos-simulator',
+      );
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      console.error('API Error processing mock POS webhook:', error);
+      const statusCode =
+        error.status ||
+        (typeof error.getStatus === 'function' ? error.getStatus() : 500);
+      return res.status(statusCode).json({
+        success: false,
+        error: error.message || 'Failed to process POS webhook',
       });
     }
   }

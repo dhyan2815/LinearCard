@@ -1,9 +1,14 @@
-import { Injectable, Logger, HttpException, HttpStatus, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  HttpException,
+  HttpStatus,
+  ForbiddenException,
+} from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import { SupabaseService } from '../supabase/supabase.service';
 import { NotifyService } from '../notification/notify.service';
-
 
 export interface GoogleWalletPassOptions {
   passId: string;
@@ -184,7 +189,10 @@ export class WalletService {
       if (error.response?.status === 404) {
         return null;
       }
-      this.logger.error(`Error fetching genericObject ${passId}:`, error.message);
+      this.logger.error(
+        `Error fetching genericObject ${passId}:`,
+        error.message,
+      );
       throw error;
     }
   }
@@ -201,7 +209,7 @@ export class WalletService {
       const genericObject: any = getRes.data;
 
       const patchPayload: any = {
-        notifyPreference: 'notifyOnUpdate'
+        notifyPreference: 'notifyOnUpdate',
       };
 
       const formattedBalance =
@@ -501,7 +509,10 @@ export class WalletService {
     }
   }
 
-  public async checkNotificationQuota(memberId: string, bypassQuota = false): Promise<void> {
+  public async checkNotificationQuota(
+    memberId: string,
+    bypassQuota = false,
+  ): Promise<void> {
     // Note: The 3 wallet notifications per 24hr limit has been permanently removed.
     return;
   }
@@ -556,8 +567,11 @@ export class WalletService {
     bypassQuota = false,
   ): Promise<{ success: boolean; messageId: string }> {
     const messageId = `msg_${Date.now()}`;
-    const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID || '3388000000023177673';
-    
+    const issuerId =
+      process.env.GOOGLE_WALLET_ISSUER_ID ||
+      process.env.ISSUER_ID ||
+      '3388000000023177673';
+
     // Support both short ID and full ID formats
     const resourceId = passId.includes('.') ? passId : `${issuerId}.${passId}`;
 
@@ -602,5 +616,327 @@ export class WalletService {
       // Re-throw so controller handles it
       throw error;
     }
+  }
+
+  /**
+   * Dispatches real-time Google Wallet heads-up push notifications (TEXT_AND_NOTIFY)
+   * and refreshes the card visual balance. Resilient try/catch ensures downstream delivery
+   * issues never roll back or crash the transaction.
+   */
+  public async sendTransactionNotification(
+    pass: {
+      id: string;
+      fullPassId: string;
+      memberId: string;
+      tenantId: string;
+      phone?: string;
+    },
+    transaction: {
+      type: 'award' | 'redeem';
+      pointsChanged: number;
+      newBalance: number;
+      orderId?: string;
+      orderAmount: number;
+    },
+    tenantName: string = 'LinearCard',
+  ): Promise<{
+    walletPushed: boolean;
+    directNotified: boolean;
+    warning?: string;
+  }> {
+    const isAward = transaction.type === 'award';
+    const orderRef = transaction.orderId ? ` #${transaction.orderId}` : '';
+
+    const pushTitle = isAward ? 'Points Earned! 🎉' : 'Points Redeemed! 💳';
+    const pushBody = isAward
+      ? `+${transaction.pointsChanged} pts earned on order${orderRef}. Balance: ${transaction.newBalance} Pts.`
+      : `-${transaction.pointsChanged} pts redeemed on order${orderRef}. Balance: ${transaction.newBalance} Pts.`;
+
+    let walletPushed = false;
+    const directNotified = false;
+    let warning: string | undefined;
+
+    // 1. Google Wallet Pass Visual Refresh & OS Notification
+    try {
+      // 1a. Update generic pass object text modules and notifyPreference
+      await this.updateGenericObject(pass.fullPassId, {
+        balance: `${transaction.newBalance} Pts`,
+        pushNotification: pushBody,
+      });
+
+      // 1b. Dispatch explicit Google Wallet system tray notification (TEXT_AND_NOTIFY)
+      const messageId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const issuerId =
+        process.env.GOOGLE_WALLET_ISSUER_ID ||
+        process.env.ISSUER_ID ||
+        '3388000000023177673';
+      const resourceId = pass.fullPassId.includes('.')
+        ? pass.fullPassId
+        : `${issuerId}.${pass.fullPassId}`;
+
+      await this.sendOfferMessage(resourceId, messageId, pushTitle, pushBody);
+      walletPushed = true;
+
+      await this.notifyService.logNotification({
+        tenantId: pass.tenantId,
+        memberId: pass.memberId,
+        type: isAward ? 'points_awarded' : 'points_redeemed',
+        channel: 'wallet_push',
+        status: 'sent',
+        header: pushTitle,
+        body: pushBody,
+      });
+    } catch (err: any) {
+      this.logger.warn(
+        `Google Wallet notification warning for ${pass.fullPassId}: ${err.message}`,
+      );
+      warning = `Google Wallet notification sync delayed: ${err.message}`;
+      await this.notifyService.logNotification({
+        tenantId: pass.tenantId,
+        memberId: pass.memberId,
+        type: isAward ? 'points_awarded' : 'points_redeemed',
+        channel: 'wallet_push',
+        status: 'failed',
+        errorReason: err.message,
+        header: pushTitle,
+        body: pushBody,
+      });
+    }
+
+    return { walletPushed, directNotified, warning };
+  }
+
+  /**
+   * Processes order-linked loyalty transactions (Award 10% or Redeem max 50% cap).
+   * Validates inputs, calculates point changes, updates database balance,
+   * records an immutable AuditLog entry, and pushes real-time wallet notifications.
+   */
+  public async processOrderTransaction(
+    passIdentifier: string,
+    amountInput: number | string,
+    transactionType: 'award' | 'redeem',
+    source: 'manual' | 'webhook',
+    orderId?: string,
+    adminId?: string,
+    staffTenantId?: string,
+  ): Promise<{
+    success: boolean;
+    pointsChanged: number;
+    newBalance: number;
+    discountApplied: number;
+    payableAmount: number;
+    orderAmount: number;
+    orderId: string | null;
+    passUpdateStatus: 'pushed_to_wallet' | 'sync_delayed';
+    warning?: string;
+    transaction: any;
+  }> {
+    if (!passIdentifier) {
+      throw new HttpException(
+        'Pass ID is required to process transaction.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const amount = Number(amountInput);
+    if (!amount || isNaN(amount) || amount <= 0) {
+      throw new HttpException(
+        'Order amount must be greater than ₹0.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (transactionType !== 'award' && transactionType !== 'redeem') {
+      throw new HttpException(
+        "Invalid transaction type. Must be either 'award' or 'redeem'.",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Resolve Pass
+    let pass: any = null;
+    const cleanId = passIdentifier.includes('/m/')
+      ? passIdentifier.split('/m/')[1]
+      : passIdentifier;
+
+    const isUUID =
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+        cleanId,
+      );
+
+    if (isUUID) {
+      const { data } = await this.supabaseService.client
+        .from('Pass')
+        .select('*, Member(*), Tenant(*)')
+        .eq('id', cleanId)
+        .single();
+      pass = data;
+    }
+
+    if (!pass) {
+      const fullPassId = cleanId.includes('.')
+        ? cleanId
+        : `${process.env.ISSUER_ID}.${cleanId}`;
+      const { data } = await this.supabaseService.client
+        .from('Pass')
+        .select('*, Member(*), Tenant(*)')
+        .eq('fullPassId', fullPassId)
+        .single();
+      pass = data;
+    }
+
+    if (!pass) {
+      const { data } = await this.supabaseService.client
+        .from('Pass')
+        .select('*, Member(*), Tenant(*)')
+        .ilike('fullPassId', `%${cleanId}%`)
+        .limit(1)
+        .single();
+      pass = data;
+    }
+
+    if (!pass && (/^\d{8,}$/.test(cleanId) || /^\+\d+$/.test(cleanId))) {
+      const { data: phonePasses } = await this.supabaseService.client
+        .from('Pass')
+        .select('*, Member!inner(*), Tenant(*)')
+        .ilike('Member.phone', `%${cleanId}%`)
+        .order('createdAt', { ascending: false });
+      if (phonePasses && phonePasses.length > 0) {
+        pass = phonePasses[0];
+      }
+    }
+
+    if (!pass) {
+      throw new HttpException(
+        `Pass '${passIdentifier}' was not found. Please verify Pass ID or barcode.`,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    // Cross-tenant security check
+    if (staffTenantId && pass.tenantId && pass.tenantId !== staffTenantId) {
+      throw new HttpException(
+        'Unauthorized: This pass belongs to a different store or brand.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const currentBalance = Number(pass.balance) || 0;
+    let pointsChanged = 0;
+    let newBalance = currentBalance;
+    let discountApplied = 0;
+    let payableAmount = amount;
+
+    if (transactionType === 'award') {
+      // 10% Earning Rule
+      pointsChanged = Math.floor(amount * 0.1);
+      newBalance = currentBalance + pointsChanged;
+      discountApplied = 0;
+      payableAmount = amount;
+    } else {
+      // Redeem Rule: 1 Point = ₹1, Max 50% Cap
+      if (currentBalance <= 0) {
+        throw new HttpException(
+          'Customer has 0 points available. Point redemption cannot be applied to this order.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const maxDeductible = Math.floor(amount * 0.5);
+      if (maxDeductible <= 0) {
+        throw new HttpException(
+          'Order amount is too small for point redemption (minimum ₹2 order).',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      pointsChanged = Math.min(currentBalance, maxDeductible);
+      discountApplied = pointsChanged;
+      payableAmount = amount - discountApplied;
+      newBalance = currentBalance - pointsChanged;
+    }
+
+    // 1. Update Pass balance in database
+    const { error: dbError } = await this.supabaseService.client
+      .from('Pass')
+      .update({ balance: newBalance })
+      .eq('id', pass.id);
+
+    if (dbError) {
+      this.logger.error(
+        `Failed to update balance in database for pass ${pass.id}:`,
+        dbError,
+      );
+      throw new HttpException(
+        `Database error updating balance: ${dbError.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 2. Insert immutable AuditLog entry
+    try {
+      await this.supabaseService.client.from('AuditLog').insert({
+        memberId: pass.memberId,
+        passId: pass.id,
+        adminId: adminId || 'system',
+        action: 'order_transaction',
+        details: {
+          transactionType,
+          source,
+          orderId: orderId || null,
+          orderAmount: amount,
+          pointsChanged,
+          previousBalance: currentBalance,
+          newBalance,
+          discountApplied,
+          payableAmount,
+        },
+      });
+    } catch (auditErr: any) {
+      this.logger.warn(
+        `AuditLog insertion warning for pass ${pass.id}: ${auditErr.message}`,
+      );
+    }
+
+    // 3. Dispatch Google Wallet and device notification
+    const notificationResult = await this.sendTransactionNotification(
+      {
+        id: pass.id,
+        fullPassId: pass.fullPassId,
+        memberId: pass.memberId,
+        tenantId: pass.tenantId,
+        phone: pass.Member?.phone,
+      },
+      {
+        type: transactionType,
+        pointsChanged,
+        newBalance,
+        orderId,
+        orderAmount: amount,
+      },
+      pass.Tenant?.name || 'LinearCard',
+    );
+
+    return {
+      success: true,
+      pointsChanged,
+      newBalance,
+      discountApplied,
+      payableAmount,
+      orderAmount: amount,
+      orderId: orderId || null,
+      passUpdateStatus: notificationResult.walletPushed
+        ? 'pushed_to_wallet'
+        : 'sync_delayed',
+      warning: notificationResult.warning,
+      transaction: {
+        passId: pass.id,
+        memberId: pass.memberId,
+        memberName: pass.Member?.name || 'Member',
+        action: transactionType,
+        source,
+        timestamp: new Date().toISOString(),
+      },
+    };
   }
 }

@@ -80,14 +80,19 @@ export class MembersController {
       if (passes && passes.length > 0) {
         let deletedPassesCount = 0;
         const passesToKeep = [];
-        
+
         for (const pass of passes) {
           if (pass.fullPassId) {
             try {
-              const googlePass = await this.walletService.getGenericObject(pass.fullPassId);
+              const googlePass = await this.walletService.getGenericObject(
+                pass.fullPassId,
+              );
               if (googlePass && googlePass.hasUsers === false) {
                 // Pass was deleted from wallet app
-                await this.supabaseService.client.from('Pass').delete().eq('id', pass.id);
+                await this.supabaseService.client
+                  .from('Pass')
+                  .delete()
+                  .eq('id', pass.id);
                 deletedPassesCount++;
                 continue;
               }
@@ -102,7 +107,11 @@ export class MembersController {
           // All passes were deleted, eliminate member completely
           await this.deleteMemberData(id);
           throw new HttpException(
-            { success: false, error: 'Member has deleted their pass from Google Wallet and was removed from the system' },
+            {
+              success: false,
+              error:
+                'Member has deleted their pass from Google Wallet and was removed from the system',
+            },
             HttpStatus.NOT_FOUND,
           );
         }
@@ -149,16 +158,28 @@ export class MembersController {
 
   private async deleteMemberData(memberId: string) {
     // Delete related records manually to ensure they're removed if no CASCADE is set
-    await this.supabaseService.client.from('Pass').delete().eq('memberId', memberId);
-    await this.supabaseService.client.from('AuditLog').delete().eq('memberId', memberId);
-    await this.supabaseService.client.from('ConsentLog').delete().eq('memberId', memberId);
-    await this.supabaseService.client.from('NotificationLog').delete().eq('memberId', memberId);
-    
+    await this.supabaseService.client
+      .from('Pass')
+      .delete()
+      .eq('memberId', memberId);
+    await this.supabaseService.client
+      .from('AuditLog')
+      .delete()
+      .eq('memberId', memberId);
+    await this.supabaseService.client
+      .from('ConsentLog')
+      .delete()
+      .eq('memberId', memberId);
+    await this.supabaseService.client
+      .from('NotificationLog')
+      .delete()
+      .eq('memberId', memberId);
+
     const { error } = await this.supabaseService.client
       .from('Member')
       .delete()
       .eq('id', memberId);
-      
+
     if (error) throw error;
   }
 

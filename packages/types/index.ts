@@ -53,3 +53,21 @@ export interface Member {
   passes?: Pass[];
 }
 
+export interface PassTemplate {
+  id: string;
+  tenantId: string;
+  title: string;
+  name?: string;
+  subtitle?: string;
+  archetype: string;
+  status: 'draft' | 'published' | 'unsaved';
+  classSuffix: string;
+  googleClassId?: string;
+  fieldRows?: Array<{ id: string; columns: Array<{ header: string; body: string }> }>;
+  hexBackgroundColor?: string;
+  logoUrl?: string;
+  heroImageUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+

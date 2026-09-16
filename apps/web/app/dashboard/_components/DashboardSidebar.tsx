@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Palette, Zap, Bell, Users, Settings2, ChevronDown, Check, Menu } from 'lucide-react';
+import { Palette, Zap, Bell, Users, Settings2, ChevronDown, Check, Menu, Terminal } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useDashboard } from './DashboardContext';
 
@@ -17,7 +17,8 @@ export function DashboardSidebar() {
     { id: 'template-designer', path: '/dashboard/template-designer', label: 'Template Designer', icon: <Palette className="w-4 h-4" /> },
     { id: 'live-activity', path: '/dashboard/live-activity', label: 'Live Activity', icon: <Zap className="w-4 h-4" /> },
     { id: 'push-campaigns', path: '/dashboard/push-campaigns', label: 'Push Campaigns', icon: <Bell className="w-4 h-4" /> },
-    { id: 'members', path: '/dashboard/members', label: 'Passholders', icon: <Users className="w-4 h-4" /> },
+    { id: 'members', path: '/dashboard/members', label: 'Members', icon: <Users className="w-4 h-4" /> },
+    { id: 'pos-simulator', path: '/dashboard/pos-simulator', label: 'POS Simulator', icon: <Terminal className="w-4 h-4" /> },
     { id: 'settings', path: '/dashboard/settings', label: 'Settings', icon: <Settings2 className="w-4 h-4" /> },
   ] as const;
 

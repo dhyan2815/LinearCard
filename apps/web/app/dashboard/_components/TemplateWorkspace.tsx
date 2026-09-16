@@ -102,10 +102,7 @@ export function TemplateWorkspace({
     setDesignData({ ...designData, rows: newRows });
   };
 
-
-
   const handleSaveDraft = async () => {
-
     const savePromise = async () => {
       if (savedTemplateId) {
         const data = await apiClient(`/templates/${savedTemplateId}`, {
@@ -149,7 +146,6 @@ export function TemplateWorkspace({
   };
 
   const handlePublish = async () => {
-
     const publishPromise = async () => {
       let tplId = savedTemplateId;
       if (!tplId) {
@@ -349,7 +345,6 @@ export function TemplateWorkspace({
             </div>
           ))}
         </div>
-
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-6 border-t border-border-subtle gap-4">
           <div>

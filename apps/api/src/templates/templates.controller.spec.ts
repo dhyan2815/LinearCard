@@ -72,8 +72,6 @@ describe('TemplatesController.updateTemplate', () => {
     });
   });
 
-
-
   it('should throw 404 if template not found', async () => {
     mockUpdatedRecord = null;
     await expect(
@@ -86,4 +84,3 @@ describe('TemplatesController.updateTemplate', () => {
     });
   });
 });
-
