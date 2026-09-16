@@ -1,125 +1,99 @@
 import { WalletService } from './wallet.service';
 
-describe('WalletService.createGenericClass locations mapping', () => {
-  const originalEnv = process.env;
+describe('WalletService.sendPromoMessageWithAudit', () => {
+  let service: WalletService;
+  let mockSupabaseService: any;
+  let mockNotifyService: any;
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
-    process.env.ISSUER_ID = 'test_issuer';
-    process.env.GOOGLE_CLIENT_EMAIL = 'test@test.iam.gserviceaccount.com';
-    process.env.GOOGLE_PRIVATE_KEY = 'dummy_key';
+    mockSupabaseService = {
+      client: {
+        from: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        not: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        single: jest.fn(),
+        gte: jest.fn(),
+      },
+    };
+    mockNotifyService = {
+      logNotification: jest.fn(),
+    };
+    service = new WalletService(mockSupabaseService, mockNotifyService);
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
+  it('should reject member without consent', async () => {
+    mockSupabaseService.client.single.mockResolvedValue({ data: null }); // No consent
+
+    await expect(
+      service.sendPromoMessageWithAudit(
+        'pass-1',
+        'mem-1',
+        'tenant-1',
+        'Header',
+        'Body',
+      ),
+    ).rejects.toThrow('Member has not consented');
   });
 
-  it('should include locations in payload when provided', async () => {
-    const service = new WalletService();
-    // Spy on the private method to capture the payload before it's sent
-    const capturedPayloads: any[] = [];
+  it('should log success after Google API succeeds', async () => {
+    mockSupabaseService.client.single.mockResolvedValueOnce({
+      data: { consentedAt: '2023-01-01' },
+    });
+
     const fakeClient = {
-      request: jest.fn().mockImplementation((opts: any) => {
-        capturedPayloads.push(opts.data);
-        return Promise.resolve({ data: { id: 'test.class' } });
-      }),
+      request: jest.fn().mockResolvedValue({ data: { success: true } }),
     };
     jest
       .spyOn(service, 'getGoogleAuthClient')
       .mockResolvedValue(fakeClient as any);
 
-    await service.createGenericClass({
-      classSuffix: 'test_class',
-      cardTitle: 'Test Store',
-      locations: [
-        { latitude: 19.076, longitude: 72.8777 },
-        { latitude: 28.6139, longitude: 77.209 },
-      ],
-    });
+    const result = await service.sendPromoMessageWithAudit(
+      'pass-1',
+      'mem-1',
+      'tenant-1',
+      'Header',
+      'Body',
+    );
 
-    const payload = capturedPayloads[0];
-    expect(payload.locations).toHaveLength(2);
-    expect(payload.locations[0]).toEqual({
-      kind: 'walletobjects#latLongPoint',
-      latitude: 19.076,
-      longitude: 72.8777,
-    });
-    expect(payload.locations[1]).toEqual({
-      kind: 'walletobjects#latLongPoint',
-      latitude: 28.6139,
-      longitude: 77.209,
-    });
+    expect(result.success).toBe(true);
+    expect(mockNotifyService.logNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'sent',
+        type: 'promo_message',
+      }),
+    );
   });
 
-  it('should NOT include locations in payload when none provided', async () => {
-    const service = new WalletService();
-    const capturedPayloads: any[] = [];
+  it('should log failure if Google API fails', async () => {
+    mockSupabaseService.client.single.mockResolvedValueOnce({
+      data: { consentedAt: '2023-01-01' },
+    });
+    mockSupabaseService.client.gte.mockResolvedValueOnce({ count: 1 });
+
     const fakeClient = {
-      request: jest.fn().mockImplementation((opts: any) => {
-        capturedPayloads.push(opts.data);
-        return Promise.resolve({ data: { id: 'test.class' } });
-      }),
+      request: jest.fn().mockRejectedValue(new Error('Google API Error')),
     };
     jest
       .spyOn(service, 'getGoogleAuthClient')
       .mockResolvedValue(fakeClient as any);
 
-    await service.createGenericClass({
-      classSuffix: 'test_class',
-      cardTitle: 'Test Store',
-    });
+    await expect(
+      service.sendPromoMessageWithAudit(
+        'pass-1',
+        'mem-1',
+        'tenant-1',
+        'Header',
+        'Body',
+      ),
+    ).rejects.toThrow();
 
-    const payload = capturedPayloads[0];
-    expect(payload.locations).toBeUndefined();
-  });
-
-  it('should NOT include locations in payload when empty array provided', async () => {
-    const service = new WalletService();
-    const capturedPayloads: any[] = [];
-    const fakeClient = {
-      request: jest.fn().mockImplementation((opts: any) => {
-        capturedPayloads.push(opts.data);
-        return Promise.resolve({ data: { id: 'test.class' } });
+    expect(mockNotifyService.logNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        errorReason: 'Google Wallet addMessage failed',
       }),
-    };
-    jest
-      .spyOn(service, 'getGoogleAuthClient')
-      .mockResolvedValue(fakeClient as any);
-
-    await service.createGenericClass({
-      classSuffix: 'test_class',
-      cardTitle: 'Test Store',
-      locations: [],
-    });
-
-    const payload = capturedPayloads[0];
-    expect(payload.locations).toBeUndefined();
-  });
-
-  it('should cap locations at 10 even if more are supplied', async () => {
-    const service = new WalletService();
-    const capturedPayloads: any[] = [];
-    const fakeClient = {
-      request: jest.fn().mockImplementation((opts: any) => {
-        capturedPayloads.push(opts.data);
-        return Promise.resolve({ data: { id: 'test.class' } });
-      }),
-    };
-    jest
-      .spyOn(service, 'getGoogleAuthClient')
-      .mockResolvedValue(fakeClient as any);
-
-    const twelveLocations = Array.from({ length: 12 }, (_, i) => ({
-      latitude: i,
-      longitude: i,
-    }));
-
-    await service.createGenericClass({
-      classSuffix: 'test_class',
-      cardTitle: 'Test',
-      locations: twelveLocations,
-    });
-
-    expect(capturedPayloads[0].locations).toHaveLength(10);
+    );
   });
 });

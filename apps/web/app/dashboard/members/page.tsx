@@ -4,9 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Users, Search, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/Button';
+import { Search } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { Tenant, Member } from '@linearcard/types';
 
@@ -52,22 +50,12 @@ export default function MembersPage() {
   });
 
   return (
-    <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
-      <div className="mb-8 flex justify-between items-center">
-        <Button asChild variant="secondary" size="sm">
-          <Link href="/dashboard">
-            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-          </Link>
-        </Button>
-      </div>
-
-      <div className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div className="min-h-full pb-12">
+      <div className="max-w-[1600px] mx-auto space-y-6">
+        <div className="border-b border-border-subtle pb-4 mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-ink-dark tracking-tight mb-2 flex items-center gap-3">
-            <Users className="w-8 h-8 text-brand-blue" />
-            Members List
-          </h1>
-          <p className="text-sm text-ink-secondary">View and search through all enrolled members.</p>
+          <h2 className="text-xl font-medium text-ink-dark tracking-tight">Members</h2>
+          <p className="text-sm text-ink-secondary mt-1">View and search through all enrolled members.</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <div className="flex flex-col items-start gap-1 w-full sm:w-auto">
@@ -149,6 +137,7 @@ export default function MembersPage() {
           </table>
         </div>
       </Card>
-    </main>
+      </div>
+    </div>
   );
 }

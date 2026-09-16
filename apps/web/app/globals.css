@@ -69,6 +69,18 @@
     background-color: var(--color-brand-blue);
     color: #ffffff;
   }
+
+  /* Disable spin buttons for Chrome, Safari, Edge, Opera */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Disable spin buttons for Firefox */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
 }
 
 /* Custom Scrollbar */
