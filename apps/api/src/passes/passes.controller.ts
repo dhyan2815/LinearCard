@@ -761,4 +761,90 @@ export class PassesController {
       });
     }
   }
+
+  @Post('webhooks/external-order')
+  async postExternalOrderWebhook(@Req() req: Request, @Res() res: Response) {
+    try {
+      const { phone, amount, action, orderId, tenantId } = req.body;
+
+      if (!phone || !tenantId) {
+        return res
+          .status(400)
+          .json({ success: false, error: 'phone and tenantId are required' });
+      }
+      if (
+        amount === undefined ||
+        amount === null ||
+        isNaN(Number(amount)) ||
+        Number(amount) <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: 'Order amount must be greater than ₹0.',
+        });
+      }
+      if (action !== 'award' && action !== 'redeem') {
+        return res.status(400).json({
+          success: false,
+          error: "Action must be either 'award' or 'redeem'.",
+        });
+      }
+
+      // 1. Find the member and their pass using the phone and tenantId
+      // Note: This endpoint is unauthenticated for demo purposes.
+      const { data: pass } = await this.supabaseService.client
+        .from('Pass')
+        .select('id, Member!inner(phone)')
+        .eq('tenantId', tenantId)
+        .eq('Member.phone', phone)
+        .single();
+
+      if (!pass) {
+        return res.status(404).json({
+          success: false,
+          error: 'No active pass found for this phone number and tenant.',
+        });
+      }
+
+      // 2. Process the transaction
+      const result = await this.walletService.processOrderTransaction(
+        pass.id,
+        amount,
+        action,
+        'webhook',
+        orderId,
+        'pos-external',
+        tenantId,
+      );
+
+      // 3. Dispatch WhatsApp Receipt (since manual POS triggers it manually or we want it for the demo)
+      // `processOrderTransaction` handles Wallet Push. We will manually handle WhatsApp here to match legacy behavior.
+      // We need to fetch full pass details to send the message properly.
+      const { data: fullPass } = await this.supabaseService.client
+        .from('Pass')
+        .select('*, Member(*), Tenant(*)')
+        .eq('id', pass.id)
+        .single();
+        
+      if (fullPass && fullPass.Member?.phone) {
+        this.whatsappService.sendRedemptionReceiptWithLog(
+          fullPass.Member.phone,
+          result.newBalance.toString(),
+          fullPass.Tenant?.name || 'LinearCard',
+          { tenantId: fullPass.tenantId, memberId: fullPass.memberId }
+        ).catch(err => console.error('WhatsApp webhook receipt failed (non-fatal):', err));
+      }
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      console.error('API Error processing external POS webhook:', error);
+      const statusCode =
+        error.status ||
+        (typeof error.getStatus === 'function' ? error.getStatus() : 500);
+      return res.status(statusCode).json({
+        success: false,
+        error: error.message || 'Failed to process external POS webhook',
+      });
+    }
+  }
 }

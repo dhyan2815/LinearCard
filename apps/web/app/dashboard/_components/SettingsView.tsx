@@ -88,7 +88,7 @@ export function SettingsView() {
         <div className="space-y-1">
           <Label>Endpoint URL</Label>
           <Input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
-            placeholder="https://your-server.com/webhook/linearcard" />
+            placeholder="http://127.0.0.1:3001/passes/webhooks/external-order" />
         </div>
         <p className="text-xs text-ink-muted">LinearCard will POST signed events here.</p>
         {msg && <p className={`text-sm font-medium ${msg.startsWith('Error') ? 'text-red-500' : 'text-emerald-400'}`}>{msg}</p>}
