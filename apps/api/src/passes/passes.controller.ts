@@ -606,6 +606,7 @@ export class PassesController {
       );
 
       return res.status(200).json({
+        success: true,
         statusCode: 200,
         message: 'Promotional message sent',
         messageId: result.messageId,
@@ -615,6 +616,7 @@ export class PassesController {
 
       const statusCode = error.status || 500;
       return res.status(statusCode).json({
+        success: false,
         statusCode,
         error: error.message || 'Failed to send promotional message',
       });
@@ -706,58 +708,6 @@ export class PassesController {
       return res.status(statusCode).json({
         success: false,
         error: error.message || 'Failed to process order transaction',
-      });
-    }
-  }
-
-  @Post('webhooks/mock')
-  async postMockWebhook(@Req() req: Request, @Res() res: Response) {
-    try {
-      const { pass_id, passId, amount, action, order_id, orderId } = req.body;
-      const targetPassId = pass_id || passId;
-      const targetOrderId = order_id || orderId;
-
-      if (!targetPassId) {
-        return res
-          .status(400)
-          .json({ success: false, error: 'pass_id (or passId) is required' });
-      }
-      if (
-        amount === undefined ||
-        amount === null ||
-        isNaN(Number(amount)) ||
-        Number(amount) <= 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          error: 'Order amount must be greater than ₹0.',
-        });
-      }
-      if (action !== 'award' && action !== 'redeem') {
-        return res.status(400).json({
-          success: false,
-          error: "Action must be either 'award' or 'redeem'.",
-        });
-      }
-
-      const result = await this.walletService.processOrderTransaction(
-        targetPassId,
-        amount,
-        action,
-        'webhook',
-        targetOrderId,
-        'pos-simulator',
-      );
-
-      return res.status(200).json(result);
-    } catch (error: any) {
-      console.error('API Error processing mock POS webhook:', error);
-      const statusCode =
-        error.status ||
-        (typeof error.getStatus === 'function' ? error.getStatus() : 500);
-      return res.status(statusCode).json({
-        success: false,
-        error: error.message || 'Failed to process POS webhook',
       });
     }
   }
