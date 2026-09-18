@@ -140,7 +140,8 @@ export class WalletService {
     // 2. VERCEL_URL (injected automatically in preview serverless environments)
     // 3. Localhost (development)
     const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3001');
+      (process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL}` : 
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3001'));
 
     classPayload.callbackOptions = {
       url: `${apiUrl}/passes/webhooks/google-wallet`

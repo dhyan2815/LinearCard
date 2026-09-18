@@ -17,29 +17,30 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
 
   // Resolve base API URL dynamically for Vercel Previews (Server-side & statically defined Client-side)
   let baseApiUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (!baseApiUrl && process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview' && process.env.NEXT_PUBLIC_VERCEL_URL) {
-    // e.g. linearcard-git-feat-abc-team.vercel.app -> linearcard-api-git-feat-abc-team.vercel.app
-    baseApiUrl = `https://${process.env.NEXT_PUBLIC_VERCEL_URL.replace(/^linearcard(-git)?/, 'linearcard-api$1')}`;
-  }
-
+  
   if (isServer) {
+    if (!baseApiUrl && process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview') {
+      // Use NEXT_PUBLIC_VERCEL_BRANCH_URL to get the alias (e.g. project-git-branch.vercel.app)
+      // instead of NEXT_PUBLIC_VERCEL_URL which gives the unique deployment hash that differs between projects.
+      const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL || process.env.NEXT_PUBLIC_VERCEL_URL;
+      if (vercelUrl) {
+        baseApiUrl = `https://${vercelUrl.replace(/^linearcard(-git)?/, 'linearcard-api$1')}`;
+      }
+    }
     // On the server, we use the environment variable, dynamic preview URL, or fallback to localhost
     fullUrl = `${(baseApiUrl || 'http://localhost:3001').replace(/\/+$/, '')}${cleanEndpoint}`;
   } else {
-    // In the browser, if an explicit absolute URL is provided, use it
-    if (baseApiUrl && baseApiUrl.startsWith('http')) {
+    // In the browser, ALWAYS dynamically resolve based on window.location.hostname to avoid stale hash URLs
+    const hostname = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
+    
+    if (hostname.includes('.vercel.app')) {
+      const apiHostname = hostname.replace(/^linearcard(-git)?/, 'linearcard-api$1');
+      fullUrl = `${window.location.protocol}//${apiHostname}${cleanEndpoint}`;
+    } else if (baseApiUrl && baseApiUrl.startsWith('http')) {
+      // Custom domains (production) will use the static API URL since they don't include .vercel.app
       fullUrl = `${baseApiUrl.replace(/\/+$/, '')}${cleanEndpoint}`;
     } else {
-      // Dynamic fallback based on the current window location
-      const hostname = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-      
-      // If we are unexpectedly in a preview browser environment without the env var, fallback to hostname rewriting
-      if (hostname.includes('.vercel.app')) {
-        const apiHostname = hostname.replace(/^linearcard(-git)?/, 'linearcard-api$1');
-        fullUrl = `${window.location.protocol}//${apiHostname}${cleanEndpoint}`;
-      } else {
-        fullUrl = `${window.location.protocol}//${hostname}:3001${cleanEndpoint}`;
-      }
+      fullUrl = `${window.location.protocol}//${hostname}:3001${cleanEndpoint}`;
     }
   }
   
