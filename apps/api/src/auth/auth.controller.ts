@@ -45,7 +45,7 @@ export class AuthController {
         );
       }
 
-      const otp = '1234';
+      const otp = Math.floor(1000 + Math.random() * 9000).toString();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       let brandName = 'LinearCard';
 
@@ -250,7 +250,7 @@ export class AuthController {
         );
       }
 
-      const otp = '1234';
+      const otp = Math.floor(1000 + Math.random() * 9000).toString();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
       const { error: insertError } = await this.supabaseService.client
@@ -299,36 +299,32 @@ export class AuthController {
           .order('createdAt', { ascending: false })
           .limit(1);
 
-      if (otp !== '1234') {
-        if (otpError || !otpSessions || otpSessions.length === 0) {
-          throw new HttpException(
-            'No active OTP found. Please request a new code.',
-            HttpStatus.UNAUTHORIZED,
-          );
-        }
-        const otpSession = otpSessions[0];
-        if (new Date().toISOString() > otpSession.expiresAt) {
-          throw new HttpException(
-            'OTP has expired. Please request a new code.',
-            HttpStatus.UNAUTHORIZED,
-          );
-        }
-        if (!this.otpService.verifyOtp(otp, otpSession.otpHash)) {
-          throw new HttpException(
-            'Invalid code. Please try again.',
-            HttpStatus.UNAUTHORIZED,
-          );
-        }
-        await this.supabaseService.client
-          .from('OtpSession')
-          .update({ consumedAt: new Date().toISOString() })
-          .eq('id', otpSession.id);
-      } else if (otpSessions && otpSessions.length > 0) {
-        await this.supabaseService.client
-          .from('OtpSession')
-          .update({ consumedAt: new Date().toISOString() })
-          .eq('id', otpSessions[0].id);
+      if (otpError || !otpSessions || otpSessions.length === 0) {
+        throw new HttpException(
+          'No active OTP found. Please request a new code.',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
+
+      const otpSession = otpSessions[0];
+      if (new Date().toISOString() > otpSession.expiresAt) {
+        throw new HttpException(
+          'OTP has expired. Please request a new code.',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      if (!this.otpService.verifyOtp(otp, otpSession.otpHash)) {
+        throw new HttpException(
+          'Invalid code. Please try again.',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      await this.supabaseService.client
+        .from('OtpSession')
+        .update({ consumedAt: new Date().toISOString() })
+        .eq('id', otpSession.id);
 
       // Check or create admin
       let { data: admin } = await this.supabaseService.client

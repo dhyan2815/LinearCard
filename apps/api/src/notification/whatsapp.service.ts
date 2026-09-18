@@ -13,15 +13,9 @@ export class WhatsappService {
   }
 
   private async wahaPost(endpoint: string, body: object) {
-    // WAHA temporarily disabled per RM due to unstable sessions causing errors
-    this.logger.log(
-      `[WAHA TEMPORARILY DISABLED] Skipping message to ${endpoint}. Payload: ${JSON.stringify(body)}`,
-    );
-    return { success: true };
-
     const WAHA_BASE_URL = process.env.WAHA_BASE_URL;
     const WAHA_API_KEY = process.env.WAHA_API_KEY;
-    const WAHA_SESSION = process.env.WAHA_SESSION ?? 'default';
+    const WAHA_SESSION = process.env.WAHA_SESSION;
 
     // Gracefully handle missing base URL so the app can still run in offline/dev modes
     if (!WAHA_BASE_URL) {
