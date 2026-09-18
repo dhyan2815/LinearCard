@@ -135,6 +135,11 @@ export class WalletService {
       };
     }
 
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:3001';
+    classPayload.callbackOptions = {
+      url: `${apiUrl}/passes/webhooks/google-wallet`
+    };
+
     const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass`;
 
     try {

@@ -797,4 +797,53 @@ export class PassesController {
       });
     }
   }
+
+  @Post('webhooks/google-wallet')
+  async postGoogleWalletWebhook(@Req() req: Request, @Res() res: Response) {
+    try {
+      const token = typeof req.body === 'string' ? req.body : req.body?.signedMessage;
+      if (!token) {
+        return res.status(400).send('Missing signedMessage');
+      }
+
+      // We decode the JWS payload. For production, signature verification with Google's public keys is required.
+      const decoded = jwt.decode(token, { json: true }) as any;
+      if (!decoded) {
+        return res.status(400).send('Invalid JWS');
+      }
+
+      const { objectId, eventType } = decoded;
+      
+      // Process only save events ('save', 'SAVE', or sometimes 'add'/'ADD')
+      const typeStr = (eventType || '').toLowerCase();
+      if (typeStr !== 'save' && typeStr !== 'add') {
+        return res.status(200).send('Ignored event type');
+      }
+
+      if (!objectId) {
+        return res.status(400).send('Missing objectId');
+      }
+
+      // Look up the pass by fullPassId (objectId in Google Wallet)
+      const { data: pass } = await this.supabaseService.client
+        .from('Pass')
+        .select('*, Member(*), Tenant(*)')
+        .eq('fullPassId', objectId)
+        .single();
+
+      if (pass && pass.Member?.phone) {
+        await this.whatsappService.sendWalletSaveConfirmationWithLog(
+          pass.Member.phone,
+          pass.Tenant?.name || 'LinearCard',
+          { tenantId: pass.tenantId, memberId: pass.memberId }
+        ).catch(err => console.error('WhatsApp save confirmation failed (non-fatal):', err));
+      }
+
+      return res.status(200).send('OK');
+    } catch (error: any) {
+      console.error('API Error processing google wallet webhook:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
 }
+
