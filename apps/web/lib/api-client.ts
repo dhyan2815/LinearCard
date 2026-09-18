@@ -14,18 +14,32 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
   const isServer = typeof window === 'undefined';
   
   let fullUrl: string;
+
+  // Resolve base API URL dynamically for Vercel Previews (Server-side & statically defined Client-side)
+  let baseApiUrl = process.env.NEXT_PUBLIC_API_URL;
+  
   if (isServer) {
-    // On the server, we use the environment variable or fallback to localhost
-    const serverApiUrl = process.env.NEXT_PUBLIC_API_URL;
-    fullUrl = `${serverApiUrl.replace(/\/+$/, '')}${cleanEndpoint}`;
+    if (!baseApiUrl && process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview') {
+      // Use NEXT_PUBLIC_VERCEL_BRANCH_URL to get the alias (e.g. project-git-branch.vercel.app)
+      // instead of NEXT_PUBLIC_VERCEL_URL which gives the unique deployment hash that differs between projects.
+      const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL || process.env.NEXT_PUBLIC_VERCEL_URL;
+      if (vercelUrl) {
+        baseApiUrl = `https://${vercelUrl.replace(/^linearcard(-git)?/, 'linearcard-api$1')}`;
+      }
+    }
+    // On the server, we use the environment variable, dynamic preview URL, or fallback to localhost
+    fullUrl = `${(baseApiUrl || 'http://localhost:3001').replace(/\/+$/, '')}${cleanEndpoint}`;
   } else {
-    // In the browser, if an explicit absolute URL is provided, use it
-    if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.startsWith('http')) {
-      fullUrl = `${process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '')}${cleanEndpoint}`;
+    // In the browser, ALWAYS dynamically resolve based on window.location.hostname to avoid stale hash URLs
+    const hostname = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
+    
+    if (hostname.includes('.vercel.app')) {
+      const apiHostname = hostname.replace(/^linearcard(-git)?/, 'linearcard-api$1');
+      fullUrl = `${window.location.protocol}//${apiHostname}${cleanEndpoint}`;
+    } else if (baseApiUrl && baseApiUrl.startsWith('http')) {
+      // Custom domains (production) will use the static API URL since they don't include .vercel.app
+      fullUrl = `${baseApiUrl.replace(/\/+$/, '')}${cleanEndpoint}`;
     } else {
-      // Dynamic fallback: use current hostname but port 3001 for NestJS
-      // If hostname is localhost, use 127.0.0.1 to avoid IPv6 issues on Windows
-      const hostname = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
       fullUrl = `${window.location.protocol}//${hostname}:3001${cleanEndpoint}`;
     }
   }

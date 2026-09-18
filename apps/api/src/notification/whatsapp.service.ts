@@ -158,4 +158,35 @@ export class WhatsappService {
       throw err;
     }
   }
+
+  public async sendWalletSaveConfirmationWithLog(
+    phone: string,
+    brandName: string,
+    opts: { tenantId: string; memberId?: string },
+  ): Promise<void> {
+    const text = `🎉 Success! Your ${brandName} card has been securely saved to your Google Wallet. You can now access it anytime to check your balance or scan at the store.`;
+    try {
+      await this.wahaPost('/api/sendText', {
+        chatId: this.toWahaId(phone),
+        text,
+      });
+      await this.notifyService.logNotification({
+        tenantId: opts.tenantId,
+        memberId: opts.memberId,
+        type: 'wallet_save_confirmation' as any,
+        channel: 'whatsapp',
+        status: 'sent',
+      });
+    } catch (err: any) {
+      await this.notifyService.logNotification({
+        tenantId: opts.tenantId,
+        memberId: opts.memberId,
+        type: 'wallet_save_confirmation' as any,
+        channel: 'whatsapp',
+        status: 'failed',
+        errorReason: err?.message || String(err),
+      });
+      throw err;
+    }
+  }
 }
