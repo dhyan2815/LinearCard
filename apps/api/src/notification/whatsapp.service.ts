@@ -5,7 +5,7 @@ import { NotifyService } from './notify.service';
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
 
-  constructor(private readonly notifyService: NotifyService) {}
+  constructor(private readonly notifyService: NotifyService) { }
 
   private toWahaId(phone: string): string {
     // Convert E.164 (+919876543210) -> Waha format (919876543210@c.us)
@@ -78,7 +78,7 @@ export class WhatsappService {
   ) {
     return this.wahaPost('/api/sendText', {
       chatId: this.toWahaId(phone),
-      text: `🎉 Welcome, ${memberName}!\n\nYour *${brandName}* loyalty pass is ready.\n\nTap to add it to Google Wallet:\n${walletUrl}\n\n_Powered by LinearCard_`,
+      text: `🎉 Welcome, ${memberName}!\n\nYour *${brandName}* card has been securely saved to your Google Wallet.\nYou can now access it anytime to check your balance or scan at the store.\n\n_*Powered by LinearCard*_`,
     });
   }
 
