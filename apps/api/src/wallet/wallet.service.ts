@@ -888,11 +888,12 @@ export class WalletService {
     // 2. Insert immutable AuditLog entry
     try {
       await this.supabaseService.client.from('AuditLog').insert({
+        tenantId: pass.tenantId,
         memberId: pass.memberId,
-        passId: pass.id,
-        adminId: adminId || 'system',
+        actor: adminId || 'system',
         action: 'order_transaction',
         details: {
+          passId: pass.id,
           transactionType,
           source,
           orderId: orderId || null,

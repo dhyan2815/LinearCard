@@ -623,6 +623,97 @@ export class PassesController {
     }
   }
 
+  @Get('scan-history')
+  async getScanHistory(@Req() req: Request, @Res() res: Response) {
+    try {
+      const rawToken = extractAdminToken(req);
+      if (!rawToken) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Missing or invalid authentication',
+        });
+      }
+
+      let authenticatedTenantId = null;
+      try {
+        const decoded: any = jwt.verify(rawToken, JWT_SECRET);
+        authenticatedTenantId = decoded.tenantId;
+      } catch (err) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Invalid token',
+        });
+      }
+
+      if (!authenticatedTenantId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized: No tenant context found',
+        });
+      }
+
+      const { timeFilter } = req.query; // 'today', 'this_week', 'this_month', 'last_month', 'all'
+      
+      let query = this.supabaseService.client
+        .from('AuditLog')
+        .select('*, Member(name, phone)')
+        .eq('action', 'order_transaction')
+        .eq('tenantId', authenticatedTenantId)
+        .order('createdAt', { ascending: false })
+        .limit(100);
+
+      const now = new Date();
+      if (timeFilter && timeFilter !== 'all') {
+        let startDate: Date;
+        let endDate = new Date(now);
+
+        switch (timeFilter) {
+          case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+          case 'this_week':
+            startDate = new Date(now);
+            startDate.setDate(now.getDate() - now.getDay()); // Sunday as start of week
+            startDate.setHours(0, 0, 0, 0);
+            break;
+          case 'this_month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+          case 'last_month':
+            startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+            break;
+          default:
+            startDate = null; // 'all' or unknown falls back to no filter
+        }
+
+        if (startDate) {
+          query = query.gte('createdAt', startDate.toISOString());
+          if (timeFilter === 'last_month') {
+            query = query.lte('createdAt', endDate.toISOString());
+          }
+        }
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      return res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      console.error('API Error fetching scan history:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to fetch scan history',
+      });
+    }
+  }
+
   @Post('process-order')
   async postProcessOrder(@Req() req: Request, @Res() res: Response) {
     try {
@@ -698,6 +789,24 @@ export class PassesController {
         authenticatedAdminId,
         staffTenantId,
       );
+
+      // Dispatch WhatsApp Receipt for /scan manual transactions
+      if (result.transaction && result.transaction.passId) {
+        const { data: fullPass } = await this.supabaseService.client
+          .from('Pass')
+          .select('*, Member(*), Tenant(*)')
+          .eq('id', result.transaction.passId)
+          .single();
+
+        if (fullPass && fullPass.Member?.phone) {
+          this.whatsappService.sendRedemptionReceiptWithLog(
+            fullPass.Member.phone,
+            result.newBalance.toString() + ' Pts',
+            fullPass.Tenant?.name || 'LinearCard',
+            { tenantId: fullPass.tenantId, memberId: fullPass.memberId }
+          ).catch(err => console.error('WhatsApp receipt failed (non-fatal):', err));
+        }
+      }
 
       return res.status(200).json(result);
     } catch (error: any) {

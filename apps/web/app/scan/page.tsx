@@ -24,6 +24,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/api-client';
+import { ScanHistoryTable } from '@/components/ScanHistoryTable';
 
 interface PassData {
   memberName: string;
@@ -60,6 +61,7 @@ export default function ScanPage() {
   const [passData, setPassData] = useState<PassData | null>(null);
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
+  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   const [orderAmount, setOrderAmount] = useState('');
   const [orderId, setOrderId] = useState('');
@@ -150,6 +152,7 @@ export default function ScanPage() {
 
       setTransactionResult(data);
       setPassData((prev) => (prev ? { ...prev, balance: `${data.newBalance} Pts` } : null));
+      setHistoryRefresh((prev) => prev + 1);
 
       if (data.warning) {
         setWarning(data.warning);
@@ -569,6 +572,11 @@ export default function ScanPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Scan & Transaction History */}
+        <div className="mt-8">
+          <ScanHistoryTable refreshTrigger={historyRefresh} />
         </div>
       </main>
     </div>
