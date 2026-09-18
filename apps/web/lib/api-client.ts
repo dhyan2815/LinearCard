@@ -16,7 +16,7 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
   let fullUrl: string;
   if (isServer) {
     // On the server, we use the environment variable or fallback to localhost
-    const serverApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const serverApiUrl = process.env.NEXT_PUBLIC_API_URL;
     fullUrl = `${serverApiUrl.replace(/\/+$/, '')}${cleanEndpoint}`;
   } else {
     // In the browser, if an explicit absolute URL is provided, use it

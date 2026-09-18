@@ -21,7 +21,11 @@ const getEnv = (key: string) => {
   return match ? match[1].replace(/['"]/g, '').trim() : '';
 };
 
-const WAHA_BASE_URL = getEnv('WAHA_BASE_URL') || 'https://api-linearping.cmdev.cc/waha';
+const WAHA_BASE_URL = getEnv('WAHA_BASE_URL');
+if (!WAHA_BASE_URL) {
+  console.log(`\n\x1b[31m[ERROR]\x1b[0m WAHA_BASE_URL is missing from .env`);
+  process.exit(1);
+}
 const WAHA_API_KEY = getEnv('WAHA_API_KEY');
 let currentSession = getEnv('WAHA_SESSION');
 
