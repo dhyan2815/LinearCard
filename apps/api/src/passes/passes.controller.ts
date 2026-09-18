@@ -33,7 +33,7 @@ function resolveImageUrl(url?: string): string | undefined {
     return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
   }
   if (url.startsWith('/')) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace('-api', '')}` : 'http://localhost:3000');
     if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
       return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
     }
@@ -147,7 +147,7 @@ export class PassesController {
         // 5. Trigger WhatsApp delivery if reqed
         if (body.deliverWhatsapp && body.phone && passRecordId) {
           const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL;
+            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace('-api', '')}` : 'http://localhost:3000');
           const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
 
           this.whatsappService

@@ -146,7 +146,7 @@ export class TemplatesController {
         }
         if (url.startsWith('/')) {
           const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL;
+            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace('-api', '')}` : 'http://localhost:3000');
           if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
             return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
           }

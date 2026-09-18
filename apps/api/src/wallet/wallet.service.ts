@@ -135,7 +135,13 @@ export class WalletService {
       };
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:3001';
+    // Fallback order:
+    // 1. Explicit NEXT_PUBLIC_API_URL (set statically for production)
+    // 2. VERCEL_URL (injected automatically in preview serverless environments)
+    // 3. Localhost (development)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3001');
+
     classPayload.callbackOptions = {
       url: `${apiUrl}/passes/webhooks/google-wallet`
     };
