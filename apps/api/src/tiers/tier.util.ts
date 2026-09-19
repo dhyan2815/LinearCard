@@ -1,22 +1,23 @@
-export interface TierThreshold {
-  name: string;
-  min: number;
-}
+import type { Tier } from '@linearcard/types';
 
-export function computeTier(
-  balance: number,
-  thresholds: TierThreshold[],
-): string {
-  if (!thresholds || thresholds.length === 0) {
-    return 'Standard';
+/**
+ * Pure function: given a balance and a program's real `Tier` rows, returns
+ * the matching tier row (or null when no tiers are configured). Ranking is
+ * by `minPoints` — the highest tier whose `minPoints` the balance meets or
+ * exceeds wins. `sortOrder` is preserved on the row for callers/UI that need
+ * display order, but ranking itself always goes by `minPoints`.
+ */
+export function computeTier(balance: number, tiers: Tier[]): Tier | null {
+  if (!tiers || tiers.length === 0) {
+    return null;
   }
 
-  const sorted = [...thresholds].sort((a, b) => a.min - b.min);
+  const sorted = [...tiers].sort((a, b) => a.minPoints - b.minPoints);
 
-  let matched = sorted[0].name;
-  for (const threshold of sorted) {
-    if (balance >= threshold.min) {
-      matched = threshold.name;
+  let matched = sorted[0];
+  for (const tier of sorted) {
+    if (balance >= tier.minPoints) {
+      matched = tier;
     }
   }
   return matched;

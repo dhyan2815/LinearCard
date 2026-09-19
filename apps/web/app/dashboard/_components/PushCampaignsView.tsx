@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Label } from '@/components/ui/Label';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Alert } from '@/components/ui/Alert';
 import { apiClient } from '@/lib/api-client';
 
 export function PushCampaignsView({ tenantId }: { tenantId: string }) {
@@ -39,14 +40,8 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="border-b border-border-subtle pb-4 mb-4">
-        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Push Campaigns</h2>
-        <p className="text-sm text-ink-secondary mt-1">Broadcast marketing updates or pass notifications across WhatsApp and Wallet Push.</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card className="p-6 space-y-5 bg-surface-card border-border-subtle shadow-sm">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <Card className="p-6 space-y-5">
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Delivery Channel</Label>
             <div className="flex gap-2 mt-2">
@@ -67,19 +62,17 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
               placeholder={channel === 'whatsapp' ? 'e.g. Earn double points this weekend!' : 'e.g. Your pass has been updated.'}
               rows={4} className="w-full rounded-xl border border-border-subtle bg-canvas text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-blue resize-none placeholder:text-ink-muted mt-2" />
           </div>
-          {result && <p className="text-sm text-emerald-500 font-medium">✅ Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</p>}
-          {sendError && (
-            <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm flex items-center gap-2">
-              <span className="shrink-0">⚠</span> {sendError}
-            </div>
+          {result && (
+            <Alert variant="success">Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</Alert>
           )}
+          {sendError && <Alert variant="error">{sendError}</Alert>}
           <Button onClick={handleSend} disabled={!message.trim() || isSending || !tenantId} className="w-full">
             {isSending ? 'Sending Broadcast...' : 'Dispatch to All Members'}
           </Button>
         </Card>
 
         {logs.length > 0 && (
-          <Card className="p-6 bg-surface-card border-border-subtle shadow-sm flex flex-col h-full max-h-125">
+          <Card className="p-6 flex flex-col h-full max-h-125">
             <h3 className="text-base font-semibold text-ink-dark mb-4">Recent Broadcasts</h3>
             <div className="space-y-3 overflow-y-auto pr-2 flex-1">
               {logs.map((log: any) => (
@@ -108,7 +101,6 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
             </div>
           </Card>
         )}
-      </div>
     </div>
   );
 }

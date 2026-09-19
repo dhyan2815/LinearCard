@@ -4,13 +4,11 @@ import React from 'react';
 import { Sun, Moon } from 'lucide-react';
 
 export function ThemeToggle() {
-  const [theme, setTheme] = React.useState('dark');
-
-  React.useEffect(() => {
-    // Check initial theme from html tag
-    const isLight = document.documentElement.classList.contains('light');
-    setTheme(isLight ? 'light' : 'dark');
-  }, []);
+  // The blocking script in layout.tsx already set the html class before paint;
+  // just mirror it into state so this component's icon matches.
+  const [theme, setTheme] = React.useState(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('light') ? 'light' : 'dark'
+  );
 
   const toggleTheme = () => {
     // If the current theme is dark, switch to light mode and save preference
@@ -26,19 +24,6 @@ export function ThemeToggle() {
       setTheme('dark');
     }
   };
-
-  // Restore on mount
-  React.useEffect(() => {
-    const saved = localStorage.getItem('theme');
-    // Apply the saved theme preference on initial load
-    if (saved === 'light') {
-      document.documentElement.classList.add('light');
-      setTheme('light');
-    } else {
-      document.documentElement.classList.remove('light');
-      setTheme('dark');
-    }
-  }, []);
 
   return (
     <button

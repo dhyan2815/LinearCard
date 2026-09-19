@@ -1,17 +1,30 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(:not(.light) *));
+
 @theme {
   --color-canvas: #09090b;
   --color-surface-card: #18181b;
   --color-surface-bone: #18181b;
+  --color-surface: var(--color-surface-card);
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
   --color-border-subtle: rgba(255, 255, 255, 0.1);
   --color-border-strong: rgba(255, 255, 255, 0.2);
+  --color-scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --color-scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
   --color-brand-blue: #2b00ff;
   --color-brand-blue-hover: #1e00cc;
   --color-ink-dark: #f8fafc;
   --color-ink-secondary: #94a3b8;
   --color-ink-muted: #64748b;
-  
+
+  --color-success: #10b981;
+  --color-success-surface: rgba(16, 185, 129, 0.1);
+  --color-warning: #f59e0b;
+  --color-warning-surface: rgba(245, 158, 11, 0.1);
+  --color-info: #2b00ff;
+  --color-info-surface: rgba(43, 0, 255, 0.1);
+
   --color-background: var(--color-canvas);
   --color-foreground: var(--color-ink-dark);
   --color-card: var(--color-surface-card);
@@ -40,23 +53,26 @@
   --font-mono: var(--font-geist-mono), monospace;
 }
 
+:root {
+  --radius: 0.75rem;
+}
+
+.light {
+  color-scheme: light;
+  --color-canvas: #f8fafc;
+  --color-surface-card: #ffffff;
+  --color-surface-bone: #ffffff;
+  --color-surface-hover: rgba(0, 0, 0, 0.04);
+  --color-border-subtle: rgba(0, 0, 0, 0.1);
+  --color-border-strong: rgba(0, 0, 0, 0.2);
+  --color-scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --color-scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
+  --color-ink-dark: #0f172a;
+  --color-ink-secondary: #475569;
+  --color-ink-muted: #94a3b8;
+}
+
 @layer base {
-  :root {
-    --radius: 0.75rem;
-  }
-
-  .light {
-    color-scheme: light;
-    --color-canvas: #f8fafc;
-    --color-surface-card: #ffffff;
-    --color-surface-bone: #ffffff;
-    --color-border-subtle: rgba(0, 0, 0, 0.1);
-    --color-border-strong: rgba(0, 0, 0, 0.2);
-    --color-ink-dark: #0f172a;
-    --color-ink-secondary: #475569;
-    --color-ink-muted: #94a3b8;
-  }
-
   body {
     background-color: var(--color-canvas);
     color: var(--color-ink-dark);
@@ -94,10 +110,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--color-scrollbar-thumb-hover);
 }

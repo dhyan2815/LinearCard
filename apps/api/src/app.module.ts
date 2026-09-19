@@ -6,6 +6,7 @@ import { MembersModule } from './members/members.module';
 import { TemplatesModule } from './templates/templates.module';
 import { TenantModule } from './tenant/tenant.module';
 import { AuthModule } from './auth/auth.module';
+import { DevelopersModule } from './developers/developers.module';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -26,6 +27,7 @@ import { NotificationModule } from './notification/notification.module';
     DashboardModule,
     SettingsModule,
     NotificationsModule,
+    DevelopersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

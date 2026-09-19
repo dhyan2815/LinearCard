@@ -18,6 +18,7 @@ export function DashboardSidebar() {
     { id: 'live-activity', path: '/dashboard/live-activity', label: 'Live Activity', icon: <Zap className="w-4 h-4" /> },
     { id: 'push-campaigns', path: '/dashboard/push-campaigns', label: 'Push Campaigns', icon: <Bell className="w-4 h-4" /> },
     { id: 'members', path: '/dashboard/members', label: 'Members', icon: <Users className="w-4 h-4" /> },
+    { id: 'developers', path: '/dashboard/developers', label: 'Developers', icon: <Terminal className="w-4 h-4" /> },
     { id: 'settings', path: '/dashboard/settings', label: 'Settings', icon: <Settings2 className="w-4 h-4" /> },
   ] as const;
 

@@ -8,6 +8,7 @@ import { Plus, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
+import { StoreLocationEntry } from './StoreLocationEntry';
 
 const COLOR_PALETTE = [
   { name: 'Obsidian', hex: '#18181B' },
@@ -58,18 +59,31 @@ export function TemplateWorkspace({
   setSavedTemplateId,
   setTemplateStatus,
   currentTenant,
-  selectedTenantId
+  selectedTenantId,
+  passCount = 0
 }: any) {
+  // Any design edit invalidates whatever is currently published (or makes an
+  // unsaved template as-yet-unpublished), so every mutation routes through
+  // here to re-enable the Publish button — previously only the archetype
+  // buttons did this, so a colour-only change couldn't be republished.
+  const updateDesignData = (updater: any) => {
+    setDesignData((prev: any) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      return next;
+    });
+    setTemplateStatus((prev: any) => (prev === 'published' ? 'draft' : prev));
+  };
+
   const addRow = () => {
     if (designData.rows.length >= 3) return;
-    setDesignData({
+    updateDesignData({
       ...designData,
       rows: [...designData.rows, { id: `row${Date.now()}`, columns: [{ key: generateFieldKey(), header: 'New Field', body: 'Value' }] }]
     });
   };
 
   const removeRow = (rowId: string) => {
-    setDesignData({ ...designData, rows: designData.rows.filter((r: any) => r.id !== rowId) });
+    updateDesignData({ ...designData, rows: designData.rows.filter((r: any) => r.id !== rowId) });
   };
 
   const addColumn = (rowId: string) => {
@@ -79,7 +93,7 @@ export function TemplateWorkspace({
       }
       return r;
     });
-    setDesignData({ ...designData, rows: newRows });
+    updateDesignData({ ...designData, rows: newRows });
   };
 
   const updateColumn = (rowId: string, colIndex: number, field: 'header' | 'body', value: string) => {
@@ -91,7 +105,7 @@ export function TemplateWorkspace({
       }
       return r;
     });
-    setDesignData({ ...designData, rows: newRows });
+    updateDesignData({ ...designData, rows: newRows });
   };
 
   const removeColumn = (rowId: string, colIndex: number) => {
@@ -103,13 +117,13 @@ export function TemplateWorkspace({
       }
       return r;
     });
-    setDesignData({ ...designData, rows: newRows });
+    updateDesignData({ ...designData, rows: newRows });
   };
 
   const tierThresholds: Array<{ name: string; min: number }> = designData.tierThresholds || [];
 
   const addTier = () => {
-    setDesignData({ ...designData, tierThresholds: [...tierThresholds, { name: '', min: 0 }] });
+    updateDesignData({ ...designData, tierThresholds: [...tierThresholds, { name: '', min: 0 }] });
   };
 
   const updateTier = (
@@ -122,11 +136,40 @@ export function TemplateWorkspace({
       ...next[index],
       [field]: field === 'min' ? Number(value) || 0 : value,
     };
-    setDesignData({ ...designData, tierThresholds: next });
+    updateDesignData({ ...designData, tierThresholds: next });
   };
 
   const removeTier = (index: number) => {
-    setDesignData({ ...designData, tierThresholds: tierThresholds.filter((_, i) => i !== index) });
+    updateDesignData({ ...designData, tierThresholds: tierThresholds.filter((_, i) => i !== index) });
+  };
+
+  const storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }> =
+    designData.storeLocations || [];
+
+  const addLocation = () => {
+    if (storeLocations.length >= 10) return;
+    updateDesignData({
+      ...designData,
+      storeLocations: [...storeLocations, { latitude: '', longitude: '', label: '' }],
+    });
+  };
+
+  const updateLocation = (
+    index: number,
+    fieldOrUpdates: 'latitude' | 'longitude' | 'label' | Record<string, string>,
+    value?: string,
+  ) => {
+    const next = [...storeLocations];
+    if (typeof fieldOrUpdates === 'string') {
+      next[index] = { ...next[index], [fieldOrUpdates]: value };
+    } else {
+      next[index] = { ...next[index], ...fieldOrUpdates };
+    }
+    updateDesignData({ ...designData, storeLocations: next });
+  };
+
+  const removeLocation = (index: number) => {
+    updateDesignData({ ...designData, storeLocations: storeLocations.filter((_, i) => i !== index) });
   };
 
   const handleSaveDraft = async () => {
@@ -139,6 +182,7 @@ export function TemplateWorkspace({
             archetype: designData.archetype,
             fieldRows: designData.rows,
             tierThresholds,
+            storeLocations,
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
@@ -156,6 +200,7 @@ export function TemplateWorkspace({
             archetype: designData.archetype,
             fieldRows: designData.rows,
             tierThresholds,
+            storeLocations,
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
@@ -187,6 +232,7 @@ export function TemplateWorkspace({
             classSuffix: designData.classSuffix,
             fieldRows: designData.rows,
             tierThresholds,
+            storeLocations,
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
@@ -203,6 +249,7 @@ export function TemplateWorkspace({
             archetype: designData.archetype,
             fieldRows: designData.rows,
             tierThresholds,
+            storeLocations,
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
@@ -224,11 +271,36 @@ export function TemplateWorkspace({
     });
   };
 
+  const handleResyncPasses = async () => {
+    if (!savedTemplateId) return;
+    const resyncPromise = async () => {
+      const data = await apiClient(`/templates/${savedTemplateId}/resync-passes`, {
+        method: 'POST',
+      });
+      if (!data.success) throw new Error(data.error || 'Failed to resync passes');
+      return data;
+    };
+
+    toast.promise(resyncPromise(), {
+      loading: 'Pushing design to existing passes...',
+      success: (data: any) => `Updated ${data.succeeded}/${data.total} existing passes.`,
+      error: (err: any) => err.message || 'Resync failed'
+    });
+  };
+
   return (
     <div className="flex flex-col gap-8 w-full max-w-3xl">
-      <div className="border-b border-border-subtle pb-4">
-        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Template Designer</h2>
-        <p className="text-sm text-ink-secondary mt-1">Design the core structure of your Google Wallet!</p>
+      <div className="border-b border-border-subtle pb-4 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-medium text-ink-dark tracking-tight">Template Designer</h2>
+          <p className="text-sm text-ink-secondary mt-1">Design the core structure of your Google Wallet!</p>
+        </div>
+        <div className="shrink-0 inline-flex items-center rounded-lg border border-border-subtle bg-surface-card p-1 text-xs font-medium">
+          <span className="px-3 py-1.5 rounded-md bg-brand-blue text-white">Google</span>
+          <span className="px-3 py-1.5 rounded-md text-ink-muted cursor-not-allowed" title="Coming soon">
+            Apple <span className="text-[10px]">(Coming soon)</span>
+          </span>
+        </div>
       </div>
 
       {origin && (
@@ -268,7 +340,7 @@ export function TemplateWorkspace({
               </span>
             )}
           </Label>
-          <Input type="text" value={designData.cardTitle} onChange={(e) => setDesignData({...designData, cardTitle: e.target.value})} className="mt-2" required/>
+          <Input type="text" value={designData.cardTitle} onChange={(e) => updateDesignData({...designData, cardTitle: e.target.value})} className="mt-2" required/>
         </div>
 
         <div className="space-y-2">
@@ -301,11 +373,11 @@ export function TemplateWorkspace({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Logo Asset URL</Label>
-            <Input type="text" value={designData.logoUrl} onChange={(e) => setDesignData({...designData, logoUrl: e.target.value})} placeholder="https://..." className="mt-1 font-mono text-sm"/>
+            <Input type="text" value={designData.logoUrl} onChange={(e) => updateDesignData({...designData, logoUrl: e.target.value})} placeholder="https://..." className="mt-1 font-mono text-sm"/>
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Hero Cover URL</Label>
-            <Input type="text" value={designData.heroImageUrl} onChange={(e) => setDesignData({...designData, heroImageUrl: e.target.value})} placeholder="https://..." className="mt-1 font-mono text-sm"/>
+            <Input type="text" value={designData.heroImageUrl} onChange={(e) => updateDesignData({...designData, heroImageUrl: e.target.value})} placeholder="https://..." className="mt-1 font-mono text-sm"/>
           </div>
         </div>
 
@@ -315,7 +387,7 @@ export function TemplateWorkspace({
             {COLOR_PALETTE.map((c) => (
               <button 
                 key={c.hex} type="button" title={c.name}
-                onClick={() => setDesignData({...designData, hexBackgroundColor: c.hex})} 
+                onClick={() => updateDesignData({...designData, hexBackgroundColor: c.hex})}
                 className={`w-8 h-8 rounded-full border-2 transition-all ${designData.hexBackgroundColor === c.hex ? 'border-white dark:border-zinc-300 scale-110 shadow-sm' : 'border-transparent opacity-60 hover:scale-105 hover:opacity-100'}`} 
                 style={{backgroundColor: c.hex}}
               />
@@ -327,7 +399,7 @@ export function TemplateWorkspace({
               <input 
                 type="color" 
                 value={designData.hexBackgroundColor}
-                onChange={(e) => setDesignData({...designData, hexBackgroundColor: e.target.value})}
+                onChange={(e) => updateDesignData({...designData, hexBackgroundColor: e.target.value})}
                 className="absolute -inset-2 w-12 h-12 cursor-pointer opacity-0 z-10"
               />
               <div 
@@ -375,6 +447,42 @@ export function TemplateWorkspace({
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-ink-dark">
+              Store Locations ({storeLocations.length}/10 locations)
+            </h3>
+            <button
+              type="button"
+              onClick={addLocation}
+              disabled={storeLocations.length >= 10}
+              className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors disabled:opacity-50"
+            >
+              + Add Location
+            </button>
+          </div>
+          <p className="text-xs text-ink-muted mb-3">
+            Up to 10 outlet pins for Google Wallet's proximity notifications
+            (~150m radius). The notification text is Google's own and cannot
+            be customised. Delivery requires the customer to have "Allow all
+            the time" location access and the Nearby Passes toggle enabled —
+            neither LinearCard nor the merchant can grant this on their behalf.
+          </p>
+          {storeLocations.length > 0 && (
+            <div className="space-y-3">
+              {storeLocations.map((loc, idx) => (
+                <StoreLocationEntry
+                  key={idx}
+                  index={idx}
+                  location={loc}
+                  onUpdate={updateLocation}
+                  onRemove={removeLocation}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-6">
@@ -436,7 +544,12 @@ export function TemplateWorkspace({
               </div>
             )}
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
+            {templateStatus === 'published' && savedTemplateId && (
+              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="flex-1 sm:flex-none">
+                Push design to existing passes {passCount > 0 ? `(${passCount})` : ''}
+              </Button>
+            )}
             <Button type="button" variant="secondary" onClick={handleSaveDraft} className="flex-1 sm:flex-none">
               Save Draft
             </Button>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { DEFAULT_PASS_HEX } from '@linearcard/types';
 
 export interface PassPreviewCardProps {
   memberName?: string;
@@ -23,7 +24,7 @@ export interface PassPreviewCardProps {
 export default function PassPreviewCard({
   memberName = 'Dhyan Patel',
   cardTitle = 'LinearCard Platinum',
-  hexBackgroundColor = '#D4AF37',
+  hexBackgroundColor = DEFAULT_PASS_HEX,
   barcodeValue = 'https://linearcard.vercel.app/m/882190',
   barcodeAltText = '882190',
   logoUrl = '',
@@ -53,7 +54,9 @@ export default function PassPreviewCard({
   const containerBg = isDarkMode ? '#1e1e1e' : '#ffffff';
   const textColor = isDarkMode ? '#ffffff' : '#1e1e1e';
   const secondaryTextColor = isDarkMode ? '#a0a0a0' : '#5f6368';
-  const headerBg = hexBackgroundColor || '#1A365D';
+<<<<<<< HEAD
+  const headerBg = hexBackgroundColor || DEFAULT_PASS_HEX;
+  const cardBorder = isDarkMode ? 'border-neutral-800' : 'border-neutral-200';
 
   const displayPassId = passId || barcodeAltText || 'PREVIEW-882190';
   const displayBarcodeValue = passId ? `https://linearcard.vercel.app/m/${passId}` : (barcodeValue || 'https://linearcard.com');

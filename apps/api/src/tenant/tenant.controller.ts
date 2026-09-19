@@ -1,22 +1,109 @@
 import {
   Controller,
   Get,
+  Post,
   Param,
+  Body,
+  Req,
+  UseGuards,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 
 @Controller('tenant')
 export class TenantController {
   constructor(private readonly supabaseService: SupabaseService) {}
 
+  /**
+   * Merchant submits business/tax details for the production-approval
+   * review. Tenant-guarded so a caller can only edit their own tenant.
+   */
+  @Post('tenants/:id/business-details')
+  @UseGuards(TenantGuard)
+  async submitBusinessDetails(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Req() req: TenantRequest,
+  ) {
+    if (req.tenantId !== id && req.authRole !== 'admin') {
+      throw new HttpException(
+        { success: false, error: 'Unauthorized for this tenant' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const { businessDetails } = body || {};
+    if (!businessDetails || typeof businessDetails !== 'object') {
+      throw new HttpException(
+        { success: false, error: 'businessDetails object is required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const { error } = await this.supabaseService.client
+      .from('Tenant')
+      .update({ businessDetails, publishStatus: 'pending' })
+      .eq('id', id);
+    if (error)
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+
+    return { success: true };
+  }
+
+  /**
+   * LinearCard-admin-only: verifies a tenant's submitted business details
+   * and promotes it out of demo mode. Reuses the same
+   * `authRole === 'admin'` gate already used by other admin-only actions
+   * (e.g. PassesController.postsendpromomessage's cross-tenant override).
+   */
+  @Post('admin/tenants/:id/approve-for-production')
+  @UseGuards(TenantGuard)
+  async approveForProduction(
+    @Param('id') id: string,
+    @Req() req: TenantRequest,
+  ) {
+    if (req.authRole !== 'admin') {
+      throw new HttpException(
+        { success: false, error: 'Admin authorization required' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const { error } = await this.supabaseService.client
+      .from('Tenant')
+      .update({ publishStatus: 'production' })
+      .eq('id', id);
+    if (error)
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+
+    return { success: true, publishStatus: 'production' };
+  }
+
+  /**
+   * Tenant-switcher list for the (authenticated) admin dashboard. Guarded,
+   * and column-whitelisted to the same non-sensitive shape getTenantBySlug
+   * returns — `select('*')` here used to leak every tenant's issuerId,
+   * googleClientEmail, googlePrivateKeyEncrypted, businessDetails (tax/GST/
+   * legal name) and the legacy plaintext `apiKey` column that TenantGuard
+   * still accepts as a credential.
+   */
   @Get('tenants')
+  @UseGuards(TenantGuard)
   async getTenants() {
     try {
       const { data: tenants, error } = await this.supabaseService.client
         .from('Tenant')
-        .select('*')
+        .select(
+          'id, name, brandHexColor, logoUrl, heroUrl, classSuffix, publishStatus',
+        )
         .order('name', { ascending: true });
 
       if (error) {

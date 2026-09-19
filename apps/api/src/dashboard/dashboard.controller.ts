@@ -1,13 +1,22 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { WalletService } from '../wallet/wallet.service';
+import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly walletService: WalletService,
+  ) {}
 
   @Get('stats')
-  async getstats() {
+  @UseGuards(TenantGuard)
+  async getstats(@Req() req: TenantRequest) {
     try {
+      // Every count is scoped to the caller's tenant — these used to
+      // aggregate across ALL tenants on an unguarded route.
+      const tenantId = req.tenantId;
       const [
         { count: memberCount },
         { count: passCount },
@@ -15,11 +24,18 @@ export class DashboardController {
       ] = await Promise.all([
         this.supabaseService.client
           .from('Member')
-          .select('*', { count: 'exact', head: true }),
+          .select('*', { count: 'exact', head: true })
+          .eq('tenantId', tenantId),
         this.supabaseService.client
           .from('Pass')
-          .select('*', { count: 'exact', head: true }),
-        this.supabaseService.client.from('Pass').select('tier'),
+          .select('*', { count: 'exact', head: true })
+          .eq('tenantId', tenantId)
+          .is('deletedAt', null),
+        this.supabaseService.client
+          .from('Pass')
+          .select('tier')
+          .eq('tenantId', tenantId)
+          .is('deletedAt', null),
       ]);
 
       const tierDistribution: Record<string, number> = {};
@@ -28,11 +44,15 @@ export class DashboardController {
         tierDistribution[t] = (tierDistribution[t] || 0) + 1;
       });
 
-      const googleConnected = !!(
-        process.env.GOOGLE_CLIENT_EMAIL &&
-        process.env.GOOGLE_PRIVATE_KEY &&
-        process.env.ISSUER_ID
-      );
+      // Resolves this tenant's own Google Wallet credentials, falling back to
+      // the shared env ones — forTenant throws when neither is complete.
+      let googleConnected = false;
+      try {
+        await this.walletService.forTenant(tenantId!);
+        googleConnected = true;
+      } catch {
+        googleConnected = false;
+      }
 
       return {
         success: true,

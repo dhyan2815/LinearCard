@@ -10,7 +10,17 @@ import { GoogleAuth } from 'google-auth-library';
 import { SupabaseService } from '../supabase/supabase.service';
 import { NotifyService } from '../notification/notify.service';
 import { WhatsappService } from '../notification/whatsapp.service';
-import { computeTier, TierThreshold } from '../tiers/tier.util';
+import { computeTier } from '../tiers/tier.util';
+import { AuditService } from '../audit/audit.service';
+import { WebhookService } from '../developers/webhook.service';
+import { DEFAULT_PASS_HEX, Tier } from '@linearcard/types';
+import { decryptSecret } from '../env';
+
+export interface WalletCredentials {
+  issuerId: string;
+  clientEmail: string;
+  privateKey: string;
+}
 
 export interface GoogleWalletPassOptions {
   passId: string;
@@ -31,11 +41,84 @@ export interface GoogleWalletPassOptions {
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
 
+  // Set only on an instance returned by forTenant(); a plain injected
+  // singleton has this null and resolves credentials from env on every call
+  // — this is what keeps every pre-existing call site working unchanged.
+  private credentials: WalletCredentials | null = null;
+
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly notifyService: NotifyService,
     private readonly whatsappService: WhatsappService,
+    private readonly auditService: AuditService,
+    private readonly webhookService: WebhookService,
   ) {}
+
+  /**
+   * Returns a WalletService instance scoped to one tenant's Google Wallet
+   * credentials (decrypted from the Tenant row), falling back field-by-field
+   * to the shared env vars when the tenant hasn't configured its own yet.
+   * Shares this instance's already-injected collaborators (DB/notify/audit/
+   * webhook services) — only the credential resolution differs.
+   */
+  public async forTenant(tenantId: string): Promise<WalletService> {
+    const scoped = new WalletService(
+      this.supabaseService,
+      this.notifyService,
+      this.whatsappService,
+      this.auditService,
+      this.webhookService,
+    );
+    scoped.credentials = await this.resolveTenantCredentials(tenantId);
+    return scoped;
+  }
+
+  private async resolveTenantCredentials(
+    tenantId: string,
+  ): Promise<WalletCredentials> {
+    const { data: tenant } = await this.supabaseService.client
+      .from('Tenant')
+      .select('issuerId, googleClientEmail, googlePrivateKeyEncrypted')
+      .eq('id', tenantId)
+      .single();
+
+    const issuerId = tenant?.issuerId || process.env.ISSUER_ID;
+    const clientEmail = tenant?.googleClientEmail || process.env.GOOGLE_CLIENT_EMAIL;
+    const rawKey = tenant?.googlePrivateKeyEncrypted
+      ? decryptSecret(tenant.googlePrivateKeyEncrypted)
+      : process.env.GOOGLE_PRIVATE_KEY;
+
+    if (!issuerId || !clientEmail || !rawKey) {
+      throw new Error(
+        `Missing Google Wallet credentials for tenant ${tenantId}. Configure Tenant.issuerId/googleClientEmail/googlePrivateKeyEncrypted or set ISSUER_ID/GOOGLE_CLIENT_EMAIL/GOOGLE_PRIVATE_KEY in .env.`,
+      );
+    }
+
+    return { issuerId, clientEmail, privateKey: this.formatPrivateKey(rawKey) };
+  }
+
+  /**
+   * Single source of truth for credential resolution. Collapses what used to
+   * be five separate `process.env.ISSUER_ID` reads (three with a hardcoded
+   * issuer-string fallback) into one path: prefer credentials set via
+   * forTenant(), else resolve straight from env, else throw — never silently
+   * produce a broken `"undefined.suffix"` class/object id.
+   */
+  private getCredentialsOrThrow(): WalletCredentials {
+    if (this.credentials) return this.credentials;
+
+    const issuerId = process.env.ISSUER_ID;
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+    const rawKey = process.env.GOOGLE_PRIVATE_KEY;
+
+    if (!issuerId || !clientEmail || !rawKey) {
+      throw new Error(
+        'Missing Google Wallet credentials. Please ensure ISSUER_ID, GOOGLE_CLIENT_EMAIL, and GOOGLE_PRIVATE_KEY are set in .env',
+      );
+    }
+
+    return { issuerId, clientEmail, privateKey: this.formatPrivateKey(rawKey) };
+  }
 
   /**
    * Formats private key handling newline escapes and PEM headers
@@ -56,14 +139,7 @@ export class WalletService {
   }
 
   public async getGoogleAuthClient() {
-    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-    const rawKey = process.env.GOOGLE_PRIVATE_KEY;
-
-    if (!clientEmail || !rawKey) {
-      throw new Error('Missing Google Wallet credentials.');
-    }
-
-    const privateKey = this.formatPrivateKey(rawKey);
+    const { clientEmail, privateKey } = this.getCredentialsOrThrow();
 
     const auth = new GoogleAuth({
       credentials: {
@@ -76,9 +152,84 @@ export class WalletService {
     return await auth.getClient();
   }
 
+  /**
+   * Single source of truth for a tenant's pass design. Prefers the tenant's
+   * published PassTemplate (what the designer shows) and falls back to
+   * Tenant.brandHexColor only when no published template exists — avoids the
+   * class/object mismatch where issuance stamped the stale tenant colour
+   * over a template the designer had already re-coloured.
+   *
+   * `templateId` optionally pins the design to a specific PassTemplate
+   * (e.g. the one a member's new `Tier` points at after a tier change)
+   * instead of the tenant's latest published template.
+   */
+  public async resolveTenantPassDesign(
+    tenantId: string,
+    templateId?: string,
+  ): Promise<{
+    hexBackgroundColor: string;
+    logoUrl?: string;
+    heroImageUrl?: string;
+    classSuffix?: string;
+    cardTitle?: string;
+    fieldRows?: any[];
+  }> {
+    const { data: tenant } = await this.supabaseService.client
+      .from('Tenant')
+      .select('*')
+      .eq('id', tenantId)
+      .single();
+
+    let template: any = null;
+    if (templateId) {
+      const { data } = await this.supabaseService.client
+        .from('PassTemplate')
+        .select('*')
+        .eq('id', templateId)
+        .eq('tenantId', tenantId)
+        .maybeSingle();
+      template = data;
+    }
+
+    if (!template) {
+      const { data } = await this.supabaseService.client
+        .from('PassTemplate')
+        .select('*')
+        .eq('tenantId', tenantId)
+        .eq('status', 'published')
+        .order('updatedAt', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      template = data;
+    }
+
+    if (template) {
+      return {
+        hexBackgroundColor:
+          template.hexBackgroundColor ||
+          tenant?.brandHexColor ||
+          DEFAULT_PASS_HEX,
+        logoUrl: template.logoUrl || tenant?.logoUrl,
+        heroImageUrl: template.heroImageUrl || tenant?.heroUrl,
+        classSuffix: template.classSuffix || tenant?.classSuffix,
+        cardTitle: tenant?.name || template.title,
+        fieldRows: template.fieldRows || [],
+      };
+    }
+
+    return {
+      hexBackgroundColor: tenant?.brandHexColor || DEFAULT_PASS_HEX,
+      logoUrl: tenant?.logoUrl,
+      heroImageUrl: tenant?.heroUrl,
+      classSuffix: tenant?.classSuffix,
+      cardTitle: tenant?.name,
+      fieldRows: [],
+    };
+  }
+
   public async createGenericClass(templateData: any) {
     const client = await this.getGoogleAuthClient();
-    const issuerId = process.env.ISSUER_ID;
+    const { issuerId } = this.getCredentialsOrThrow();
     const classId = `${issuerId}.${templateData.classSuffix || 'linearcard_sandbox_class'}`;
 
     const cardRowTemplateInfos: any[] = [];
@@ -119,7 +270,7 @@ export class WalletService {
     const classPayload: any = {
       id: classId,
       issuerName: templateData.cardTitle || 'LinearCard',
-      hexBackgroundColor: templateData.hexBackgroundColor || '#1A365D',
+      hexBackgroundColor: templateData.hexBackgroundColor || DEFAULT_PASS_HEX,
     };
 
     if (templateData.logoUrl) {
@@ -137,6 +288,23 @@ export class WalletService {
           cardRowTemplateInfos,
         },
       };
+    }
+
+    // Google Wallet OS-level proximity notifications. Max 10 per class;
+    // extras are truncated here rather than relying on Google to do it.
+    // Uses the non-deprecated `merchantLocations` field (simple
+    // {latitude, longitude} pairs) — NOT the deprecated `locations` /
+    // `walletobjects#latLongPoint` shape used by older code.
+    if (
+      Array.isArray(templateData.storeLocations) &&
+      templateData.storeLocations.length > 0
+    ) {
+      classPayload.merchantLocations = templateData.storeLocations
+        .slice(0, 10)
+        .map((l: { latitude: number | string; longitude: number | string }) => ({
+          latitude: Number(l.latitude),
+          longitude: Number(l.longitude),
+        }));
     }
 
     // Fallback order:
@@ -306,6 +474,10 @@ export class WalletService {
         };
       }
 
+      if (updateData.hexBackgroundColor) {
+        patchPayload.hexBackgroundColor = updateData.hexBackgroundColor;
+      }
+
       if (updateData.pushNotification) {
         patchPayload.messages = [
           {
@@ -334,7 +506,7 @@ export class WalletService {
       cardTitle = 'LinearCard Platinum',
       balance = '1250 Pts',
       tier = 'Platinum',
-      hexBackgroundColor = '#1A365D',
+      hexBackgroundColor = DEFAULT_PASS_HEX,
       classSuffix = 'linearcard_sandbox_class',
       logoUrl = '',
       heroImageUrl = '',
@@ -345,21 +517,12 @@ export class WalletService {
       options.barcodeValue || `https://linearcard.vercel.app/m/${passId}`;
     const barcodeAltText = options.barcodeAltText || passId;
 
-    const issuerId = process.env.ISSUER_ID;
-    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-    const rawKey = process.env.GOOGLE_PRIVATE_KEY;
-
-    if (!issuerId || !clientEmail || !rawKey) {
-      throw new Error(
-        'Missing Google Wallet credentials. Please ensure ISSUER_ID, GOOGLE_CLIENT_EMAIL, and GOOGLE_PRIVATE_KEY are set in .env',
-      );
-    }
+    const { issuerId, clientEmail, privateKey } = this.getCredentialsOrThrow();
 
     if (!passId) {
       throw new Error('passId is required to generate a Google Wallet pass.');
     }
 
-    const privateKey = this.formatPrivateKey(rawKey);
     const objectSuffix = passId;
     const fullPassId = `${issuerId}.${objectSuffix}`;
     const classId = `${issuerId}.${classSuffix}`;
@@ -430,7 +593,7 @@ export class WalletService {
         value: barcodeValue,
         alternateText: `${tier || 'Member'} • ${balance || '0 Pts'}`,
       },
-      hexBackgroundColor: hexBackgroundColor || '#1A365D',
+      hexBackgroundColor: hexBackgroundColor || DEFAULT_PASS_HEX,
       ...(logoUrl && { logo: { sourceUri: { uri: logoUrl } } }),
       ...(heroImageUrl && { heroImage: { sourceUri: { uri: heroImageUrl } } }),
     };
@@ -583,10 +746,7 @@ export class WalletService {
     bypassQuota = false,
   ): Promise<{ success: boolean; messageId: string }> {
     const messageId = `msg_${Date.now()}`;
-    const issuerId =
-      process.env.GOOGLE_WALLET_ISSUER_ID ||
-      process.env.ISSUER_ID ||
-      '3388000000023177673';
+    const { issuerId } = this.getCredentialsOrThrow();
 
     // Support both short ID and full ID formats
     const resourceId = passId.includes('.') ? passId : `${issuerId}.${passId}`;
@@ -656,6 +816,11 @@ export class WalletService {
     },
     tenantName: string = 'LinearCard',
     tier?: string,
+    design?: {
+      hexBackgroundColor?: string;
+      logoUrl?: string;
+      heroImageUrl?: string;
+    },
   ): Promise<{
     walletPushed: boolean;
     directNotified: boolean;
@@ -680,14 +845,12 @@ export class WalletService {
         balance: `${transaction.newBalance} Pts`,
         pushNotification: pushBody,
         ...(tier ? { tier } : {}),
+        ...(design || {}),
       });
 
       // 1b. Dispatch explicit Google Wallet system tray notification (TEXT_AND_NOTIFY)
       const messageId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const issuerId =
-        process.env.GOOGLE_WALLET_ISSUER_ID ||
-        process.env.ISSUER_ID ||
-        '3388000000023177673';
+      const { issuerId } = this.getCredentialsOrThrow();
       const resourceId = pass.fullPassId.includes('.')
         ? pass.fullPassId
         : `${issuerId}.${pass.fullPassId}`;
@@ -739,7 +902,7 @@ export class WalletService {
       tenantId: string;
       tier?: string;
       phone?: string;
-      tierThresholds?: TierThreshold[];
+      tiers?: Tier[];
     },
     transaction: {
       type: 'award' | 'redeem';
@@ -757,16 +920,33 @@ export class WalletService {
     tierChanged: boolean;
     isUpgrade?: boolean;
   }> {
-    const thresholds = pass.tierThresholds || [];
+    const tiers = pass.tiers || [];
     const previousTier = pass.tier || 'Standard';
 
+    // Every Google Wallet call this method fans out to must use the pass's
+    // OWN tenant credentials, not whatever instance happened to be injected.
+    // Already-scoped instances (from forTenant) are reused as-is; the plain
+    // injected singleton resolves the tenant's credentials here, which falls
+    // back to env when the tenant has none configured — so behaviour is
+    // unchanged for env-backed tenants.
+    let scoped: WalletService = this;
+    if (!this.credentials) {
+      try {
+        scoped = await this.forTenant(pass.tenantId);
+      } catch (err: any) {
+        this.logger.warn(
+          `Falling back to env wallet credentials for pass ${pass.id}: ${err.message}`,
+        );
+      }
+    }
+
     // No tiers configured for this tenant: leave the pass's tier field alone.
-    // computeTier([]) always resolves to 'Standard', which would otherwise
-    // silently stomp a manually-set tier (e.g. from the dashboard balance-adjust
-    // endpoint) on the very next scan.
-    if (thresholds.length === 0) {
+    // computeTier([]) returns null, which would otherwise silently stomp a
+    // manually-set tier (e.g. from the dashboard balance-adjust endpoint) on
+    // the very next scan.
+    if (tiers.length === 0) {
       const { walletPushed, directNotified, warning } =
-        await this.sendTransactionNotification(
+        await scoped.sendTransactionNotification(
           pass,
           transaction,
           tenantName,
@@ -796,35 +976,71 @@ export class WalletService {
       };
     }
 
-    const nextTier = computeTier(transaction.newBalance, thresholds);
+    const nextTierRow = computeTier(transaction.newBalance, tiers);
+    const nextTier = nextTierRow?.name ?? previousTier;
     const tierChanged = nextTier !== previousTier;
 
-    // A tier's rank is its configured `min` — higher min means a higher tier.
-    // Missing thresholds (e.g. a manually-set tier name with no matching
-    // entry) are treated as rank -1 so we never mislabel that transition.
+    // A tier's rank is its configured `minPoints` — higher minPoints means a
+    // higher tier. Missing tiers (e.g. a manually-set tier name with no
+    // matching entry) are treated as rank -1 so we never mislabel that
+    // transition.
     const rankOf = (name: string): number =>
-      thresholds.find((t) => t.name === name)?.min ?? -1;
+      tiers.find((t) => t.name === name)?.minPoints ?? -1;
     const isUpgrade = tierChanged && rankOf(nextTier) > rankOf(previousTier);
+
+    // Payoff: a tier change carries its own `templateId`, so the pass design
+    // (colour/logo/hero) swaps to match the new tier's template.
+    let design:
+      | { hexBackgroundColor?: string; logoUrl?: string; heroImageUrl?: string }
+      | undefined;
+    if (tierChanged && nextTierRow?.templateId) {
+      try {
+        const resolved = await this.resolveTenantPassDesign(
+          pass.tenantId,
+          nextTierRow.templateId,
+        );
+        design = {
+          hexBackgroundColor: resolved.hexBackgroundColor,
+          logoUrl: resolved.logoUrl,
+          heroImageUrl: resolved.heroImageUrl,
+        };
+      } catch (err: any) {
+        this.logger.warn(
+          `Failed to resolve tier design for pass ${pass.id}: ${err.message}`,
+        );
+      }
+    }
 
     if (tierChanged) {
       try {
         await this.supabaseService.client
           .from('Pass')
-          .update({ tier: nextTier })
+          .update({ tier: nextTier, tierId: nextTierRow?.id ?? null })
           .eq('id', pass.id);
       } catch (err: any) {
         this.logger.warn(
           `Failed to persist tier change for pass ${pass.id}: ${err.message}`,
         );
       }
+
+      this.webhookService
+        .dispatch(pass.tenantId, 'tier.changed', {
+          passId: pass.id,
+          memberId: pass.memberId,
+          previousTier,
+          tier: nextTier,
+          isUpgrade,
+        })
+        .catch(() => {});
     }
 
     const { walletPushed, directNotified, warning } =
-      await this.sendTransactionNotification(
+      await scoped.sendTransactionNotification(
         pass,
         transaction,
         tenantName,
         nextTier,
+        design,
       );
 
     if (pass.phone) {
@@ -943,7 +1159,7 @@ export class WalletService {
     if (!pass) {
       const fullPassId = cleanId.includes('.')
         ? cleanId
-        : `${process.env.ISSUER_ID}.${cleanId}`;
+        : `${this.getCredentialsOrThrow().issuerId}.${cleanId}`;
       const { data } = await this.supabaseService.client
         .from('Pass')
         .select('*, Member(*), Tenant(*, PassTemplate(tierThresholds))')
@@ -1042,13 +1258,13 @@ export class WalletService {
 
     // 2. Insert immutable AuditLog entry
     try {
-      await this.supabaseService.client.from('AuditLog').insert({
+      await this.auditService.record({
         tenantId: pass.tenantId,
         memberId: pass.memberId,
+        passId: pass.id,
         actor: adminId || 'system',
         action: 'order_transaction',
         details: {
-          passId: pass.id,
           transactionType,
           source,
           orderId: orderId || null,
@@ -1066,9 +1282,46 @@ export class WalletService {
       );
     }
 
+    this.webhookService
+      .dispatch(
+        pass.tenantId,
+        transactionType === 'award' ? 'points.awarded' : 'points.redeemed',
+        {
+          passId: pass.id,
+          memberId: pass.memberId,
+          pointsChanged,
+          newBalance,
+          orderId: orderId || null,
+        },
+      )
+      .catch(() => {});
+
     // 3. Recompute tier, sync Google Wallet, and dispatch WhatsApp
-    const templateThresholds =
-      pass.Tenant?.PassTemplate?.[0]?.tierThresholds || [];
+    // Real `Tier` rows for this tenant's canonical program, sorted for
+    // computeTier. A unique index on Program.tenantId guarantees exactly one
+    // Program per tenant (enforced in the 20260919000006 migration). We
+    // still resolve the Program explicitly (oldest first) rather than
+    // filtering Tier by tenantId directly, so that if the constraint is
+    // ever bypassed (e.g. a stale row from before it existed), we use one
+    // deterministic Program instead of silently merging tiers across all of
+    // the tenant's Programs.
+    const { data: programRow } = await this.supabaseService.client
+      .from('Program')
+      .select('id')
+      .eq('tenantId', pass.tenantId)
+      .order('createdAt', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: tierRows } = programRow
+      ? await this.supabaseService.client
+          .from('Tier')
+          .select('*')
+          .eq('programId', programRow.id)
+          .order('sortOrder', { ascending: true })
+      : { data: [] };
+    const tiers: Tier[] = tierRows || [];
+
     const syncResult = await this.syncPassAfterTransaction(
       {
         id: pass.id,
@@ -1077,7 +1330,7 @@ export class WalletService {
         tenantId: pass.tenantId,
         tier: pass.tier,
         phone: pass.Member?.phone,
-        tierThresholds: templateThresholds,
+        tiers,
       },
       {
         type: transactionType,

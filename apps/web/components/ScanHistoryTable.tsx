@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { History, ChevronDown, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiClient } from '@/lib/api-client';
+import { DataTable, DataTableColumn } from '@/components/ui/DataTable';
+import { Card } from '@/components/ui/Card';
 
 interface ScanHistoryEntry {
   id: string;
@@ -57,9 +59,62 @@ export function ScanHistoryTable({ refreshTrigger }: { refreshTrigger: number })
     fetchHistory();
   }, [timeFilter, refreshTrigger]);
 
+  const columns: DataTableColumn<ScanHistoryEntry>[] = [
+    {
+      header: 'Time',
+      className: 'whitespace-nowrap',
+      render: (entry) =>
+        new Date(entry.createdAt).toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+    },
+    {
+      header: 'Customer',
+      render: (entry) => (
+        <>
+          <div className="font-semibold text-ink-dark">{entry.Member?.name || 'Unknown'}</div>
+          <div className="text-xs text-ink-secondary font-mono mt-0.5">{entry.Member?.phone}</div>
+        </>
+      ),
+    },
+    {
+      header: 'Action',
+      render: (entry) => (
+        <span
+          className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+            entry.details.transactionType === 'award'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : 'bg-brand-blue/10 text-brand-blue border-brand-blue/30'
+          }`}
+        >
+          {entry.details.transactionType.toUpperCase()}
+        </span>
+      ),
+    },
+    {
+      header: 'Order Amount',
+      render: (entry) => <span className="text-ink-dark font-medium">₹{entry.details.orderAmount}</span>,
+    },
+    {
+      header: 'Points',
+      align: 'right',
+      render: (entry) => (
+        <>
+          <div className={`font-bold ${entry.details.transactionType === 'award' ? 'text-emerald-400' : 'text-brand-blue'}`}>
+            {entry.details.transactionType === 'award' ? '+' : '-'}{entry.details.pointsChanged}
+          </div>
+          <div className="text-[11px] text-ink-secondary mt-0.5">Bal: {entry.details.newBalance}</div>
+        </>
+      ),
+    },
+  ];
+
   return (
-    <div className="bg-surface-card border border-border-subtle rounded-2xl shadow-sm mt-8 animate-in fade-in">
-      <div className="p-5 sm:p-6 border-b border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <Card className="mt-8 animate-in fade-in">
+      <div className="p-5 sm:p-6 border-b border-border-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h2 className="text-lg font-bold text-ink-dark flex items-center gap-2">
           <History className="w-5 h-5 text-brand-blue" />
           Scan & Transaction History
@@ -107,80 +162,14 @@ export function ScanHistoryTable({ refreshTrigger }: { refreshTrigger: number })
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-canvas/50 text-[11px] uppercase tracking-wider text-ink-secondary border-b border-border-subtle">
-              <th className="px-6 py-4 font-bold">Time</th>
-              <th className="px-6 py-4 font-bold">Customer</th>
-              <th className="px-6 py-4 font-bold">Action</th>
-              <th className="px-6 py-4 font-bold">Order Amount</th>
-              <th className="px-6 py-4 font-bold text-right">Points</th>
-            </tr>
-          </thead>
-          <tbody className="text-sm">
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-ink-secondary text-sm">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 rounded-full border-2 border-brand-blue border-t-transparent animate-spin" />
-                    Loading history...
-                  </div>
-                </td>
-              </tr>
-            ) : errorMsg ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-red-500 font-medium text-sm">
-                  {errorMsg}
-                </td>
-              </tr>
-            ) : history.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-ink-secondary text-sm">
-                  No transactions found for the selected period.
-                </td>
-              </tr>
-            ) : (
-              history.map((entry) => (
-                <tr key={entry.id} className="border-b border-white/5 hover:bg-white/2 transition-colors">
-                  <td className="px-6 py-4 text-ink-secondary whitespace-nowrap">
-                    {new Date(entry.createdAt).toLocaleString([], {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="font-semibold text-ink-dark">{entry.Member?.name || 'Unknown'}</div>
-                    <div className="text-xs text-ink-secondary font-mono mt-0.5">{entry.Member?.phone}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                      entry.details.transactionType === 'award' 
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : 'bg-brand-blue/10 text-brand-blue border-brand-blue/30'
-                    }`}>
-                      {entry.details.transactionType.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-ink-dark font-medium">
-                    ₹{entry.details.orderAmount}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className={`font-bold ${entry.details.transactionType === 'award' ? 'text-emerald-400' : 'text-brand-blue'}`}>
-                      {entry.details.transactionType === 'award' ? '+' : '-'}{entry.details.pointsChanged}
-                    </div>
-                    <div className="text-[11px] text-ink-secondary mt-0.5">
-                      Bal: {entry.details.newBalance}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <DataTable
+        columns={columns}
+        data={history}
+        getRowKey={(entry) => entry.id}
+        loading={loading}
+        error={errorMsg}
+        emptyMessage="No transactions found for the selected period."
+      />
+    </Card>
   );
 }

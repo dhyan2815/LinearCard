@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import { OtpService } from '../notification/otp.service';
@@ -7,27 +7,12 @@ import { WalletService } from '../wallet/wallet.service';
 import { NotifyService } from '../notification/notify.service';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../env';
+import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
+import { AuditService } from '../audit/audit.service';
+import { WebhookService } from '../developers/webhook.service';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
-
-function extractAdminToken(req: Request): string | null {
-  const authHeader = req.headers['authorization'];
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7);
-  }
-  if (req.cookies?.admin_session) {
-    const c = req.cookies.admin_session;
-    return typeof c === 'object' && c?.value ? c.value : c;
-  }
-  const rawCookie = req.headers['cookie'];
-  if (rawCookie) {
-    const match = rawCookie.match(/(?:^|;\s*)admin_session=([^;]+)/);
-    if (match) return decodeURIComponent(match[1]);
-  }
-  return null;
-}
-
-function resolveImageUrl(url?: string): string | undefined {
+export function resolveImageUrl(url?: string): string | undefined {
   if (!url) return undefined;
   if (url.includes('localhost') || url.includes('127.0.0.1')) {
     return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
@@ -50,6 +35,9 @@ export class PassesController {
     private readonly whatsappService: WhatsappService,
     private readonly walletService: WalletService,
     private readonly notifyService: NotifyService,
+    private readonly tenantGuard: TenantGuard,
+    private readonly auditService: AuditService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   @Post('generate-pass')
@@ -103,19 +91,46 @@ export class PassesController {
       // 2. Generate the definitive, explicit Pass ID (UUID)
       const explicitPassId = crypto.randomUUID();
 
-      // 3. Create the Google Wallet Pass using the explicit Pass ID
-      const result = await this.walletService.createGoogleWalletPass({
+      // 3. Fall back to the tenant's published design when the caller
+      // doesn't explicitly override a field — keeps this endpoint's
+      // "whatever the caller sends" flexibility while still defaulting to
+      // the single source of truth instead of a stale/undefined colour.
+      const passDesign = await this.walletService.resolveTenantPassDesign(
+        targetTenantId,
+      );
+
+      // Demo-status tenants may only issue passes to registered test
+      // members — a minimal gate ahead of the production-approval flow.
+      // Fails OPEN on a missing/unknown status: 'demo' has to be set
+      // explicitly (the column defaults to 'production'), so an unreadable
+      // tenant row can never silently block a live tenant's issuance.
+      const { data: tenantRow } = await this.supabaseService.client
+        .from('Tenant')
+        .select('publishStatus')
+        .eq('id', targetTenantId)
+        .single();
+      if (tenantRow?.publishStatus === 'demo' && !member.isTestAccount) {
+        throw new Error(
+          'This tenant is in demo mode: passes can only be issued to registered test accounts until approved for production.',
+        );
+      }
+
+      const tenantWallet = await this.walletService.forTenant(targetTenantId);
+
+      // 4. Create the Google Wallet Pass using the explicit Pass ID
+      const result = await tenantWallet.createGoogleWalletPass({
         passId: explicitPassId,
         memberName: body.memberName,
-        cardTitle: body.cardTitle,
+        cardTitle: body.cardTitle ?? passDesign.cardTitle,
         balance: body.balance ?? body.issueBalance,
         tier: body.tier ?? body.issueTier,
-        hexBackgroundColor: body.hexBackgroundColor,
+        hexBackgroundColor:
+          body.hexBackgroundColor ?? passDesign.hexBackgroundColor,
         barcodeValue: body.barcodeValue, // will fallback to passId if not provided
         barcodeAltText: body.barcodeAltText, // will fallback to passId if not provided
-        classSuffix: body.classSuffix,
-        logoUrl: resolveImageUrl(body.logoUrl),
-        heroImageUrl: resolveImageUrl(body.heroImageUrl),
+        classSuffix: body.classSuffix ?? passDesign.classSuffix,
+        logoUrl: resolveImageUrl(body.logoUrl ?? passDesign.logoUrl),
+        heroImageUrl: resolveImageUrl(body.heroImageUrl ?? passDesign.heroImageUrl),
         rows: body.rows,
       });
 
@@ -193,16 +208,8 @@ export class PassesController {
           .order('createdAt', { ascending: false });
 
         if (phonePasses && phonePasses.length > 0) {
-          const token = extractAdminToken(req);
-          let staffTenantId = null;
-          if (token) {
-            try {
-              const decoded: any = jwt.verify(token, JWT_SECRET);
-              staffTenantId = decoded.tenantId;
-            } catch {
-              // Ignore invalid session
-            }
-          }
+          const resolved = await this.tenantGuard.resolveTenant(req);
+          const staffTenantId = resolved?.tenantId || null;
 
           // If a staff member is logged in, prioritize returning the pass for their tenant
           if (staffTenantId) {
@@ -268,7 +275,8 @@ export class PassesController {
   }
 
   @Post('update-pass')
-  async postupdatepass(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async postupdatepass(@Req() req: TenantRequest, @Res() res: Response) {
     try {
       const body = req.body;
 
@@ -280,42 +288,8 @@ export class PassesController {
           .json({ success: false, error: 'passId is required' });
       }
 
-      // API Key or Admin Session Validation
-      const rawToken = extractAdminToken(req);
-      let authenticatedTenantId = null;
-      let authenticatedRole = null;
-
-      if (rawToken) {
-        try {
-          const decoded: any = jwt.verify(rawToken, JWT_SECRET);
-          authenticatedTenantId = decoded.tenantId;
-          authenticatedRole = decoded.role;
-        } catch {
-          // Fallback to evaluating as an API key if not a valid JWT
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        const authHeader = req.headers['authorization'] as string;
-        if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          const { data: tenant } = await this.supabaseService.client
-            .from('Tenant')
-            .select('id')
-            .eq('apiKey', token)
-            .single();
-          if (tenant) {
-            authenticatedTenantId = tenant.id;
-          }
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        return res.status(401).json({
-          success: false,
-          error: 'Unauthorized: Missing or invalid authentication',
-        });
-      }
+      const authenticatedTenantId = req.tenantId;
+      const authenticatedRole = req.authRole;
 
       const isUUID =
         /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
@@ -394,8 +368,9 @@ export class PassesController {
         .eq('id', pass.id);
 
       // Async follow-ups (Google PATCH + WAHA with logging)
+      const tenantWallet = await this.walletService.forTenant(pass.tenantId);
       Promise.all([
-        this.walletService
+        tenantWallet
           .updateGenericObject(pass.fullPassId, {
             balance: balance.toString(),
             tier: tier || pass.tier,
@@ -480,8 +455,15 @@ export class PassesController {
           .json({ success: false, error: 'classSuffix is required' });
       }
 
-      const issuerId =
-        process.env.GOOGLE_WALLET_ISSUER_ID || '3388000000023177673';
+      // No tenant context on this legacy diagnostic endpoint — falls back to
+      // the shared env issuer (no more hardcoded literal fallback).
+      const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID;
+      if (!issuerId) {
+        return res.status(500).json({
+          success: false,
+          error: 'Missing ISSUER_ID / GOOGLE_WALLET_ISSUER_ID in environment.',
+        });
+      }
       const classId = `${issuerId}.${classSuffix}`;
 
       const client = await this.walletService.getGoogleAuthClient();
@@ -503,7 +485,8 @@ export class PassesController {
   }
 
   @Post('send-promo-message')
-  async postsendpromomessage(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async postsendpromomessage(@Req() req: TenantRequest, @Res() res: Response) {
     try {
       const { passId, header, body, bypassQuota } = req.body;
 
@@ -514,42 +497,8 @@ export class PassesController {
         });
       }
 
-      // API Key or Admin Session Validation
-      const rawToken = extractAdminToken(req);
-      let authenticatedTenantId = null;
-      let authenticatedRole = null;
-
-      if (rawToken) {
-        try {
-          const decoded: any = jwt.verify(rawToken, JWT_SECRET);
-          authenticatedTenantId = decoded.tenantId;
-          authenticatedRole = decoded.role;
-        } catch {
-          // Fallback
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        const authHeader = req.headers['authorization'] as string;
-        if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          const { data: tenant } = await this.supabaseService.client
-            .from('Tenant')
-            .select('id')
-            .eq('apiKey', token)
-            .single();
-          if (tenant) {
-            authenticatedTenantId = tenant.id;
-          }
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        return res.status(401).json({
-          success: false,
-          error: 'Unauthorized: Missing or invalid authentication',
-        });
-      }
+      const authenticatedTenantId = req.tenantId;
+      const authenticatedRole = req.authRole;
 
       // Lookup Pass
       const isUUID =
@@ -596,7 +545,8 @@ export class PassesController {
         });
       }
 
-      const result = await this.walletService.sendPromoMessageWithAudit(
+      const tenantWallet = await this.walletService.forTenant(pass.tenantId);
+      const result = await tenantWallet.sendPromoMessageWithAudit(
         pass.id, // we can use pass.id or fullPassId here, service handles it
         pass.memberId,
         pass.tenantId,
@@ -624,33 +574,10 @@ export class PassesController {
   }
 
   @Get('scan-history')
-  async getScanHistory(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async getScanHistory(@Req() req: TenantRequest, @Res() res: Response) {
     try {
-      const rawToken = extractAdminToken(req);
-      if (!rawToken) {
-        return res.status(401).json({
-          success: false,
-          error: 'Unauthorized: Missing or invalid authentication',
-        });
-      }
-
-      let authenticatedTenantId = null;
-      try {
-        const decoded: any = jwt.verify(rawToken, JWT_SECRET);
-        authenticatedTenantId = decoded.tenantId;
-      } catch (err) {
-        return res.status(401).json({
-          success: false,
-          error: 'Unauthorized: Invalid token',
-        });
-      }
-
-      if (!authenticatedTenantId) {
-        return res.status(403).json({
-          success: false,
-          error: 'Unauthorized: No tenant context found',
-        });
-      }
+      const authenticatedTenantId = req.tenantId;
 
       const { timeFilter } = req.query; // 'today', 'this_week', 'this_month', 'last_month', 'all'
       
@@ -743,34 +670,22 @@ export class PassesController {
         });
       }
 
-      // Admin authentication
-      const rawToken = extractAdminToken(req);
-      let authenticatedTenantId = null;
+      // Admin authentication (soft — this endpoint allows unauthenticated
+      // POS callers, but identifies the tenant/role when credentials exist)
+      const resolved = await this.tenantGuard.resolveTenant(req);
+      const authenticatedTenantId = resolved?.tenantId || null;
+      const authenticatedRole = resolved?.role || null;
       let authenticatedAdminId = 'system';
-      let authenticatedRole = null;
-
-      if (rawToken) {
-        try {
-          const decoded: any = jwt.verify(rawToken, JWT_SECRET);
-          authenticatedTenantId = decoded.tenantId;
-          authenticatedAdminId = decoded.sub || decoded.adminId || 'admin';
-          authenticatedRole = decoded.role;
-        } catch {
-          // Token verification fallback
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        const authHeader = req.headers['authorization'] as string;
-        if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          const { data: tenant } = await this.supabaseService.client
-            .from('Tenant')
-            .select('id')
-            .eq('apiKey', token)
-            .single();
-          if (tenant) {
-            authenticatedTenantId = tenant.id;
+      if (resolved) {
+        const rawToken = req.headers['authorization']?.startsWith('Bearer ')
+          ? req.headers['authorization'].substring(7)
+          : null;
+        if (rawToken) {
+          try {
+            const decoded: any = jwt.verify(rawToken, JWT_SECRET);
+            authenticatedAdminId = decoded.sub || decoded.adminId || 'admin';
+          } catch {
+            // Not a JWT (likely an API key) — keep default admin id.
           }
         }
       }
@@ -907,27 +822,27 @@ export class PassesController {
     }
   }
 
+  // TODO: ECv2SigningOnly verification — signature verification against Google's public keys is
+  // deliberately deferred (user-approved). Do not implement here without re-confirming scope.
   @Post('webhooks/google-wallet')
   async postGoogleWalletWebhook(@Req() req: Request, @Res() res: Response) {
     try {
-      const token = typeof req.body === 'string' ? req.body : req.body?.signedMessage;
-      if (!token) {
+      const raw = typeof req.body === 'string' ? req.body : req.body?.signedMessage;
+      if (!raw) {
         return res.status(400).send('Missing signedMessage');
       }
 
-      // We decode the JWS payload. For production, signature verification with Google's public keys is required.
-      const decoded = jwt.decode(token, { json: true }) as any;
-      if (!decoded) {
-        return res.status(400).send('Invalid JWS');
+      // Google sends `signedMessage` as a JSON string (not a JWT). Malformed JSON is the only
+      // case that should return non-200 — everything else must 200 so Google stops retrying.
+      let decoded: any;
+      try {
+        decoded = JSON.parse(raw);
+      } catch {
+        return res.status(400).send('Invalid signedMessage JSON');
       }
 
-      const { objectId, eventType } = decoded;
-      
-      // Process only save events ('save', 'SAVE', or sometimes 'add'/'ADD')
+      const { classId, objectId, eventType, expTimeMillis, nonce } = decoded || {};
       const typeStr = (eventType || '').toLowerCase();
-      if (typeStr !== 'save' && typeStr !== 'add') {
-        return res.status(200).send('Ignored event type');
-      }
 
       if (!objectId) {
         return res.status(400).send('Missing objectId');
@@ -940,13 +855,75 @@ export class PassesController {
         .eq('fullPassId', objectId)
         .single();
 
-      if (pass && pass.Member?.phone) {
+      if (!pass) {
+        // No tenant/member to attribute this to — a NotificationLog insert
+        // here could never succeed (tenantId/memberId are NOT NULL FKs), so
+        // this is surfaced in the server log instead.
+        console.warn(
+          `Google Wallet callback for unrecognized objectId: ${objectId} (eventType=${eventType}, classId=${classId})`,
+        );
+        return res.status(200).send('Unknown objectId');
+      }
+
+      if (typeStr === 'del') {
+        await this.supabaseService.client
+          .from('Pass')
+          .update({ deletedAt: new Date().toISOString() })
+          .eq('id', pass.id);
+
+        try {
+          await this.auditService.record({
+            tenantId: pass.tenantId,
+            memberId: pass.memberId,
+            passId: pass.id,
+            actor: 'google-wallet-webhook',
+            action: 'pass_deleted',
+            details: { objectId, classId, nonce },
+          });
+        } catch (auditErr: any) {
+          console.error(`AuditLog insertion warning for pass ${pass.id}:`, auditErr.message);
+        }
+
+        this.webhookService
+          .dispatch(pass.tenantId, 'pass.deleted', { passId: pass.id, objectId, memberId: pass.memberId })
+          .catch(() => {});
+
+        return res.status(200).send('OK');
+      }
+
+      // Process only save events ('save', 'SAVE', or sometimes 'add'/'ADD')
+      if (typeStr !== 'save' && typeStr !== 'add') {
+        await this.notifyService.logNotification({
+          tenantId: pass.tenantId,
+          memberId: pass.memberId,
+          type: 'wallet_callback',
+          channel: 'google_wallet',
+          status: 'failed',
+          errorReason: `Unhandled eventType: ${eventType}`,
+        });
+        return res.status(200).send('Ignored event type');
+      }
+
+      // A pass removed from the wallet and re-added via the same link must
+      // come back out of the soft-deleted state the 'del' branch put it in.
+      if (pass.deletedAt) {
+        await this.supabaseService.client
+          .from('Pass')
+          .update({ deletedAt: null })
+          .eq('id', pass.id);
+      }
+
+      if (pass.Member?.phone) {
         await this.whatsappService.sendWalletSaveConfirmationWithLog(
           pass.Member.phone,
           pass.Tenant?.name || 'LinearCard',
           { tenantId: pass.tenantId, memberId: pass.memberId }
         ).catch(err => console.error('WhatsApp save confirmation failed (non-fatal):', err));
       }
+
+      this.webhookService
+        .dispatch(pass.tenantId, 'pass.installed', { passId: pass.id, objectId, memberId: pass.memberId })
+        .catch(() => {});
 
       return res.status(200).send('OK');
     } catch (error: any) {

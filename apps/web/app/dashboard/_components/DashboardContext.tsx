@@ -1,7 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient } from '@/lib/api-client';
-import { Tenant } from '@linearcard/types';
+import { Tenant, DEFAULT_PASS_HEX } from '@linearcard/types';
 
 type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
 
@@ -14,6 +14,7 @@ export interface DesignData {
   heroImageUrl: string;
   rows: Array<{ id: string; columns: Array<{ key: string; header: string; body: string }> }>;
   tierThresholds: Array<{ name: string; min: number }>;
+  storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }>;
 }
 
 export interface StatsData {
@@ -76,13 +77,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     classSuffix: '',
     archetype: 'loyalty',
     cardTitle: '',
-    hexBackgroundColor: '#1A365D',
+    hexBackgroundColor: DEFAULT_PASS_HEX,
     logoUrl: '',
     heroImageUrl: '',
     rows: [
       { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
     ],
-    tierThresholds: []
+    tierThresholds: [],
+    storeLocations: []
   });
 
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
@@ -143,13 +145,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       classSuffix: t?.classSuffix || '',
       archetype: 'loyalty',
       cardTitle: t?.name || '',
-      hexBackgroundColor: t?.brandHexColor || '#1A365D',
+      hexBackgroundColor: t?.brandHexColor || DEFAULT_PASS_HEX,
       logoUrl: t?.logoUrl || '',
       heroImageUrl: t?.heroUrl || '',
       rows: [
         { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
       ],
-      tierThresholds: []
+      tierThresholds: [],
+      storeLocations: []
     });
     setSavedTemplateId(null);
     setTemplateStatus('unsaved');
@@ -174,7 +177,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               classSuffix: t.classSuffix,
               archetype: t.archetype,
               cardTitle: t.title || t.name,
-              hexBackgroundColor: t.hexBackgroundColor,
+              hexBackgroundColor: t.hexBackgroundColor || DEFAULT_PASS_HEX,
               logoUrl: t.logoUrl || '',
               heroImageUrl: t.heroImageUrl || '',
               rows: (t.fieldRows || [{ id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }]).map((row: any) => ({
@@ -184,7 +187,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                   key: col.key || `${row.id}_${idx}`,
                 })),
               })),
-              tierThresholds: t.tierThresholds || []
+              tierThresholds: t.tierThresholds || [],
+              storeLocations: t.storeLocations || []
             });
           } else {
             setSavedTemplateId(null);
@@ -193,13 +197,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               classSuffix: currentTenant.classSuffix || '',
               archetype: 'loyalty',
               cardTitle: currentTenant.name || '',
-              hexBackgroundColor: currentTenant.brandHexColor || '#1A365D',
+              hexBackgroundColor: currentTenant.brandHexColor || DEFAULT_PASS_HEX,
               logoUrl: currentTenant.logoUrl || '',
               heroImageUrl: currentTenant.heroUrl || '',
               rows: [
                 { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
               ],
-              tierThresholds: []
+              tierThresholds: [],
+              storeLocations: []
             });
           }
         })

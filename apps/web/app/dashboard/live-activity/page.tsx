@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { LiveActivityView } from '../_components/LiveActivityView';
 import { useDashboard } from '../_components/DashboardContext';
 import { apiClient } from '@/lib/api-client';
+import { PageShell } from '@/components/ui/PageShell';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 export default function LiveActivityPage() {
   const { 
@@ -81,20 +83,22 @@ export default function LiveActivityPage() {
   };
 
   return (
-    <div className="min-h-full pb-12">
-      <div className="max-w-[1600px] mx-auto">
-        <LiveActivityView 
-          tenantId={selectedTenantId}
-          manageData={manageData}
-          setManageData={setManageData}
-          handleUpdatePass={handleUpdatePass}
-          loading={loading}
-          error={error}
-          successMsg={successMsg}
-          passHistory={passHistory}
-          selectPassForManage={selectPassForManage}
-        />
-      </div>
-    </div>
+    <PageShell>
+      <PageHeader
+        title="Live Updates"
+        description="Select a pass from the current session to push instant patch updates over-the-air."
+      />
+      <LiveActivityView
+        tenantId={selectedTenantId}
+        manageData={manageData}
+        setManageData={setManageData}
+        handleUpdatePass={handleUpdatePass}
+        loading={loading}
+        error={error}
+        successMsg={successMsg}
+        passHistory={passHistory}
+        selectPassForManage={selectPassForManage}
+      />
+    </PageShell>
   );
 }

@@ -184,7 +184,7 @@ export default function ScanPage() {
   return (
     <div className="min-h-screen bg-canvas flex flex-col font-sans">
       {/* Top Header */}
-      <header className="border-b border-white/5 bg-canvas/80 backdrop-blur sticky top-0 z-10 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-sm">
+      <header className="border-b border-border-subtle bg-canvas/80 backdrop-blur sticky top-0 z-10 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-sm">
         <a
           href="/dashboard"
           className="flex items-center gap-2 text-ink-secondary hover:text-brand-blue transition-colors font-medium text-sm flex-1"
@@ -313,15 +313,15 @@ export default function ScanPage() {
           <div className="lg:col-span-7 space-y-4">
             {/* Error Banner */}
             {error && (
-              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
+              <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
                 <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <h4 className="font-bold text-sm">Action Required</h4>
-                  <p className="font-medium text-rose-400 text-xs mt-0.5 leading-relaxed">{error}</p>
+                  <p className="font-medium text-destructive text-xs mt-0.5 leading-relaxed">{error}</p>
                 </div>
                 <button
                   onClick={() => setError('')}
-                  className="text-xs text-rose-400 hover:text-rose-200 font-bold ml-2"
+                  className="text-xs text-destructive hover:opacity-70 font-bold ml-2"
                 >
                   ✕
                 </button>
@@ -330,11 +330,11 @@ export default function ScanPage() {
 
             {/* Warning Banner */}
             {warning && (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
-                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-400" />
+              <div className="p-4 rounded-2xl bg-warning-surface border border-warning/30 text-warning flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-warning" />
                 <div className="flex-1">
                   <h4 className="font-bold text-sm">Notice</h4>
-                  <p className="font-medium text-amber-300 text-xs mt-0.5 leading-relaxed">
+                  <p className="font-medium text-warning text-xs mt-0.5 leading-relaxed">
                     {warning}. Balance is updated in the store system.
                   </p>
                 </div>

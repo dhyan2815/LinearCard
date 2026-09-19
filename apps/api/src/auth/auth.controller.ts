@@ -16,8 +16,9 @@ import { NotifyService } from '../notification/notify.service';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import { SendOtpRequest, VerifyOtpRequest } from '@linearcard/types';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
+import { JWT_SECRET } from '../env';
+import { resolveImageUrl } from '../passes/passes.controller';
+import { WebhookService } from '../developers/webhook.service';
 
 @Controller('auth')
 export class AuthController {
@@ -27,6 +28,7 @@ export class AuthController {
     private readonly whatsappService: WhatsappService,
     private readonly walletService: WalletService,
     private readonly notifyService: NotifyService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   @Post('send-otp')
@@ -175,21 +177,22 @@ export class AuthController {
       const startingBalance = passData.balance || '0 Pts';
       const explicitPassId = crypto.randomUUID();
 
-      const passResult = await this.walletService.createGoogleWalletPass({
+      const passDesign = await this.walletService.resolveTenantPassDesign(
+        targetTenantId,
+      );
+
+      const tenantWallet = await this.walletService.forTenant(targetTenantId);
+      const passResult = await tenantWallet.createGoogleWalletPass({
         ...passData,
         passId: explicitPassId,
         tier: startingTier,
         balance: startingBalance,
         barcodeAltText: `${startingTier} Tier • ${startingBalance}`,
-        cardTitle: tenant.name,
-        classSuffix: tenant.classSuffix,
-        hexBackgroundColor: tenant.brandHexColor,
-        logoUrl: tenant.logoUrl?.startsWith('/')
-          ? `http://localhost:3000${tenant.logoUrl}`
-          : tenant.logoUrl,
-        heroImageUrl: tenant.heroUrl?.startsWith('/')
-          ? `http://localhost:3000${tenant.heroUrl}`
-          : tenant.heroUrl,
+        cardTitle: passDesign.cardTitle || tenant.name,
+        classSuffix: passDesign.classSuffix || tenant.classSuffix,
+        hexBackgroundColor: passDesign.hexBackgroundColor,
+        logoUrl: resolveImageUrl(passDesign.logoUrl),
+        heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),
       });
 
       let passRecordId = null;
@@ -207,11 +210,25 @@ export class AuthController {
             })
             .select()
             .single();
-        if (!passError && insertedPass) passRecordId = insertedPass.id;
+        if (!passError && insertedPass) {
+          passRecordId = insertedPass.id;
+          this.webhookService
+            .dispatch(targetTenantId, 'member.enrolled', {
+              passId: passRecordId,
+              memberId: member.id,
+              phone,
+            })
+            .catch(() => {});
+        }
       }
 
       if (passResult.googleWalletUrl && passRecordId) {
-        const shortUrl = `http://localhost:3000/api/p/${passRecordId}`;
+        const baseUrl =
+          process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ||
+          (process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
+            : 'http://localhost:3000');
+        const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
         this.whatsappService
           .sendPassLinkWithLog(
             phone,

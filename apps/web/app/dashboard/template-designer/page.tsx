@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import PassPreviewCard from '@/components/PassPreviewCard';
 import { TemplateWorkspace } from '../_components/TemplateWorkspace';
 import { useDashboard } from '../_components/DashboardContext';
+import { PageShell } from '@/components/ui/PageShell';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 export default function TemplateDesignerPage() {
   const {
@@ -16,12 +18,17 @@ export default function TemplateDesignerPage() {
     setTemplateStatus,
     currentTenant,
     selectedTenantId,
-    manageData
+    manageData,
+    stats
   } = useDashboard();
 
   return (
-    <div className="min-h-full pb-12">
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12 max-w-[1600px] mx-auto">
+    <PageShell>
+      <PageHeader
+        title="Template Designer"
+        description="Design your pass template and preview it live before publishing."
+      />
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12">
          <div className="xl:col-span-7 flex flex-col gap-6">
            <TemplateWorkspace 
                designData={designData}
@@ -33,6 +40,7 @@ export default function TemplateDesignerPage() {
                setTemplateStatus={setTemplateStatus}
                currentTenant={currentTenant}
                selectedTenantId={selectedTenantId}
+               passCount={stats.passCount}
            />
          </div>
          <div className="xl:col-span-5 flex justify-center xl:justify-start xl:pl-12 xl:sticky xl:top-0">
@@ -55,6 +63,6 @@ export default function TemplateDesignerPage() {
            </motion.div>
          </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
