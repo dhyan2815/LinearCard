@@ -50,6 +50,7 @@ export default function TemplateDesignerPage() {
                manageBalance={manageData.balance}
                isManageTab={false}
                archetype={designData.archetype}
+               setDesignData={setDesignData}
              />
            </motion.div>
          </div>
