@@ -42,6 +42,57 @@ export class TemplatesController {
     }
   }
 
+  /**
+   * Validates a tierThresholds payload, throwing an HttpException with the
+   * same shape/message used across createTemplate and updateTemplate.
+   */
+  private validateTierThresholds(value: any): void {
+    if (!Array.isArray(value)) {
+      throw new HttpException(
+        {
+          success: false,
+          error: 'tierThresholds must be an array',
+          message: 'tierThresholds must be an array',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const seenMins = new Set<number>();
+    for (const t of value) {
+      if (!t || typeof t.name !== 'string' || t.name.trim() === '') {
+        throw new HttpException(
+          {
+            success: false,
+            error: 'each tier threshold requires a non-empty name',
+            message: 'each tier threshold requires a non-empty name',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (typeof t.min !== 'number' || t.min < 0) {
+        throw new HttpException(
+          {
+            success: false,
+            error: 'threshold min must be a number >= 0',
+            message: 'threshold min must be a number >= 0',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (seenMins.has(t.min)) {
+        throw new HttpException(
+          {
+            success: false,
+            error: 'tier thresholds must have distinct min values',
+            message: 'tier thresholds must have distinct min values',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      seenMins.add(t.min);
+    }
+  }
+
   @Post()
   async createTemplate(@Body() body: any) {
     try {
@@ -65,6 +116,13 @@ export class TemplatesController {
       if (body.logoUrl !== undefined) insertPayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         insertPayload.heroImageUrl = body.heroImageUrl;
+
+      if (body.tierThresholds !== undefined) {
+        this.validateTierThresholds(body.tierThresholds);
+        insertPayload.tierThresholds = body.tierThresholds;
+      } else {
+        insertPayload.tierThresholds = [];
+      }
 
       const { data: template, error } = await this.supabaseService.client
         .from('PassTemplate')
@@ -160,12 +218,20 @@ export class TemplatesController {
       const logoUrl = resolveImageUrl(rawLogoUrl);
       const heroImageUrl = resolveImageUrl(rawHeroImageUrl);
 
+      const rowsWithKeys = (template.fieldRows || []).map((row: any) => ({
+        ...row,
+        columns: row.columns.map((col: any, idx: number) => ({
+          ...col,
+          key: col.key || `${row.id}_${idx}`,
+        })),
+      }));
+
       const classData: any = await this.walletService.createGenericClass({
         classSuffix: template.classSuffix || template.tenant?.classSuffix,
         cardTitle: template.tenant?.name || template.title,
         hexBackgroundColor:
           template.hexBackgroundColor || template.tenant?.brandHexColor,
-        rows: template.fieldRows,
+        rows: rowsWithKeys,
         logoUrl,
         heroImageUrl,
       });
@@ -215,6 +281,11 @@ export class TemplatesController {
       if (body.logoUrl !== undefined) updatePayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         updatePayload.heroImageUrl = body.heroImageUrl;
+
+      if (body.tierThresholds !== undefined) {
+        this.validateTierThresholds(body.tierThresholds);
+        updatePayload.tierThresholds = body.tierThresholds;
+      }
 
       const { data: updated, error } = await this.supabaseService.client
         .from('PassTemplate')

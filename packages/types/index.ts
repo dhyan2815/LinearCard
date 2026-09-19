@@ -53,6 +53,11 @@ export interface Member {
   passes?: Pass[];
 }
 
+export interface TierThreshold {
+  name: string;
+  min: number;
+}
+
 export interface PassTemplate {
   id: string;
   tenantId: string;
@@ -63,7 +68,8 @@ export interface PassTemplate {
   status: 'draft' | 'published' | 'unsaved';
   classSuffix: string;
   googleClassId?: string;
-  fieldRows?: Array<{ id: string; columns: Array<{ header: string; body: string }> }>;
+  fieldRows?: Array<{ id: string; columns: Array<{ key: string; header: string; body: string }> }>;
+  tierThresholds?: TierThreshold[];
   hexBackgroundColor?: string;
   logoUrl?: string;
   heroImageUrl?: string;

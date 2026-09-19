@@ -15,3 +15,5 @@ plans/
 .agent/
 .claude/
 next-env.d.ts
+CLAUDE.md
+.claude/

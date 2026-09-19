@@ -27,21 +27,25 @@ const ARCHETYPES = [
   { value: 'access_badge', label: 'Access Badge' },
 ] as const;
 
+function generateFieldKey(): string {
+  return `field_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 const ARCHETYPE_PRESETS: Record<string, any[]> = {
   loyalty: [
-    { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
+    { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
   ],
   membership: [
-    { id: 'row1', columns: [{ header: 'Member ID', body: '100492' }, { header: 'Status', body: 'Active' }] },
-    { id: 'row2', columns: [{ header: 'Home Club', body: 'YMCA' }, { header: 'Expires', body: '12/2026' }] }
+    { id: 'row1', columns: [{ key: 'member_id', header: 'Member ID', body: '100492' }, { key: 'status', header: 'Status', body: 'Active' }] },
+    { id: 'row2', columns: [{ key: 'home_club', header: 'Home Club', body: 'YMCA' }, { key: 'expires', header: 'Expires', body: '12/2026' }] }
   ],
   id_card: [
-    { id: 'row1', columns: [{ header: 'Employee ID', body: 'EMP-992' }, { header: 'Role', body: 'Developer' }] },
-    { id: 'row2', columns: [{ header: 'Department', body: 'Engineering' }, { header: 'Valid Thru', body: '12/2026' }] }
+    { id: 'row1', columns: [{ key: 'employee_id', header: 'Employee ID', body: 'EMP-992' }, { key: 'role', header: 'Role', body: 'Developer' }] },
+    { id: 'row2', columns: [{ key: 'department', header: 'Department', body: 'Engineering' }, { key: 'valid_thru', header: 'Valid Thru', body: '12/2026' }] }
   ],
   access_badge: [
-    { id: 'row1', columns: [{ header: 'Event', body: 'VIP Access' }, { header: 'Date', body: 'Oct 31' }] },
-    { id: 'row2', columns: [{ header: 'Gate', body: 'A1' }, { header: 'Section', body: '10' }, { header: 'Seat', body: '5F' }] }
+    { id: 'row1', columns: [{ key: 'event', header: 'Event', body: 'VIP Access' }, { key: 'date', header: 'Date', body: 'Oct 31' }] },
+    { id: 'row2', columns: [{ key: 'gate', header: 'Gate', body: 'A1' }, { key: 'section', header: 'Section', body: '10' }, { key: 'seat', header: 'Seat', body: '5F' }] }
   ]
 };
 
@@ -59,8 +63,8 @@ export function TemplateWorkspace({
   const addRow = () => {
     if (designData.rows.length >= 3) return;
     setDesignData({
-      ...designData, 
-      rows: [...designData.rows, { id: `row${Date.now()}`, columns: [{ header: 'New Field', body: 'Value' }] }]
+      ...designData,
+      rows: [...designData.rows, { id: `row${Date.now()}`, columns: [{ key: generateFieldKey(), header: 'New Field', body: 'Value' }] }]
     });
   };
 
@@ -71,7 +75,7 @@ export function TemplateWorkspace({
   const addColumn = (rowId: string) => {
     const newRows = designData.rows.map((r: any) => {
       if (r.id === rowId && r.columns.length < 3) {
-        return { ...r, columns: [...r.columns, { header: 'New Field', body: 'Value' }] };
+        return { ...r, columns: [...r.columns, { key: generateFieldKey(), header: 'New Field', body: 'Value' }] };
       }
       return r;
     });
@@ -102,6 +106,29 @@ export function TemplateWorkspace({
     setDesignData({ ...designData, rows: newRows });
   };
 
+  const tierThresholds: Array<{ name: string; min: number }> = designData.tierThresholds || [];
+
+  const addTier = () => {
+    setDesignData({ ...designData, tierThresholds: [...tierThresholds, { name: '', min: 0 }] });
+  };
+
+  const updateTier = (
+    index: number,
+    field: 'name' | 'min',
+    value: string,
+  ) => {
+    const next = [...tierThresholds];
+    next[index] = {
+      ...next[index],
+      [field]: field === 'min' ? Number(value) || 0 : value,
+    };
+    setDesignData({ ...designData, tierThresholds: next });
+  };
+
+  const removeTier = (index: number) => {
+    setDesignData({ ...designData, tierThresholds: tierThresholds.filter((_, i) => i !== index) });
+  };
+
   const handleSaveDraft = async () => {
     const savePromise = async () => {
       if (savedTemplateId) {
@@ -111,6 +138,7 @@ export function TemplateWorkspace({
             name: designData.cardTitle,
             archetype: designData.archetype,
             fieldRows: designData.rows,
+            tierThresholds,
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
@@ -127,6 +155,7 @@ export function TemplateWorkspace({
             name: designData.cardTitle,
             archetype: designData.archetype,
             fieldRows: designData.rows,
+            tierThresholds,
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
@@ -157,6 +186,7 @@ export function TemplateWorkspace({
             archetype: designData.archetype,
             classSuffix: designData.classSuffix,
             fieldRows: designData.rows,
+            tierThresholds,
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
@@ -172,6 +202,7 @@ export function TemplateWorkspace({
             name: designData.cardTitle,
             archetype: designData.archetype,
             fieldRows: designData.rows,
+            tierThresholds,
             hexBackgroundColor: designData.hexBackgroundColor,
             logoUrl: designData.logoUrl || null,
             heroImageUrl: designData.heroImageUrl || null,
@@ -342,6 +373,52 @@ export function TemplateWorkspace({
                   </button>
                 )}
               </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-ink-dark">
+              Tier Thresholds
+            </h3>
+            <button
+              type="button"
+              onClick={addTier}
+              className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors"
+            >
+              + Add Tier
+            </button>
+          </div>
+          <p className="text-xs text-ink-muted mb-3">
+            Members are auto-promoted to a tier once their points balance
+            reaches its minimum, on every scan transaction.
+          </p>
+          {tierThresholds.map((tier, idx) => (
+            <div key={idx} className="flex items-center gap-2 mb-2">
+              <input
+                type="text"
+                value={tier.name}
+                onChange={(e) => updateTier(idx, 'name', e.target.value)}
+                placeholder="Tier name (e.g. Gold)"
+                className="text-sm flex-1 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
+              />
+              <input
+                type="number"
+                min={0}
+                value={tier.min}
+                onChange={(e) => updateTier(idx, 'min', e.target.value)}
+                placeholder="Min points"
+                className="text-sm w-32 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => removeTier(idx)}
+                className="text-ink-muted hover:text-red-500 transition-colors"
+                aria-label="Remove tier"
+              >
+                ✕
+              </button>
             </div>
           ))}
         </div>

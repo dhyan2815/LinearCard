@@ -40,7 +40,7 @@ export class AuthController {
 
       if (await this.otpService.isOtpRateLimited(phone, 'enrollment')) {
         throw new HttpException(
-          'An OTP was recently sent. Please wait before requesting a new code.',
+          'Too many OTP requests. Please wait 5 minutes before requesting a new code.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
@@ -245,7 +245,7 @@ export class AuthController {
 
       if (await this.otpService.isOtpRateLimited(phone, 'admin_login')) {
         throw new HttpException(
-          'An OTP was recently sent. Please wait before requesting a new code.',
+          'Too many OTP requests. Please wait 5 minutes before requesting a new code.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }

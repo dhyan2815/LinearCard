@@ -20,12 +20,30 @@ export class OtpService {
   async isOtpRateLimited(phone: string, purpose: string): Promise<boolean> {
     const { data } = await this.supabaseService.client
       .from('OtpSession')
-      .select('id')
+      .select('createdAt')
       .eq('phone', phone)
       .eq('purpose', purpose)
       .is('consumedAt', null)
-      .gt('expiresAt', new Date().toISOString())
-      .limit(1);
-    return (data?.length ?? 0) > 0;
+      .order('createdAt', { ascending: false })
+      .limit(3);
+
+    if (!data || data.length < 3) {
+      return false;
+    }
+
+    const newest = new Date(data[0].createdAt).getTime();
+    const oldest = new Date(data[2].createdAt).getTime();
+    const now = Date.now();
+    const fiveMins = 5 * 60 * 1000;
+
+    // Check if 3 unconsumed requests were made within a 5-minute window
+    const isBurst = (newest - oldest) < fiveMins;
+
+    // If they hit the burst limit, block until 5 minutes have passed since the newest request
+    if (isBurst && (now - newest) < fiveMins) {
+      return true;
+    }
+
+    return false;
   }
 }

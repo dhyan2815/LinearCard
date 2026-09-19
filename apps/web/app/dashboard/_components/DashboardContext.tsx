@@ -12,7 +12,8 @@ export interface DesignData {
   hexBackgroundColor: string;
   logoUrl: string;
   heroImageUrl: string;
-  rows: Array<{ id: string; columns: Array<{ header: string; body: string }> }>;
+  rows: Array<{ id: string; columns: Array<{ key: string; header: string; body: string }> }>;
+  tierThresholds: Array<{ name: string; min: number }>;
 }
 
 export interface StatsData {
@@ -79,10 +80,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     logoUrl: '',
     heroImageUrl: '',
     rows: [
-      { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
-    ]
+      { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
+    ],
+    tierThresholds: []
   });
-  
+
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
   const [templateStatus, setTemplateStatus] = useState<'unsaved' | 'draft' | 'published'>('unsaved');
   const [manageData, setManageData] = useState<ManageData>({
@@ -145,8 +147,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       logoUrl: t?.logoUrl || '',
       heroImageUrl: t?.heroUrl || '',
       rows: [
-        { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
-      ]
+        { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
+      ],
+      tierThresholds: []
     });
     setSavedTemplateId(null);
     setTemplateStatus('unsaved');
@@ -174,7 +177,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               hexBackgroundColor: t.hexBackgroundColor,
               logoUrl: t.logoUrl || '',
               heroImageUrl: t.heroImageUrl || '',
-              rows: t.fieldRows || [{ id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }]
+              rows: (t.fieldRows || [{ id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }]).map((row: any) => ({
+                ...row,
+                columns: row.columns.map((col: any, idx: number) => ({
+                  ...col,
+                  key: col.key || `${row.id}_${idx}`,
+                })),
+              })),
+              tierThresholds: t.tierThresholds || []
             });
           } else {
             setSavedTemplateId(null);
@@ -187,8 +197,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               logoUrl: currentTenant.logoUrl || '',
               heroImageUrl: currentTenant.heroUrl || '',
               rows: [
-                { id: 'row1', columns: [{ header: 'Points', body: '500' }, { header: 'Tier', body: 'Gold' }] }
-              ]
+                { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
+              ],
+              tierThresholds: []
             });
           }
         })

@@ -45,6 +45,9 @@ interface TransactionResult {
   orderId: string | null;
   passUpdateStatus: 'pushed_to_wallet' | 'sync_delayed';
   warning?: string;
+  tier: string;
+  tierChanged: boolean;
+  isUpgrade?: boolean;
   transaction: {
     passId: string;
     memberId: string;
@@ -457,6 +460,12 @@ export default function ScanPage() {
                           <span>Order Total: ₹{transactionResult.orderAmount}</span>
                           <span>New Balance: {transactionResult.newBalance} Pts</span>
                         </div>
+                      </div>
+                    )}
+
+                    {transactionResult?.tierChanged && transactionResult?.isUpgrade && (
+                      <div className="mt-3 rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-600">
+                        🏆 Customer upgraded to <strong>{transactionResult.tier}</strong> tier!
                       </div>
                     )}
 

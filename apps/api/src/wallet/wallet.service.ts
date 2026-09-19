@@ -9,6 +9,8 @@ import * as jwt from 'jsonwebtoken';
 import { GoogleAuth } from 'google-auth-library';
 import { SupabaseService } from '../supabase/supabase.service';
 import { NotifyService } from '../notification/notify.service';
+import { WhatsappService } from '../notification/whatsapp.service';
+import { computeTier, TierThreshold } from '../tiers/tier.util';
 
 export interface GoogleWalletPassOptions {
   passId: string;
@@ -32,6 +34,7 @@ export class WalletService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly notifyService: NotifyService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   /**
@@ -82,12 +85,13 @@ export class WalletService {
     if (templateData.rows && templateData.rows.length > 0) {
       templateData.rows.forEach((row: any) => {
         const items = row.columns.map((col: any, idx: number) => {
+          const fieldId = col.key || `${row.id}_${idx}`;
           return {
             item: {
               fieldSelector: {
                 fields: [
                   {
-                    fieldPath: `object.textModulesData['${row.id}_${idx}']`,
+                    fieldPath: `object.textModulesData['${fieldId}']`,
                   },
                 ],
               },
@@ -386,7 +390,7 @@ export class WalletService {
             displayBody = balance;
 
           textModulesData.push({
-            id: `${row.id}_${idx}`,
+            id: col.key || `${row.id}_${idx}`,
             header: col.header,
             body: displayBody,
           });
@@ -651,6 +655,7 @@ export class WalletService {
       orderAmount: number;
     },
     tenantName: string = 'LinearCard',
+    tier?: string,
   ): Promise<{
     walletPushed: boolean;
     directNotified: boolean;
@@ -674,6 +679,7 @@ export class WalletService {
       await this.updateGenericObject(pass.fullPassId, {
         balance: `${transaction.newBalance} Pts`,
         pushNotification: pushBody,
+        ...(tier ? { tier } : {}),
       });
 
       // 1b. Dispatch explicit Google Wallet system tray notification (TEXT_AND_NOTIFY)
@@ -719,6 +725,152 @@ export class WalletService {
   }
 
   /**
+   * Single post-transaction sync point: recomputes tier from thresholds,
+   * pushes the balance/tier to the Google Wallet object, and fires WhatsApp
+   * (redemption receipt always; tier-upgrade message only on a tier change).
+   * Never throws — a delivery failure on any channel is logged and swallowed
+   * so it can never roll back the underlying loyalty transaction.
+   */
+  public async syncPassAfterTransaction(
+    pass: {
+      id: string;
+      fullPassId: string;
+      memberId: string;
+      tenantId: string;
+      tier?: string;
+      phone?: string;
+      tierThresholds?: TierThreshold[];
+    },
+    transaction: {
+      type: 'award' | 'redeem';
+      pointsChanged: number;
+      newBalance: number;
+      orderId?: string;
+      orderAmount: number;
+    },
+    tenantName: string = 'LinearCard',
+  ): Promise<{
+    walletPushed: boolean;
+    directNotified: boolean;
+    warning?: string;
+    tier: string;
+    tierChanged: boolean;
+    isUpgrade?: boolean;
+  }> {
+    const thresholds = pass.tierThresholds || [];
+    const previousTier = pass.tier || 'Standard';
+
+    // No tiers configured for this tenant: leave the pass's tier field alone.
+    // computeTier([]) always resolves to 'Standard', which would otherwise
+    // silently stomp a manually-set tier (e.g. from the dashboard balance-adjust
+    // endpoint) on the very next scan.
+    if (thresholds.length === 0) {
+      const { walletPushed, directNotified, warning } =
+        await this.sendTransactionNotification(
+          pass,
+          transaction,
+          tenantName,
+        );
+
+      if (pass.phone) {
+        try {
+          await this.whatsappService.sendRedemptionReceiptWithLog(
+            pass.phone,
+            `${transaction.newBalance} Pts`,
+            tenantName,
+            { tenantId: pass.tenantId, memberId: pass.memberId },
+          );
+        } catch (err: any) {
+          this.logger.warn(
+            `WhatsApp redemption receipt failed for pass ${pass.id}: ${err.message}`,
+          );
+        }
+      }
+
+      return {
+        walletPushed,
+        directNotified,
+        warning,
+        tier: previousTier,
+        tierChanged: false,
+      };
+    }
+
+    const nextTier = computeTier(transaction.newBalance, thresholds);
+    const tierChanged = nextTier !== previousTier;
+
+    // A tier's rank is its configured `min` — higher min means a higher tier.
+    // Missing thresholds (e.g. a manually-set tier name with no matching
+    // entry) are treated as rank -1 so we never mislabel that transition.
+    const rankOf = (name: string): number =>
+      thresholds.find((t) => t.name === name)?.min ?? -1;
+    const isUpgrade = tierChanged && rankOf(nextTier) > rankOf(previousTier);
+
+    if (tierChanged) {
+      try {
+        await this.supabaseService.client
+          .from('Pass')
+          .update({ tier: nextTier })
+          .eq('id', pass.id);
+      } catch (err: any) {
+        this.logger.warn(
+          `Failed to persist tier change for pass ${pass.id}: ${err.message}`,
+        );
+      }
+    }
+
+    const { walletPushed, directNotified, warning } =
+      await this.sendTransactionNotification(
+        pass,
+        transaction,
+        tenantName,
+        nextTier,
+      );
+
+    if (pass.phone) {
+      try {
+        await this.whatsappService.sendRedemptionReceiptWithLog(
+          pass.phone,
+          `${transaction.newBalance} Pts`,
+          tenantName,
+          { tenantId: pass.tenantId, memberId: pass.memberId },
+        );
+      } catch (err: any) {
+        this.logger.warn(
+          `WhatsApp redemption receipt failed for pass ${pass.id}: ${err.message}`,
+        );
+      }
+
+      // Only celebrate actual upgrades — a large redemption can drop a member
+      // to a lower tier, and "Congratulations, you've been upgraded" would be
+      // wrong (and confusing) in that case.
+      if (isUpgrade) {
+        try {
+          await this.whatsappService.sendTierUpgradeMessage(
+            pass.phone,
+            nextTier,
+            tenantName,
+            { tenantId: pass.tenantId, memberId: pass.memberId },
+          );
+        } catch (err: any) {
+          this.logger.warn(
+            `WhatsApp tier-upgrade message failed for pass ${pass.id}: ${err.message}`,
+          );
+        }
+      }
+    }
+
+    return {
+      walletPushed,
+      directNotified,
+      warning,
+      tier: nextTier,
+      tierChanged,
+      isUpgrade,
+    };
+  }
+
+  /**
    * Processes order-linked loyalty transactions (Award 10% or Redeem max 50% cap).
    * Validates inputs, calculates point changes, updates database balance,
    * records an immutable AuditLog entry, and pushes real-time wallet notifications.
@@ -741,6 +893,9 @@ export class WalletService {
     orderId: string | null;
     passUpdateStatus: 'pushed_to_wallet' | 'sync_delayed';
     warning?: string;
+    tier: string;
+    tierChanged: boolean;
+    isUpgrade?: boolean;
     transaction: any;
   }> {
     if (!passIdentifier) {
@@ -779,7 +934,7 @@ export class WalletService {
     if (isUUID) {
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*, PassTemplate(tierThresholds))')
         .eq('id', cleanId)
         .single();
       pass = data;
@@ -791,7 +946,7 @@ export class WalletService {
         : `${process.env.ISSUER_ID}.${cleanId}`;
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*, PassTemplate(tierThresholds))')
         .eq('fullPassId', fullPassId)
         .single();
       pass = data;
@@ -800,7 +955,7 @@ export class WalletService {
     if (!pass) {
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*, PassTemplate(tierThresholds))')
         .ilike('fullPassId', `%${cleanId}%`)
         .limit(1)
         .single();
@@ -810,7 +965,7 @@ export class WalletService {
     if (!pass && (/^\d{8,}$/.test(cleanId) || /^\+\d+$/.test(cleanId))) {
       const { data: phonePasses } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member!inner(*), Tenant(*)')
+        .select('*, Member!inner(*), Tenant(*, PassTemplate(tierThresholds))')
         .ilike('Member.phone', `%${cleanId}%`)
         .order('createdAt', { ascending: false });
       if (phonePasses && phonePasses.length > 0) {
@@ -911,14 +1066,18 @@ export class WalletService {
       );
     }
 
-    // 3. Dispatch Google Wallet and device notification
-    const notificationResult = await this.sendTransactionNotification(
+    // 3. Recompute tier, sync Google Wallet, and dispatch WhatsApp
+    const templateThresholds =
+      pass.Tenant?.PassTemplate?.[0]?.tierThresholds || [];
+    const syncResult = await this.syncPassAfterTransaction(
       {
         id: pass.id,
         fullPassId: pass.fullPassId,
         memberId: pass.memberId,
         tenantId: pass.tenantId,
+        tier: pass.tier,
         phone: pass.Member?.phone,
+        tierThresholds: templateThresholds,
       },
       {
         type: transactionType,
@@ -927,7 +1086,7 @@ export class WalletService {
         orderId,
         orderAmount: amount,
       },
-      pass.Tenant?.name || 'LinearCard',
+      pass.Tenant?.name,
     );
 
     return {
@@ -938,10 +1097,13 @@ export class WalletService {
       payableAmount,
       orderAmount: amount,
       orderId: orderId || null,
-      passUpdateStatus: notificationResult.walletPushed
+      passUpdateStatus: syncResult.walletPushed
         ? 'pushed_to_wallet'
         : 'sync_delayed',
-      warning: notificationResult.warning,
+      warning: syncResult.warning,
+      tier: syncResult.tier,
+      tierChanged: syncResult.tierChanged,
+      isUpgrade: syncResult.isUpgrade,
       transaction: {
         passId: pass.id,
         memberId: pass.memberId,

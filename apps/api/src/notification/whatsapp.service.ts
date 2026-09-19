@@ -189,4 +189,36 @@ export class WhatsappService {
       throw err;
     }
   }
+
+  public async sendTierUpgradeMessage(
+    phone: string,
+    tierName: string,
+    brandName: string,
+    opts: { tenantId: string; memberId?: string },
+  ): Promise<void> {
+    const text = `🏆 Congratulations! You've been upgraded to *${tierName}* tier on your *${brandName}* card. Enjoy your new perks!`;
+    try {
+      await this.wahaPost('/api/sendText', {
+        chatId: this.toWahaId(phone),
+        text,
+      });
+      await this.notifyService.logNotification({
+        tenantId: opts.tenantId,
+        memberId: opts.memberId,
+        type: 'tier_upgrade' as any,
+        channel: 'whatsapp',
+        status: 'sent',
+      });
+    } catch (err: any) {
+      await this.notifyService.logNotification({
+        tenantId: opts.tenantId,
+        memberId: opts.memberId,
+        type: 'tier_upgrade' as any,
+        channel: 'whatsapp',
+        status: 'failed',
+        errorReason: err?.message || String(err),
+      });
+      throw err;
+    }
+  }
 }
