@@ -44,6 +44,8 @@ export class PController {
 
       const passDesign = await this.walletService.resolveTenantPassDesign(
         pass.tenantId,
+        undefined,
+        pass.programId ?? undefined,
       );
 
       const tenantWallet = await this.walletService.forTenant(pass.tenantId);

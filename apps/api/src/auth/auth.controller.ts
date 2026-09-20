@@ -83,10 +83,47 @@ export class AuthController {
     }
   }
 
+  /**
+   * Phase 3.6 — which program an enrollment issues against.
+   *
+   * An explicit `programId` must belong to the tenant, or the caller is
+   * trying to enroll someone into someone else's program. With none, the
+   * tenant's oldest program is the default, which is what keeps the
+   * pre-Phase-3 `/enroll/:slug` URL working.
+   */
+  private async resolveEnrollmentProgram(
+    tenantId: string,
+    programId?: string,
+  ): Promise<any | null> {
+    if (programId) {
+      const { data } = await this.supabaseService.client
+        .from('Program')
+        .select('*')
+        .eq('id', programId)
+        .eq('tenantId', tenantId)
+        .maybeSingle();
+      if (!data)
+        throw new HttpException(
+          'Program not found for this brand.',
+          HttpStatus.NOT_FOUND,
+        );
+      return data;
+    }
+
+    const { data } = await this.supabaseService.client
+      .from('Program')
+      .select('*')
+      .eq('tenantId', tenantId)
+      .order('createdAt', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    return data ?? null;
+  }
+
   @Post('verify-otp')
   async verifyOtp(@Body() body: VerifyOtpRequest, @Req() req: Request) {
     try {
-      const { otp, consentGiven, tenantId, ...passData } = body;
+      const { otp, consentGiven, tenantId, programId, ...passData } = body;
       let { phone } = body;
       if (!phone || !otp || !consentGiven)
         throw new HttpException(
@@ -185,23 +222,53 @@ export class AuthController {
         legalTextVersion: 'DPDP_v1',
       });
 
-      const startingTier = passData.tier || 'Bronze';
+      // Phase 3.6 — the pass is issued against a *program*, not a tenant.
+      // An explicit programId wins; otherwise fall back to the tenant's
+      // oldest program so the old /enroll/:slug URL keeps working.
+      const targetProgram = await this.resolveEnrollmentProgram(
+        targetTenantId,
+        programId,
+      );
+
+      // The entry tier is the program's lowest configured tier, not a
+      // hardcoded 'Bronze' that may not exist in this program at all.
+      let entryTier: any = null;
+      if (targetProgram?.id) {
+        const { data } = await this.supabaseService.client
+          .from('Tier')
+          .select('*')
+          .eq('programId', targetProgram.id)
+          .order('minPoints', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        entryTier = data;
+      }
+
+      const startingTier = passData.tier || entryTier?.name || 'Bronze';
       const startingBalance = passData.balance || '0 Pts';
       const explicitPassId = crypto.randomUUID();
 
-      const passDesign =
-        await this.walletService.resolveTenantPassDesign(targetTenantId);
+      const passDesign = await this.walletService.resolveTenantPassDesign(
+        targetTenantId,
+        entryTier?.templateId,
+        targetProgram?.id,
+      );
 
       const tenantWallet = await this.walletService.forTenant(targetTenantId);
 
       // Already holds a live pass → hand back the same pass (and the same
       // balance) instead of minting a second one.
-      const { data: existingPass } = await this.supabaseService.client
+      // Scoped to the program (D8): holding a coffee pass must not block
+      // enrolling in the same tenant's gym program.
+      let existingQuery = this.supabaseService.client
         .from('Pass')
         .select('*')
         .eq('memberId', member.id)
         .eq('tenantId', targetTenantId)
-        .is('deletedAt', null)
+        .is('deletedAt', null);
+      if (targetProgram?.id)
+        existingQuery = existingQuery.eq('programId', targetProgram.id);
+      const { data: existingPass } = await existingQuery
         .order('createdAt', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -243,6 +310,8 @@ export class AuthController {
               id: explicitPassId,
               memberId: member.id,
               tenantId: targetTenantId,
+              programId: targetProgram?.id ?? null,
+              tierId: entryTier?.id ?? null,
               fullPassId: passResult.fullPassId,
               balance: 0,
               tier: startingTier,

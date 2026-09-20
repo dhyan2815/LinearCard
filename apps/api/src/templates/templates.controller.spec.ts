@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TemplatesController } from './templates.controller';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
+import { TemplatesService } from './templates.service';
 import { TenantGuard } from '../auth/tenant.guard';
 
 describe('TemplatesController.updateTemplate', () => {
@@ -48,6 +49,7 @@ describe('TemplatesController.updateTemplate', () => {
       providers: [
         { provide: SupabaseService, useValue: supabaseServiceMock },
         { provide: WalletService, useValue: {} },
+        { provide: TemplatesService, useValue: {} },
       ],
     }).compile();
 
@@ -122,74 +124,6 @@ describe('TemplatesController.updateTemplate', () => {
       expect(result.success).toBe(true);
       expect(mockUpdatePayload).toEqual(
         expect.objectContaining({ hexBackgroundColor: '#7C3AED' }),
-      );
-    });
-  });
-
-  describe('updateTemplate — tierThresholds validation', () => {
-    it('rejects a non-array tierThresholds', async () => {
-      await expect(
-        controller.updateTemplate('template-1', { tierThresholds: 'Gold' }, {
-          tenantId: 'tenant-1',
-        } as any),
-      ).rejects.toThrow('tierThresholds must be an array');
-    });
-
-    it('rejects a threshold missing a name', async () => {
-      await expect(
-        controller.updateTemplate(
-          'template-1',
-          {
-            tierThresholds: [{ min: 0 }],
-          },
-          { tenantId: 'tenant-1' } as any,
-        ),
-      ).rejects.toThrow('each tier threshold requires a non-empty name');
-    });
-
-    it('rejects a threshold with a negative min', async () => {
-      await expect(
-        controller.updateTemplate(
-          'template-1',
-          {
-            tierThresholds: [{ name: 'Bronze', min: -10 }],
-          },
-          { tenantId: 'tenant-1' } as any,
-        ),
-      ).rejects.toThrow('threshold min must be a number >= 0');
-    });
-
-    it('rejects duplicate thresholds at the same min', async () => {
-      await expect(
-        controller.updateTemplate(
-          'template-1',
-          {
-            tierThresholds: [
-              { name: 'Bronze', min: 0 },
-              { name: 'Silver', min: 0 },
-            ],
-          },
-          { tenantId: 'tenant-1' } as any,
-        ),
-      ).rejects.toThrow('tier thresholds must have distinct min values');
-    });
-
-    it('accepts and persists a valid tierThresholds array', async () => {
-      const valid = [
-        { name: 'Bronze', min: 0 },
-        { name: 'Silver', min: 500 },
-        { name: 'Gold', min: 2000 },
-      ];
-      const result = await controller.updateTemplate(
-        'template-1',
-        {
-          tierThresholds: valid,
-        },
-        { tenantId: 'tenant-1' } as any,
-      );
-      expect(result.success).toBe(true);
-      expect(supabaseServiceMock.client.from).toHaveBeenCalledWith(
-        'PassTemplate',
       );
     });
   });
@@ -281,6 +215,7 @@ describe('TemplatesController — tenant scoping on :id routes', () => {
       providers: [
         { provide: SupabaseService, useValue: supabaseServiceMock },
         { provide: WalletService, useValue: {} },
+        { provide: TemplatesService, useValue: {} },
       ],
     }).compile();
 
@@ -355,46 +290,22 @@ describe('TemplatesController.createTemplate', () => {
       providers: [
         { provide: SupabaseService, useValue: supabaseServiceMock },
         { provide: WalletService, useValue: {} },
+        { provide: TemplatesService, useValue: {} },
       ],
     }).compile();
 
     controller = module.get<TemplatesController>(TemplatesController);
   });
 
-  it('persists a valid tierThresholds array on create', async () => {
-    const valid = [
-      { name: 'Bronze', min: 0 },
-      { name: 'Silver', min: 500 },
-    ];
-
-    const result = await controller.createTemplate(
-      { name: 'New Template', tierThresholds: valid },
+  it('attaches the template to its program on create (DB-5)', async () => {
+    await controller.createTemplate(
+      { name: 'New Template', programId: 'program-1' },
       { tenantId: 'tenant-1' } as any,
     );
 
-    expect(result.success).toBe(true);
     expect(mockInsertPayload).toEqual(
-      expect.objectContaining({ tierThresholds: valid }),
+      expect.objectContaining({ programId: 'program-1' }),
     );
-  });
-
-  it('defaults tierThresholds to an empty array when not provided', async () => {
-    await controller.createTemplate({ name: 'New Template' }, {
-      tenantId: 'tenant-1',
-    } as any);
-
-    expect(mockInsertPayload).toEqual(
-      expect.objectContaining({ tierThresholds: [] }),
-    );
-  });
-
-  it('rejects an invalid (non-array) tierThresholds the same way updateTemplate does', async () => {
-    await expect(
-      controller.createTemplate(
-        { name: 'New Template', tierThresholds: 'Gold' },
-        { tenantId: 'tenant-1' } as any,
-      ),
-    ).rejects.toThrow('tierThresholds must be an array');
   });
 
   it('rejects a malformed hexBackgroundColor on create', async () => {
@@ -430,6 +341,7 @@ describe('TemplatesController collection-route tenant scoping', () => {
     const controller = new TemplatesController(
       { client: { from: () => ({ select: () => ({ eq: eqMock }) }) } } as any,
       {} as any,
+      {} as any,
     );
 
     await controller.getTemplates({ tenantId: 'guard-tenant' } as any);
@@ -457,6 +369,7 @@ describe('TemplatesController collection-route tenant scoping', () => {
           }),
         },
       } as any,
+      {} as any,
       {} as any,
     );
 

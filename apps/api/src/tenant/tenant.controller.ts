@@ -170,6 +170,15 @@ export class TenantController {
         );
       }
 
+      // Phase 3.6 — the enrollment page needs the tenant's programs so it can
+      // resolve /enroll/:tenantSlug/:programSlug, and fall back to the
+      // default (oldest) program on the bare /enroll/:tenantSlug URL.
+      const { data: programs } = await this.supabaseService.client
+        .from('Program')
+        .select('id, name, kind, enrollmentSlug, status')
+        .eq('tenantId', tenant.id)
+        .order('createdAt', { ascending: true });
+
       return {
         tenantId: tenant.id,
         name: tenant.name,
@@ -177,6 +186,8 @@ export class TenantController {
         logoUrl: tenant.logoUrl,
         heroUrl: tenant.heroUrl,
         classSuffix: tenant.classSuffix,
+        programs: programs || [],
+        defaultProgramId: (programs || [])[0]?.id ?? null,
       };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;

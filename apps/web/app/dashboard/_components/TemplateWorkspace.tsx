@@ -63,6 +63,9 @@ export function TemplateWorkspace({
   setTemplateStatus,
   currentTenant,
   selectedTenantId,
+  currentProgram,
+  tiers = [],
+  setTiers,
   passCount = 0
 }: any) {
   const [fieldsExpanded, setFieldsExpanded] = React.useState(true);
@@ -128,27 +131,36 @@ export function TemplateWorkspace({
     updateDesignData({ ...designData, rows: newRows });
   };
 
-  const tierThresholds: Array<{ name: string; min: number }> = designData.tierThresholds || [];
+  // Phase 3.2 — the editor works on the program's real `Tier` rows and saves
+  // them through PATCH /programs/:id/tiers. The old `tierThresholds` JSONB it
+  // used to write was never read by the scan pipeline (DB-9), so editing a
+  // tier here changed nothing about what the next scan computed.
+  const isTicketProgram = currentProgram?.kind === 'ticket';
+
+  const setTierList = (next: any[]) => {
+    setTiers?.(next);
+    setTemplateStatus((prev: any) => (prev === 'published' ? 'draft' : prev));
+  };
 
   const addTier = () => {
-    updateDesignData({ ...designData, tierThresholds: [...tierThresholds, { name: '', min: 0 }] });
+    setTierList([...tiers, { name: '', minPoints: 0, templateId: null }]);
   };
 
   const updateTier = (
     index: number,
-    field: 'name' | 'min',
+    field: 'name' | 'minPoints',
     value: string,
   ) => {
-    const next = [...tierThresholds];
+    const next = [...tiers];
     next[index] = {
       ...next[index],
-      [field]: field === 'min' ? Number(value) || 0 : value,
+      [field]: field === 'minPoints' ? Number(value) || 0 : value,
     };
-    updateDesignData({ ...designData, tierThresholds: next });
+    setTierList(next);
   };
 
   const removeTier = (index: number) => {
-    updateDesignData({ ...designData, tierThresholds: tierThresholds.filter((_, i) => i !== index) });
+    setTierList(tiers.filter((_: any, i: number) => i !== index));
   };
 
   const storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }> =
@@ -188,7 +200,6 @@ export function TemplateWorkspace({
       name: designData.cardTitle,
       archetype: designData.archetype,
       fieldRows: designData.rows,
-      tierThresholds,
       storeLocations,
       earnRate: designData.earnRate,
       redeemRate: designData.redeemRate,
@@ -198,12 +209,40 @@ export function TemplateWorkspace({
       heroImageUrl: designData.heroImageUrl || null,
     };
 
+    // A saved design on a loyalty program also persists its tiers and its
+    // economics onto the Program row, which is what the scan pipeline reads.
+    const saveProgramConfig = async () => {
+      if (!currentProgram?.id || currentProgram.kind !== 'loyalty') return;
+      await apiClient(`/programs/${currentProgram.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          earnRate: designData.earnRate,
+          redeemRate: designData.redeemRate,
+          redeemCapPercent: designData.redeemCapPercent,
+        }),
+      });
+      const named = tiers.filter((t: any) => t.name?.trim());
+      const data = await apiClient(`/programs/${currentProgram.id}/tiers`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          tiers: named.map((t: any) => ({
+            name: t.name,
+            minPoints: Number(t.minPoints) || 0,
+            templateId: t.templateId ?? null,
+          })),
+        }),
+      });
+      if (!data.success) throw new Error(data.error || 'Error saving tiers');
+      setTiers?.(data.tiers);
+    };
+
     if (savedTemplateId) {
       const data = await apiClient(`/templates/${savedTemplateId}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
       if (!data.success) throw new Error(data.error || 'Error saving draft');
+      await saveProgramConfig();
       setTemplateStatus('draft');
       return savedTemplateId;
     }
@@ -213,10 +252,12 @@ export function TemplateWorkspace({
       body: JSON.stringify({
         ...payload,
         tenantId: currentTenant?.id || selectedTenantId,
+        programId: currentProgram?.id ?? null,
         classSuffix: designData.classSuffix,
       }),
     });
     if (!data.success) throw new Error(data.error || 'Error saving draft');
+    await saveProgramConfig();
     setSavedTemplateId(data.template.id);
     setTemplateStatus('draft');
     return data.template.id;
@@ -543,6 +584,7 @@ export function TemplateWorkspace({
           )}
         </div>
 
+        {!isTicketProgram && (
         <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
           <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Loyalty Economics</h3>
           <p className="text-xs text-ink-muted mb-3">
@@ -574,12 +616,24 @@ export function TemplateWorkspace({
             cover at most ₹{Math.floor(1000 * ((Number(designData.redeemCapPercent) || 0) / 100))} of it.
           </p>
         </div>
+        )}
 
+        {isTicketProgram && (
+          <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
+            <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Ticket Program</h3>
+            <p className="text-xs text-ink-muted">
+              Tickets have no points and no tiers — they are single-use and
+              dated. Set the event date and venue on the program itself.
+            </p>
+          </div>
+        )}
+
+        {!isTicketProgram && (
         <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm">
           <button type="button" onClick={() => setTiersExpanded(!tiersExpanded)} className="w-full flex items-center justify-between p-4">
             <span className="flex items-center gap-2 text-xs font-semibold text-ink-dark">
               <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${tiersExpanded ? 'rotate-180' : ''}`} strokeWidth={1.75} />
-              Tier Thresholds {tierThresholds.length > 0 ? `(${tierThresholds.length})` : ''}
+              Tiers {tiers.length > 0 ? `(${tiers.length})` : ''}
             </span>
             {tiersExpanded && (
               <span
@@ -597,9 +651,10 @@ export function TemplateWorkspace({
             <div className="px-4 pb-4">
               <p className="text-xs text-ink-muted mb-3">
                 Members are auto-promoted to a tier once their points balance
-                reaches its minimum, on every scan transaction.
+                reaches its minimum, on every scan transaction. Saved onto the
+                program, which is what the scanner reads.
               </p>
-              {tierThresholds.map((tier, idx) => (
+              {tiers.map((tier: any, idx: number) => (
                 <div key={idx} className="flex items-center gap-2 mb-2">
                   <input
                     type="text"
@@ -611,8 +666,8 @@ export function TemplateWorkspace({
                   <input
                     type="number"
                     min={0}
-                    value={tier.min}
-                    onChange={(e) => updateTier(idx, 'min', e.target.value)}
+                    value={tier.minPoints}
+                    onChange={(e) => updateTier(idx, 'minPoints', e.target.value)}
                     placeholder="Min points"
                     className="text-sm w-32 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
                   />
@@ -629,6 +684,7 @@ export function TemplateWorkspace({
             </div>
           )}
         </div>
+        )}
       </div>
 
       <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-4 bg-linear-to-t from-canvas via-canvas/95 to-transparent">

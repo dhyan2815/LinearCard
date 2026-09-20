@@ -5,6 +5,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { PassesModule } from './passes/passes.module';
 import { MembersModule } from './members/members.module';
 import { TemplatesModule } from './templates/templates.module';
+import { ProgramsModule } from './programs/programs.module';
 import { TenantModule } from './tenant/tenant.module';
 import { AuthModule } from './auth/auth.module';
 import { DevelopersModule } from './developers/developers.module';
@@ -23,6 +24,7 @@ import { NotificationModule } from './notification/notification.module';
     AuthModule,
     TenantModule,
     TemplatesModule,
+    ProgramsModule,
     MembersModule,
     PassesModule,
     DashboardModule,

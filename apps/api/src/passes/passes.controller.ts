@@ -99,8 +99,14 @@ export class PassesController {
       // doesn't explicitly override a field — keeps this endpoint's
       // "whatever the caller sends" flexibility while still defaulting to
       // the single source of truth instead of a stale/undefined colour.
-      const passDesign =
-        await this.walletService.resolveTenantPassDesign(targetTenantId);
+      // Phase 3.3 — scope the design fallback to the program the caller is
+      // issuing against; without it, a tenant running two programs could get
+      // the other program's published design (PRG-2).
+      const passDesign = await this.walletService.resolveTenantPassDesign(
+        targetTenantId,
+        undefined,
+        body.programId,
+      );
 
       // Demo-status tenants may only issue passes to registered test
       // members — a minimal gate ahead of the production-approval flow.
@@ -150,6 +156,7 @@ export class PassesController {
               fullPassId: result.fullPassId,
               memberId: member.id,
               tenantId: targetTenantId,
+              programId: body.programId ?? null,
               balance:
                 parseInt(body.balance ?? body.issueBalance ?? '0', 10) || 0,
               tier: body.tier ?? body.issueTier ?? 'Standard',

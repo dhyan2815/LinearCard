@@ -745,6 +745,7 @@ describe('syncPassAfterTransaction', () => {
     expect(service.resolveTenantPassDesign).toHaveBeenCalledWith(
       basePass.tenantId,
       'tpl-silver',
+      undefined,
     );
     expect(service.updateGenericObject).toHaveBeenCalledWith(
       basePass.fullPassId,
@@ -889,33 +890,28 @@ describe('processOrderTransaction — tier propagation', () => {
     );
   });
 
-  it("resolves tiers from the tenant's one canonical Program, not a merge across stale duplicates", async () => {
-    // Simulates the pre-fix bug: a tenant somehow has two Program rows (e.g.
-    // a leftover from before the Program.tenantId unique index existed).
-    // The fetch must pick exactly one Program (oldest first) and use only
-    // its Tier rows -- never merge tiers across both Programs.
-    const programsForTenant = [
-      { id: 'program-old', createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'program-new', createdAt: '2026-06-01T00:00:00Z' },
-    ];
+  it("scores a pass against its own program, not the tenant's oldest one (PRG-1)", async () => {
+    // D8: one tenant, two programs. Before Phase 3.3 this resolved the
+    // tenant's oldest Program and scored every scan against it, so a coffee
+    // pass was ranked by the gym program's tiers.
     const tiersByProgram: Record<string, any[]> = {
-      'program-old': [
+      'program-coffee': [
         {
-          id: 't-old-silver',
-          programId: 'program-old',
+          id: 't-coffee-silver',
+          programId: 'program-coffee',
           name: 'Silver',
           minPoints: 500,
-          templateId: 'tpl-old',
+          templateId: 'tpl-coffee',
           sortOrder: 0,
         },
       ],
-      'program-new': [
+      'program-gym': [
         {
-          id: 't-new-gold',
-          programId: 'program-new',
+          id: 't-gym-gold',
+          programId: 'program-gym',
           name: 'Gold',
           minPoints: 9999,
-          templateId: 'tpl-new',
+          templateId: 'tpl-gym',
           sortOrder: 0,
         },
       ],
@@ -932,6 +928,9 @@ describe('processOrderTransaction — tier propagation', () => {
                   fullPassId: 'issuer.pass-1',
                   memberId: 'member-1',
                   tenantId: 'tenant-1',
+                  // The pass belongs to the coffee program, which is NOT the
+                  // tenant's oldest.
+                  programId: 'program-coffee',
                   balance: 100,
                   tier: 'Bronze',
                   Member: { phone: '+919876543210' },
@@ -947,13 +946,9 @@ describe('processOrderTransaction — tier propagation', () => {
       if (table === 'Program') {
         return {
           select: () => ({
-            eq: () => ({
-              order: () => ({
-                // Oldest-first ordering: the mock returns the oldest
-                // program's id, matching real Postgres ORDER BY behaviour.
-                limit: () => ({
-                  maybeSingle: async () => ({ data: programsForTenant[0] }),
-                }),
+            eq: (_col: string, id: string) => ({
+              maybeSingle: async () => ({
+                data: { id, kind: 'loyalty', earnRate: null },
               }),
             }),
           }),
@@ -984,6 +979,7 @@ describe('processOrderTransaction — tier propagation', () => {
 
     const passedTiers = syncSpy.mock.calls[0][0].tiers;
     expect(passedTiers).toHaveLength(1);
-    expect(passedTiers[0].name).toBe('Silver'); // from program-old, not program-new's Gold
+    expect(passedTiers[0].name).toBe('Silver'); // coffee's tier, not gym's Gold
+    expect(syncSpy.mock.calls[0][0].programId).toBe('program-coffee');
   });
 });

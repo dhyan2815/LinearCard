@@ -56,20 +56,57 @@ export const DEFAULT_LOYALTY_RULES: LoyaltyRules = {
 
 /** Columns pulled from the embedded PassTemplate rows when scoring a scan. */
 export const PASS_TEMPLATE_RULE_FIELDS =
-  'id, status, updatedAt, tierThresholds, earnRate, redeemRate, redeemCapPercent';
+  'id, status, updatedAt, programId, earnRate, redeemRate, redeemCapPercent';
 
 /**
- * Picks the loyalty rules a transaction is scored against: the tenant's
- * published template (most recently updated), else any template, else the
- * defaults. Mirrors `resolveTenantPassDesign`'s resolution order so the rules
- * and the design a member sees always come from the same template.
+ * Phase 3.7 (DB-6) — every Google Wallet class suffix derives from the
+ * tenant / program / tier it belongs to, never the shared
+ * `'linearcard_sandbox_class'` literal that made two brands collide on one
+ * class. Each tier gets its own suffix so the tier-driven design swap in
+ * `syncPassAfterTransaction` actually swaps classes.
+ *
+ * The environment prefix is *not* part of this: it is applied at call time
+ * by `resolveClassId`, because the suffix is stored in a row shared by all
+ * three environments (D13/D15).
  */
-export function resolveLoyaltyRules(templates: any): LoyaltyRules {
-  const rows: any[] = Array.isArray(templates)
+export function buildClassSuffix(
+  tenantSlug: string,
+  programSlug: string,
+  tierSlug?: string,
+): string {
+  const clean = (s: string) =>
+    (s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  return [clean(tenantSlug) || 'tenant', clean(programSlug) || 'program']
+    .concat(tierSlug ? [clean(tierSlug)] : [])
+    .join('_');
+}
+
+/**
+ * Picks the loyalty rules a transaction is scored against: the published
+ * template (most recently updated), else any template, else the defaults.
+ * Mirrors `resolveTenantPassDesign`'s resolution order so the rules and the
+ * design a member sees always come from the same template.
+ *
+ * `programId` narrows the candidates to that program's templates (Phase 3.3)
+ * — without it, a tenant running two programs could score a coffee scan
+ * against the gym program's earn rate.
+ */
+export function resolveLoyaltyRules(
+  templates: any,
+  programId?: string | null,
+): LoyaltyRules {
+  const all: any[] = Array.isArray(templates)
     ? templates
     : templates
       ? [templates]
       : [];
+  const scoped = programId
+    ? all.filter((t) => t?.programId === programId)
+    : all;
+  const rows = scoped.length ? scoped : programId ? [] : all;
   const published = rows
     .filter((t) => t?.status === 'published')
     .sort((a, b) =>
@@ -238,12 +275,19 @@ export class WalletService {
    * over a template the designer had already re-coloured.
    *
    * `templateId` optionally pins the design to a specific PassTemplate
-   * (e.g. the one a member's new `Tier` points at after a tier change)
-   * instead of the tenant's latest published template.
+   * (e.g. the one a member's new `Tier` points at after a tier change).
+   *
+   * `programId` scopes the fallback to that program's templates (PRG-2,
+   * Phase 3.3). Under D8 a tenant runs several programs, so "the tenant's
+   * most recently updated published template" is actively wrong — publishing
+   * a gym template would change the design used to issue a coffee pass. The
+   * tenant-wide fallback survives only for callers with no program in hand
+   * (legacy passes whose `programId` the backfill could not set).
    */
   public async resolveTenantPassDesign(
     tenantId: string,
     templateId?: string,
+    programId?: string,
   ): Promise<{
     hexBackgroundColor: string;
     logoUrl?: string;
@@ -269,7 +313,22 @@ export class WalletService {
       template = data;
     }
 
-    if (!template) {
+    if (!template && programId) {
+      const { data } = await this.supabaseService.client
+        .from('PassTemplate')
+        .select('*')
+        .eq('tenantId', tenantId)
+        .eq('programId', programId)
+        .eq('status', 'published')
+        .order('updatedAt', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      template = data;
+    }
+
+    // No program in hand: fall back to the tenant's latest published
+    // template. Correct only while a pass has no program attached.
+    if (!template && !programId) {
       const { data } = await this.supabaseService.client
         .from('PassTemplate')
         .select('*')
@@ -1132,6 +1191,7 @@ export class WalletService {
       tier?: string;
       phone?: string;
       tiers?: Tier[];
+      programId?: string | null;
     },
     transaction: {
       type: 'award' | 'redeem';
@@ -1223,6 +1283,7 @@ export class WalletService {
         const resolved = await this.resolveTenantPassDesign(
           pass.tenantId,
           nextTierRow.templateId,
+          pass.programId ?? undefined,
         );
         design = {
           hexBackgroundColor: resolved.hexBackgroundColor,
@@ -1437,8 +1498,34 @@ export class WalletService {
       );
     }
 
-    // Per-brand economics (WAL-4), not the old hardcoded 10% / 1:₹1 / 50%.
-    const rules = resolveLoyaltyRules(pass.Tenant?.PassTemplate);
+    // Per-program economics (WAL-4 + Phase 3.1). The Program row owns these
+    // now; a program created before the migration (or a pass with no
+    // program) falls back to its templates, then to the defaults.
+    const { data: programRow } = pass.programId
+      ? await this.supabaseService.client
+          .from('Program')
+          .select('id, kind, earnRate, redeemRate, redeemCapPercent')
+          .eq('id', pass.programId)
+          .maybeSingle()
+      : { data: null };
+
+    // A ticket program has no points pipeline at all (D9/D14) — awarding or
+    // redeeming against one is a caller mistake, not a silent no-op.
+    if (programRow?.kind === 'ticket') {
+      throw new HttpException(
+        'This pass belongs to a ticket program, which has no loyalty points.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const rules: LoyaltyRules =
+      programRow && programRow.earnRate !== null
+        ? {
+            earnRate: Number(programRow.earnRate),
+            redeemRate: Number(programRow.redeemRate ?? 1),
+            redeemCapPercent: Number(programRow.redeemCapPercent ?? 50),
+          }
+        : resolveLoyaltyRules(pass.Tenant?.PassTemplate, pass.programId);
 
     const currentBalance = Number(pass.balance) || 0;
     let pointsChanged = 0;
@@ -1543,28 +1630,19 @@ export class WalletService {
       )
       .catch(() => {});
 
-    // 3. Recompute tier, sync Google Wallet, and dispatch WhatsApp
-    // Real `Tier` rows for this tenant's canonical program, sorted for
-    // computeTier. A unique index on Program.tenantId guarantees exactly one
-    // Program per tenant (enforced in the 20260919000006 migration). We
-    // still resolve the Program explicitly (oldest first) rather than
-    // filtering Tier by tenantId directly, so that if the constraint is
-    // ever bypassed (e.g. a stale row from before it existed), we use one
-    // deterministic Program instead of silently merging tiers across all of
-    // the tenant's Programs.
-    const { data: programRow } = await this.supabaseService.client
-      .from('Program')
-      .select('id')
-      .eq('tenantId', pass.tenantId)
-      .order('createdAt', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    const { data: tierRows } = programRow
+    // 3. Recompute tier, sync Google Wallet, and dispatch WhatsApp.
+    //
+    // Tiers come from the pass's OWN program (PRG-1, Phase 3.3). This used to
+    // take the tenant's oldest Program, which under D8 — several programs per
+    // tenant — scored every transaction against whichever program happened to
+    // be created first. A pass with no programId (a legacy row the backfill
+    // missed) simply gets no tiers, which leaves its tier field untouched
+    // rather than scoring it against a stranger's thresholds.
+    const { data: tierRows } = pass.programId
       ? await this.supabaseService.client
           .from('Tier')
           .select('*')
-          .eq('programId', programRow.id)
+          .eq('programId', pass.programId)
           .order('sortOrder', { ascending: true })
       : { data: [] };
     const tiers: Tier[] = tierRows || [];
@@ -1578,6 +1656,7 @@ export class WalletService {
         tier: pass.tier,
         phone: pass.Member?.phone,
         tiers,
+        programId: pass.programId,
       },
       {
         type: transactionType,

@@ -14,6 +14,7 @@ import {
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
+import { TemplatesService } from './templates.service';
 
 const RESYNC_BATCH_SIZE = 10;
 
@@ -22,6 +23,7 @@ export class TemplatesController {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly walletService: WalletService,
+    private readonly templatesService: TemplatesService,
   ) {}
 
   // Tenant comes from the guard, never from `?tenantId=` — the query param
@@ -67,57 +69,6 @@ export class TemplatesController {
       );
     }
     return value.toUpperCase();
-  }
-
-  /**
-   * Validates a tierThresholds payload, throwing an HttpException with the
-   * same shape/message used across createTemplate and updateTemplate.
-   */
-  private validateTierThresholds(value: any): void {
-    if (!Array.isArray(value)) {
-      throw new HttpException(
-        {
-          success: false,
-          error: 'tierThresholds must be an array',
-          message: 'tierThresholds must be an array',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const seenMins = new Set<number>();
-    for (const t of value) {
-      if (!t || typeof t.name !== 'string' || t.name.trim() === '') {
-        throw new HttpException(
-          {
-            success: false,
-            error: 'each tier threshold requires a non-empty name',
-            message: 'each tier threshold requires a non-empty name',
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      if (typeof t.min !== 'number' || t.min < 0) {
-        throw new HttpException(
-          {
-            success: false,
-            error: 'threshold min must be a number >= 0',
-            message: 'threshold min must be a number >= 0',
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      if (seenMins.has(t.min)) {
-        throw new HttpException(
-          {
-            success: false,
-            error: 'tier thresholds must have distinct min values',
-            message: 'tier thresholds must have distinct min values',
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      seenMins.add(t.min);
-    }
   }
 
   /**
@@ -238,6 +189,9 @@ export class TemplatesController {
         subtitle: body.name || 'New Template',
         status: 'draft',
         classSuffix: body.classSuffix,
+        // DB-5: a template belongs to a program. Nullable for templates
+        // created by callers that predate Phase 3.
+        programId: body.programId ?? null,
       };
 
       if (body.fieldRows !== undefined)
@@ -249,13 +203,6 @@ export class TemplatesController {
       if (body.logoUrl !== undefined) insertPayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         insertPayload.heroImageUrl = body.heroImageUrl;
-
-      if (body.tierThresholds !== undefined) {
-        this.validateTierThresholds(body.tierThresholds);
-        insertPayload.tierThresholds = body.tierThresholds;
-      } else {
-        insertPayload.tierThresholds = [];
-      }
 
       if (body.storeLocations !== undefined) {
         this.validateStoreLocations(body.storeLocations);
@@ -337,103 +284,14 @@ export class TemplatesController {
   @UseGuards(TenantGuard)
   async publishTemplate(@Param('id') id: string, @Req() req: TenantRequest) {
     try {
-      const { data: template, error: fetchError } =
-        await this.supabaseService.client
-          .from('PassTemplate')
-          .select('*, tenant:Tenant(*)')
-          .eq('id', id)
-          .eq('tenantId', req.tenantId)
-          .single();
-      if (fetchError || !template)
-        throw new HttpException(
-          { success: false, error: 'Template not found' },
-          HttpStatus.NOT_FOUND,
-        );
-
-      function resolveImageUrl(url?: string): string | undefined {
-        if (!url) return undefined;
-        if (url.includes('localhost') || url.includes('127.0.0.1')) {
-          return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
-        }
-        if (url.startsWith('/')) {
-          const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ||
-            (process.env.VERCEL_URL
-              ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
-              : 'http://localhost:3000');
-          if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
-            return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
-          }
-          return `${baseUrl}${url}`;
-        }
-        return url;
-      }
-
-      const rawLogoUrl = template.logoUrl || template.tenant?.logoUrl;
-      const rawHeroImageUrl = template.heroImageUrl || template.tenant?.heroUrl;
-      const logoUrl = resolveImageUrl(rawLogoUrl);
-      const heroImageUrl = resolveImageUrl(rawHeroImageUrl);
-
-      const rowsWithKeys = (template.fieldRows || []).map((row: any) => ({
-        ...row,
-        columns: row.columns.map((col: any, idx: number) => ({
-          ...col,
-          key: col.key || `${row.id}_${idx}`,
-        })),
-      }));
-
-      const tenantWallet = await this.walletService.forTenant(req.tenantId!);
-      const envKey = tenantWallet.getWalletEnvPrefix() || 'prod';
-      const classData: any = await tenantWallet.createGenericClass({
-        classSuffix: template.classSuffix || template.tenant?.classSuffix,
-        cardTitle: template.tenant?.name || template.title,
-        hexBackgroundColor:
-          template.hexBackgroundColor || template.tenant?.brandHexColor,
-        rows: rowsWithKeys,
-        logoUrl,
-        heroImageUrl,
-        storeLocations: template.storeLocations ?? [],
-        // Each environment tracks whether *its own* class exists (ENV-1):
-        // `googleClassId` alone held whichever environment published last.
-        isUpdate: !!(template.googleClassIds || {})[envKey],
-      });
-
-      // The 409 fallback returns {existing:true, updated:false} when its own
-      // PATCH attempt also failed — without this check that silent failure
-      // used to still flip status to 'published'.
-      if (classData?.updated === false) {
-        throw new HttpException(
-          {
-            success: false,
-            error:
-              'Failed to publish: Google Wallet class update was rejected. Template left as draft.',
-          },
-          HttpStatus.BAD_GATEWAY,
-        );
-      }
-
-      const { data: updated, error: updateError } =
-        await this.supabaseService.client
-          .from('PassTemplate')
-          .update({
-            status: 'published',
-            googleClassId: classData.id,
-            googleClassIds: {
-              ...(template.googleClassIds || {}),
-              [envKey]: classData.id,
-            },
-            updatedAt: new Date().toISOString(),
-          })
-          .eq('id', id)
-          .eq('tenantId', req.tenantId)
-          .select()
-          .single();
-      if (updateError) throw updateError;
-
+      const { classData, template } = await this.templatesService.publish(
+        id,
+        req.tenantId!,
+      );
       return {
         success: true,
         classData,
-        template: { ...updated, name: updated.title },
+        template: { ...template, name: template.title },
       };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
@@ -607,6 +465,8 @@ export class TemplatesController {
 
       // Selectively apply only the fields provided in the body
       if (body.name !== undefined) updatePayload.title = body.name;
+      if (body.programId !== undefined)
+        updatePayload.programId = body.programId;
       if (body.archetype !== undefined)
         updatePayload.archetype = body.archetype;
       if (body.fieldRows !== undefined)
@@ -618,11 +478,6 @@ export class TemplatesController {
       if (body.logoUrl !== undefined) updatePayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         updatePayload.heroImageUrl = body.heroImageUrl;
-
-      if (body.tierThresholds !== undefined) {
-        this.validateTierThresholds(body.tierThresholds);
-        updatePayload.tierThresholds = body.tierThresholds;
-      }
 
       if (body.storeLocations !== undefined) {
         this.validateStoreLocations(body.storeLocations);

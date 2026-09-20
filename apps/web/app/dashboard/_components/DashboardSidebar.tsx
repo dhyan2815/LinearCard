@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Palette, Zap, Bell, Users, Settings2, ChevronDown, Check, Menu, Terminal, User, LogOut, Moon, Sun } from 'lucide-react';
+import { Layers, Palette, Zap, Bell, Users, Settings2, ChevronDown, Check, Menu, Terminal, User, LogOut, Moon, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useDashboard } from './DashboardContext';
 import { useRouter } from 'next/navigation';
@@ -42,6 +42,7 @@ export function DashboardSidebar() {
   };
 
   const tabs = [
+    { id: 'programs', path: '/dashboard/programs', label: 'Programs', icon: <Layers className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
     { id: 'template-designer', path: '/dashboard/template-designer', label: 'Template Designer', icon: <Palette className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
     { id: 'live-activity', path: '/dashboard/live-activity', label: 'Live Activity', icon: <Zap className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
     { id: 'push-campaigns', path: '/dashboard/push-campaigns', label: 'Push Campaigns', icon: <Bell className="w-4 h-4" strokeWidth={ICON_STROKE} /> },

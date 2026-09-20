@@ -15,6 +15,8 @@ export interface VerifyOtpRequest {
   otp: string;
   consentGiven: boolean;
   tenantId?: string;
+  /** Program the pass is issued against (Phase 3.6). */
+  programId?: string;
   memberName?: string;
   tier?: string;
   balance?: string;
@@ -44,6 +46,8 @@ export interface Pass {
   fullPassId: string;
   tier: string;
   balance: string | number;
+  /** Which program this pass belongs to (Phase 3.1). */
+  programId?: string | null;
 }
 
 export interface Member {
@@ -59,21 +63,41 @@ export interface Member {
   marketingOptOutAt?: string | null;
 }
 
-// Legacy JSONB shape stored on PassTemplate.tierThresholds. Kept as a
-// distinct DTO (not replaced by `Tier`) because it describes a threshold
-// with no DB row identity — no id/programId/templateId/sortOrder — used
-// only for the template-designer's tier editor payload. `Tier` below is
-// the real DB row shape `computeTier` operates on post Phase-3.
-export interface TierThreshold {
-  name: string;
-  min: number;
-}
+/**
+ * D9/D14. Ticket programs have no points and no tiers: the designer hides
+ * the tier editor for them and the scan pipeline skips them entirely.
+ */
+export type ProgramKind = 'loyalty' | 'ticket';
 
 export interface Program {
   id: string;
   tenantId: string;
   name: string;
+  kind: ProgramKind;
+  archetype: string;
+  status: 'draft' | 'published' | 'archived';
+  /** Second segment of /enroll/:tenantSlug/:programSlug. Unique per tenant. */
+  enrollmentSlug?: string | null;
+  /** Loyalty economics — moved here off PassTemplate in Phase 3.1. */
+  earnRate?: number | null;
+  redeemRate?: number | null;
+  redeemCapPercent?: number | null;
+  /** Ticket-only. */
+  eventStartsAt?: string | null;
+  eventEndsAt?: string | null;
+  venueName?: string | null;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Tier input as the designer sends it — no row identity yet. `PATCH
+ * /programs/:id/tiers` replaces the program's tiers with these.
+ */
+export interface TierInput {
+  name: string;
+  minPoints: number;
+  templateId?: string | null;
 }
 
 export interface Tier {
@@ -144,6 +168,8 @@ export interface CampaignPreviewResponse {
 export interface PassTemplate {
   id: string;
   tenantId: string;
+  /** Owning program (Phase 3.1, DB-5). */
+  programId?: string | null;
   title: string;
   name?: string;
   subtitle?: string;
@@ -154,11 +180,13 @@ export interface PassTemplate {
   /** Live Google Wallet class id per environment prefix, e.g. { prod, preview, dev }. */
   googleClassIds?: Record<string, string>;
   fieldRows?: Array<{ id: string; columns: Array<{ key: string; header: string; body: string }> }>;
-  tierThresholds?: TierThreshold[];
   hexBackgroundColor?: string;
   logoUrl?: string;
   heroImageUrl?: string;
-  /** Loyalty economics (Phase 1.3). Move onto `Program` in Phase 3. */
+  /**
+   * Loyalty economics. `Program` owns these post Phase 3.1; the template
+   * columns remain as the fallback for templates with no program.
+   */
   earnRate?: number;
   redeemRate?: number;
   redeemCapPercent?: number;

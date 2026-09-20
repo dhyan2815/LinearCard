@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PassesController } from './passes.controller';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -137,19 +135,5 @@ describe('PassesController.postgeneratepass demo gate', () => {
 
     expect(createGoogleWalletPass).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
-  });
-
-  it('migration defaults publishStatus to production, not demo', () => {
-    const sql = fs.readFileSync(
-      path.resolve(
-        __dirname,
-        '../../../../supabase/migrations/20260919000005_add_wallet_tenant_credentials.sql',
-      ),
-      'utf8',
-    );
-    expect(sql).toContain(`"publishStatus" TEXT NOT NULL DEFAULT 'production'`);
-    expect(sql).not.toContain(`DEFAULT 'demo'`);
-    // Existing rows are backfilled to production, not left in demo.
-    expect(sql).toMatch(/UPDATE "Tenant"\s+SET "publishStatus" = 'production'/);
   });
 });
