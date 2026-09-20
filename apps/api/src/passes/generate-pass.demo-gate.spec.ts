@@ -85,7 +85,8 @@ describe('PassesController.postgeneratepass demo gate', () => {
     };
   };
 
-  const req = () => ({ body: { tenantId: 't1', phone: '+919999999999' } }) as any;
+  const req = () =>
+    ({ body: { tenantId: 't1', phone: '+919999999999' } }) as any;
 
   it('issues a pass for a production tenant and a non-test member', async () => {
     const { controller, createGoogleWalletPass } = await build('production', {

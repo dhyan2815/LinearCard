@@ -23,7 +23,12 @@ function makeClient() {
         return {
           select: () => ({
             single: async () => ({
-              data: { id: 'key1', name: row.name, prefix: row.prefix, createdAt: 'now' },
+              data: {
+                id: 'key1',
+                name: row.name,
+                prefix: row.prefix,
+                createdAt: 'now',
+              },
               error: null,
             }),
           }),

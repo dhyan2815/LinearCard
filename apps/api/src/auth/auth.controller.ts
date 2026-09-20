@@ -125,7 +125,9 @@ export class AuthController {
           attempt.locked
             ? 'Too many incorrect attempts. Please request a new code.'
             : 'Incorrect code. Please try again.',
-          attempt.locked ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED,
+          attempt.locked
+            ? HttpStatus.TOO_MANY_REQUESTS
+            : HttpStatus.UNAUTHORIZED,
         );
       }
 
@@ -187,9 +189,8 @@ export class AuthController {
       const startingBalance = passData.balance || '0 Pts';
       const explicitPassId = crypto.randomUUID();
 
-      const passDesign = await this.walletService.resolveTenantPassDesign(
-        targetTenantId,
-      );
+      const passDesign =
+        await this.walletService.resolveTenantPassDesign(targetTenantId);
 
       const tenantWallet = await this.walletService.forTenant(targetTenantId);
 
@@ -375,7 +376,9 @@ export class AuthController {
           attempt.locked
             ? 'Too many incorrect attempts. Please request a new code.'
             : 'Invalid code. Please try again.',
-          attempt.locked ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED,
+          attempt.locked
+            ? HttpStatus.TOO_MANY_REQUESTS
+            : HttpStatus.UNAUTHORIZED,
         );
       }
 
@@ -436,7 +439,9 @@ export class AuthController {
         path: '/',
       });
 
-      console.log('[Auth] admin_session cookie set securely with httpOnly=true');
+      console.log(
+        '[Auth] admin_session cookie set securely with httpOnly=true',
+      );
 
       return { success: true, token };
     } catch (error: any) {
@@ -455,7 +460,8 @@ export class AuthController {
       (req.headers['authorization']?.startsWith('Bearer ')
         ? req.headers['authorization'].substring(7)
         : null);
-    if (!token) throw new HttpException('Not authenticated', HttpStatus.UNAUTHORIZED);
+    if (!token)
+      throw new HttpException('Not authenticated', HttpStatus.UNAUTHORIZED);
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
       const { data: admin } = await this.supabaseService.client
@@ -463,7 +469,8 @@ export class AuthController {
         .select('phone, role, tenantId')
         .eq('id', decoded.adminId)
         .single();
-      if (!admin) throw new HttpException('Admin not found', HttpStatus.UNAUTHORIZED);
+      if (!admin)
+        throw new HttpException('Admin not found', HttpStatus.UNAUTHORIZED);
       return { success: true, admin };
     } catch {
       throw new HttpException('Invalid session', HttpStatus.UNAUTHORIZED);

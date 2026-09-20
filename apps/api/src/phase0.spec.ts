@@ -8,9 +8,12 @@ import { OtpService } from './notification/otp.service';
 import { WalletService } from './wallet/wallet.service';
 
 const guardsOn = (method: string) =>
-  (Reflect.getMetadata('__guards__', (PassesController.prototype as any)[method]) || []).map(
-    (g: any) => g.name || g.constructor?.name,
-  );
+  (
+    Reflect.getMetadata(
+      '__guards__',
+      (PassesController.prototype as any)[method],
+    ) || []
+  ).map((g: any) => g.name || g.constructor?.name);
 
 describe('Phase 0.3 — endpoints that leaked are now guarded', () => {
   it('SEC-1: validate-pass requires a tenant session', () => {
@@ -24,7 +27,9 @@ describe('Phase 0.3 — endpoints that leaked are now guarded', () => {
 
 describe('Phase 0.3 — SEC-4: OTP verify attempt limiting', () => {
   const makeService = () => {
-    const update = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({}) });
+    const update = jest
+      .fn()
+      .mockReturnValue({ eq: jest.fn().mockResolvedValue({}) });
     const service = new OtpService({
       client: { from: () => ({ update }) },
     } as any);
@@ -62,7 +67,11 @@ describe('Phase 0.3 — SEC-4: OTP verify attempt limiting', () => {
   it('accepts a correct code below the limit', async () => {
     const { service } = makeService();
     await expect(
-      service.verifyOtpAttempt('1234', { id: 's1', otpHash: service.hashOtp('1234'), attempts: 2 }),
+      service.verifyOtpAttempt('1234', {
+        id: 's1',
+        otpHash: service.hashOtp('1234'),
+        attempts: 2,
+      }),
     ).resolves.toEqual({ ok: true, locked: false });
   });
 });
@@ -70,7 +79,10 @@ describe('Phase 0.3 — SEC-4: OTP verify attempt limiting', () => {
 describe('Phase 0.2 — ENV-1/ENV-4: environment isolation', () => {
   const service = () =>
     new WalletService({} as any, {} as any, {} as any, {} as any, {} as any);
-  const withEnv = (vars: Record<string, string | undefined>, fn: () => void) => {
+  const withEnv = (
+    vars: Record<string, string | undefined>,
+    fn: () => void,
+  ) => {
     const saved = { ...process.env };
     // Assigning undefined to process.env yields the string "undefined".
     for (const [k, v] of Object.entries(vars)) {
@@ -86,13 +98,19 @@ describe('Phase 0.2 — ENV-1/ENV-4: environment isolation', () => {
 
   it('prefixes class ids outside production, and leaves production ids untouched', () => {
     withEnv({ WALLET_ENV_PREFIX: undefined, VERCEL_ENV: undefined }, () => {
-      expect(service().resolveClassId('123', 'beanhouse')).toBe('123.dev_beanhouse');
+      expect(service().resolveClassId('123', 'beanhouse')).toBe(
+        '123.dev_beanhouse',
+      );
     });
     withEnv({ WALLET_ENV_PREFIX: undefined, VERCEL_ENV: 'preview' }, () => {
-      expect(service().resolveClassId('123', 'beanhouse')).toBe('123.preview_beanhouse');
+      expect(service().resolveClassId('123', 'beanhouse')).toBe(
+        '123.preview_beanhouse',
+      );
     });
     withEnv({ WALLET_ENV_PREFIX: undefined, VERCEL_ENV: 'production' }, () => {
-      expect(service().resolveClassId('123', 'beanhouse')).toBe('123.beanhouse');
+      expect(service().resolveClassId('123', 'beanhouse')).toBe(
+        '123.beanhouse',
+      );
     });
   });
 
@@ -112,7 +130,10 @@ describe('Phase 0.2 — ENV-1/ENV-4: environment isolation', () => {
 
   it('accepts an explicit public tunnel URL and appends the webhook secret', () => {
     withEnv(
-      { PUBLIC_CALLBACK_URL: 'https://tunnel.example.com/', WALLET_WEBHOOK_SECRET: 's3cret' },
+      {
+        PUBLIC_CALLBACK_URL: 'https://tunnel.example.com/',
+        WALLET_WEBHOOK_SECRET: 's3cret',
+      },
       () => {
         expect(service().resolveCallbackUrl()).toBe(
           'https://tunnel.example.com/passes/webhooks/google-wallet/s3cret',

@@ -55,6 +55,8 @@ export interface Member {
   passes?: Pass[];
   /** Demo-mode issuance gate: only test accounts get passes while the tenant is in demo. */
   isTestAccount?: boolean;
+  /** Set when the member replies STOP. Every campaign send filters on it. */
+  marketingOptOutAt?: string | null;
 }
 
 // Legacy JSONB shape stored on PassTemplate.tierThresholds. Kept as a
@@ -82,6 +84,61 @@ export interface Tier {
   templateId: string;
   sortOrder: number;
   createdAt?: string;
+}
+
+/**
+ * Phase 2.2 — campaign audience segmentation. Every field is optional and
+ * every set field narrows; an empty filter means "all members" (minus
+ * marketing opt-outs, which are never a choice).
+ */
+export interface AudienceFilter {
+  /** Program scope (D8). Inert until Phase 3 puts `programId` on `Pass`. */
+  programId?: string;
+  /** Exact tier names, e.g. ['Gold', 'Platinum']. */
+  tiers?: string[];
+  balanceMin?: number;
+  balanceMax?: number;
+  /** No AuditLog activity in this many days. */
+  inactiveForDays?: number;
+  /** Restrict to members flagged `isTestAccount` (demo-mode dry runs). */
+  testAccountsOnly?: boolean;
+}
+
+export interface Campaign {
+  id: string;
+  tenantId: string;
+  programId?: string | null;
+  name: string;
+  channel: 'whatsapp' | 'wallet_push';
+  /** Required for wallet_push — Google Wallet's addMessage needs a header. */
+  header?: string | null;
+  body: string;
+  audienceFilter: AudienceFilter;
+  status: 'draft' | 'sending' | 'sent' | 'failed';
+  sentAt?: string | null;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  createdAt?: string;
+}
+
+export interface CampaignRecipientPreview {
+  id: string;
+  name?: string;
+  phone: string;
+  tier?: string;
+  balance?: string | number;
+}
+
+export interface CampaignPreviewResponse {
+  success: boolean;
+  recipientCount: number;
+  /** First 5 recipients, so a send is never fired blind. */
+  sample: CampaignRecipientPreview[];
+  renderedHeader?: string;
+  renderedBody: string;
+  /** Members excluded purely because they opted out of marketing. */
+  optedOutCount: number;
 }
 
 export interface PassTemplate {

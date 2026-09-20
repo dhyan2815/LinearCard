@@ -23,7 +23,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET.trim() === '') {
   throw new Error(
     'JWT_SECRET environment variable is required and must not be empty. ' +
-    'Set it in .env file (e.g., apps/api/.env or monorepo root .env)',
+      'Set it in .env file (e.g., apps/api/.env or monorepo root .env)',
   );
 }
 
@@ -60,9 +60,11 @@ export function encryptSecret(plaintext: string): string {
     cipher.final(),
   ]);
   const authTag = cipher.getAuthTag();
-  return [iv.toString('hex'), authTag.toString('hex'), encrypted.toString('hex')].join(
-    ':',
-  );
+  return [
+    iv.toString('hex'),
+    authTag.toString('hex'),
+    encrypted.toString('hex'),
+  ].join(':');
 }
 
 /**
@@ -71,7 +73,9 @@ export function encryptSecret(plaintext: string): string {
 export function decryptSecret(ciphertextPacked: string): string {
   const [ivHex, authTagHex, dataHex] = ciphertextPacked.split(':');
   if (!ivHex || !authTagHex || !dataHex) {
-    throw new Error('Malformed encrypted secret (expected iv:authTag:ciphertext).');
+    throw new Error(
+      'Malformed encrypted secret (expected iv:authTag:ciphertext).',
+    );
   }
   const decipher = crypto.createDecipheriv(
     'aes-256-gcm',

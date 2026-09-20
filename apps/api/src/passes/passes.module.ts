@@ -9,7 +9,13 @@ import { AuditModule } from '../audit/audit.module';
 import { DevelopersModule } from '../developers/developers.module';
 
 @Module({
-  imports: [SupabaseModule, NotificationModule, WalletModule, AuditModule, DevelopersModule],
+  imports: [
+    SupabaseModule,
+    NotificationModule,
+    WalletModule,
+    AuditModule,
+    DevelopersModule,
+  ],
   controllers: [PassesController, PController],
   providers: [TenantGuard],
 })

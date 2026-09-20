@@ -31,7 +31,11 @@ describe('Phase 1.2 — WAL-1: field updates bind to the stable key', () => {
       // The designer renamed "Points" to "Stars" and "Tier" to "Level".
       { id: 'points', header: 'Stars', body: '100 Pts' },
       { id: 'tier', header: 'Level', body: 'Bronze' },
-      { id: 'field_custom', header: 'Points earned this year', body: 'untouched' },
+      {
+        id: 'field_custom',
+        header: 'Points earned this year',
+        body: 'untouched',
+      },
     ],
     barcode: { type: 'QR_CODE', value: 'x' },
   };
@@ -41,7 +45,9 @@ describe('Phase 1.2 — WAL-1: field updates bind to the stable key', () => {
     const request = jest.fn(async (opts: any) =>
       opts.method === 'GET' ? { data: liveObject } : { data: {} },
     );
-    jest.spyOn(service, 'getGoogleAuthClient').mockResolvedValue({ request } as any);
+    jest
+      .spyOn(service, 'getGoogleAuthClient')
+      .mockResolvedValue({ request } as any);
     await service.updateGenericObject('issuer.pass-1', updateData);
     return request.mock.calls.find((c) => c[0].method === 'PATCH')![0].data;
   };
@@ -58,7 +64,9 @@ describe('Phase 1.2 — WAL-1: field updates bind to the stable key', () => {
 
   it('never writes into a field whose header merely mentions "points"', async () => {
     const patch = await patchFor({ balance: 250 });
-    const custom = patch.textModulesData.find((m: any) => m.id === 'field_custom');
+    const custom = patch.textModulesData.find(
+      (m: any) => m.id === 'field_custom',
+    );
 
     expect(custom.body).toBe('untouched');
   });
@@ -67,21 +75,44 @@ describe('Phase 1.2 — WAL-1: field updates bind to the stable key', () => {
 describe('Phase 1.3 — WAL-4: loyalty economics are per template', () => {
   it('falls back to the historical 10% / 1:₹1 / 50% rules', () => {
     expect(resolveLoyaltyRules(undefined)).toEqual(DEFAULT_LOYALTY_RULES);
-    expect(resolveLoyaltyRules([{ status: 'draft' }])).toEqual(DEFAULT_LOYALTY_RULES);
+    expect(resolveLoyaltyRules([{ status: 'draft' }])).toEqual(
+      DEFAULT_LOYALTY_RULES,
+    );
   });
 
   it('prefers the most recently updated published template', () => {
     const rules = resolveLoyaltyRules([
       { status: 'draft', earnRate: 9, redeemRate: 9, redeemCapPercent: 99 },
-      { status: 'published', updatedAt: '2026-01-01', earnRate: 0.05, redeemRate: 2, redeemCapPercent: 20 },
-      { status: 'published', updatedAt: '2026-06-01', earnRate: 0.2, redeemRate: 0.5, redeemCapPercent: 30 },
+      {
+        status: 'published',
+        updatedAt: '2026-01-01',
+        earnRate: 0.05,
+        redeemRate: 2,
+        redeemCapPercent: 20,
+      },
+      {
+        status: 'published',
+        updatedAt: '2026-06-01',
+        earnRate: 0.2,
+        redeemRate: 0.5,
+        redeemCapPercent: 30,
+      },
     ]);
 
-    expect(rules).toEqual({ earnRate: 0.2, redeemRate: 0.5, redeemCapPercent: 30 });
+    expect(rules).toEqual({
+      earnRate: 0.2,
+      redeemRate: 0.5,
+      redeemCapPercent: 30,
+    });
   });
 
-  it('awards and caps redemption using the template\'s own rates', async () => {
-    const template = { status: 'published', earnRate: 0.2, redeemRate: 2, redeemCapPercent: 25 };
+  it("awards and caps redemption using the template's own rates", async () => {
+    const template = {
+      status: 'published',
+      earnRate: 0.2,
+      redeemRate: 2,
+      redeemCapPercent: 25,
+    };
     const pass = {
       id: '11111111-1111-1111-1111-111111111111',
       fullPassId: 'issuer.pass-1',
@@ -97,11 +128,19 @@ describe('Phase 1.3 — WAL-4: loyalty economics are per template', () => {
         client: {
           from: (table: string) =>
             table === 'Pass'
-              ? { select: () => ({ eq: () => ({ single: async () => ({ data: pass }) }) }) }
+              ? {
+                  select: () => ({
+                    eq: () => ({ single: async () => ({ data: pass }) }),
+                  }),
+                }
               : {
                   select: () => ({
                     eq: () => ({
-                      order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+                      order: () => ({
+                        limit: () => ({
+                          maybeSingle: async () => ({ data: null }),
+                        }),
+                      }),
                     }),
                   }),
                   insert: async () => ({ error: null }),
@@ -163,7 +202,11 @@ describe('Phase 1.4 — WAL-5: balance updates are atomic', () => {
             : {
                 select: () => ({
                   eq: () => ({
-                    order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+                    order: () => ({
+                      limit: () => ({
+                        maybeSingle: async () => ({ data: null }),
+                      }),
+                    }),
                   }),
                 }),
                 insert: async () => ({ error: null }),
@@ -193,7 +236,9 @@ describe('Phase 1.4 — WAL-5: balance updates are atomic', () => {
 
     // Read-modify-write would leave 100 here (both reads saw balance 0).
     expect(db.state.balance).toBe(200);
-    expect([a.newBalance, b.newBalance].sort((x, y) => x - y)).toEqual([100, 200]);
+    expect([a.newBalance, b.newBalance].sort((x, y) => x - y)).toEqual([
+      100, 200,
+    ]);
   });
 });
 

@@ -1,19 +1,17 @@
 import { Controller, Get, Post, Req, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
-import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
-import { WalletService } from '../wallet/wallet.service';
-import { NotifyService } from '../notification/notify.service';
+
+/** Replies that revoke or restore marketing consent (2.4). */
+const STOP_WORDS = ['STOP', 'UNSUBSCRIBE', 'OPTOUT', 'OPT OUT'];
+const START_WORDS = ['START', 'SUBSCRIBE', 'RESUME'];
 
 @Controller('notifications')
 export class NotificationsController {
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly otpService: OtpService,
     private readonly whatsappService: WhatsappService,
-    private readonly walletService: WalletService,
-    private readonly notifyService: NotifyService,
   ) {}
 
   @Get('log')
@@ -46,98 +44,73 @@ export class NotificationsController {
     }
   }
 
-  @Post('send')
-  async postnotificationssend(@Req() req: Request, @Res() res: Response) {
+  /**
+   * Inbound WhatsApp (2.4 / DB-8). DPDP requires withdrawal to be as easy as
+   * granting, and the easiest thing a member can do is reply STOP.
+   *
+   * Opt-out is set on every Member row carrying that phone number — one
+   * person, one decision, regardless of how many brands they're enrolled in.
+   * Accepts the WAHA `message` webhook shape and a flat `{from, body}`.
+   */
+  @Post('webhooks/whatsapp-inbound')
+  async whatsappInbound(@Req() req: Request, @Res() res: Response) {
     try {
-      const { tenantId, channel, message } = req.body;
-      if (!tenantId || !channel || !message) {
-        return res.status(400).json({
-          success: false,
-          error: 'tenantId, channel, and message are required',
-        });
+      const payload = req.body?.payload || req.body || {};
+      const rawFrom: string = payload.from || payload.chatId || '';
+      const text: string = (payload.body || payload.text || '').trim();
+
+      // WAHA sends `919876543210@c.us`; Member.phone is E.164.
+      const digits = rawFrom.split('@')[0].replace(/\D/g, '');
+      if (!digits || !text) {
+        return res.status(200).json({ success: true, ignored: true });
       }
-      if (!['whatsapp', 'wallet_push'].includes(channel as any)) {
-        return res.status(400).json({
-          success: false,
-          error: `channel must be one of: ${['whatsapp', 'wallet_push'].join(', ')}`,
-        });
+      const phone = `+${digits}`;
+
+      const word = text.toUpperCase();
+      const isStop = STOP_WORDS.includes(word);
+      const isStart = START_WORDS.includes(word);
+      if (!isStop && !isStart) {
+        return res.status(200).json({ success: true, ignored: true });
       }
 
-      const { data: members, error: memberError } =
-        await this.supabaseService.client
-          .from('Member')
-          .select('id, phone, name, passes:Pass(id, fullPassId)')
-          .eq('tenantId', tenantId);
+      const { data: members } = await this.supabaseService.client
+        .from('Member')
+        .update({ marketingOptOutAt: isStop ? new Date().toISOString() : null })
+        .eq('phone', phone)
+        .select('id, tenantId');
 
-      if (memberError) throw memberError;
       if (!members?.length) {
-        return res
-          .status(200)
-          .json({ success: true, sent: 0, failed: 0, message: 'No members' });
+        return res.status(200).json({ success: true, matched: 0 });
       }
 
-      let sent = 0;
-      let failed = 0;
+      const reply = isStop
+        ? "You've been unsubscribed. You won't receive promotional messages from us again. Reply START to resume."
+        : "You're subscribed again. Reply STOP at any time to unsubscribe.";
 
-      for (const member of members) {
-        try {
-          if (channel === 'whatsapp') {
-            await this.whatsappService['wahaPost']('/api/sendText', {
-              chatId: `${member.phone.replace(/^\+/, '')}@c.us`,
-              text: message,
-            });
-            await this.notifyService.logNotification({
-              tenantId,
-              memberId: member.id,
-              type: 'campaign',
-              channel: 'whatsapp',
-              status: 'sent',
-            });
-            sent++;
-          } else {
-            const passes: any[] = (member as any).passes || [];
-            if (!passes.length) {
-              await this.notifyService.logNotification({
-                tenantId,
-                memberId: member.id,
-                type: 'campaign',
-                channel: 'wallet_push',
-                status: 'failed',
-                errorReason: 'No pass',
-              });
-              failed++;
-              continue;
-            }
-            for (const pass of passes) {
-              await this.walletService.updateGenericObject(pass.fullPassId, {
-                pushNotification: message,
-              });
-              await this.notifyService.logNotification({
-                tenantId,
-                memberId: member.id,
-                type: 'campaign',
-                channel: 'wallet_push',
-                status: 'sent',
-              });
-            }
-            sent++;
-          }
-        } catch (err: any) {
-          await this.notifyService.logNotification({
-            tenantId,
-            memberId: member.id,
-            type: 'campaign',
-            channel: channel as any,
-            status: 'failed',
-            errorReason: err.message,
-          });
-          failed++;
-        }
-      }
+      await this.whatsappService
+        .sendTextWithLog(phone, reply, {
+          tenantId: members[0].tenantId,
+          memberId: members[0].id,
+          type: isStop ? 'opt_out_confirmation' : 'opt_in_confirmation',
+        })
+        .catch(() => {});
 
-      return res.status(200).json({ success: true, sent, failed });
+      // The withdrawal itself is the record DPDP cares about; ConsentLog only
+      // ever held grants, so the revocation is written there too.
+      await this.supabaseService.client.from('ConsentLog').insert(
+        members.map((m: any) => ({
+          memberId: m.id,
+          phone,
+          legalTextVersion: isStop ? 'DPDP_v1_withdrawal' : 'DPDP_v1',
+          consentedAt: isStop ? null : new Date().toISOString(),
+        })),
+      );
+
+      return res
+        .status(200)
+        .json({ success: true, optedOut: isStop, matched: members.length });
     } catch (error: any) {
-      console.error('API Error sending notifications:', error);
+      console.error('API Error handling inbound WhatsApp:', error);
       return res.status(500).json({ success: false, error: error.message });
     }
   }

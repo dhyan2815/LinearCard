@@ -39,7 +39,10 @@ export class DevelopersController {
 
   @Get('api-keys')
   async listKeys(@Req() req: TenantRequest) {
-    return { success: true, keys: await this.apiKeyService.list(req.tenantId!) };
+    return {
+      success: true,
+      keys: await this.apiKeyService.list(req.tenantId!),
+    };
   }
 
   @Post('api-keys')
@@ -64,7 +67,8 @@ export class DevelopersController {
       .select('id, url, events, active, createdAt')
       .eq('tenantId', req.tenantId)
       .order('createdAt', { ascending: false });
-    if (error) throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    if (error)
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     return { success: true, webhooks: data || [] };
   }
 
@@ -81,7 +85,9 @@ export class DevelopersController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const validEvents = (events || []).filter((e: string) => WEBHOOK_EVENTS.includes(e));
+    const validEvents = (events || []).filter((e: string) =>
+      WEBHOOK_EVENTS.includes(e),
+    );
     if (!validEvents.length) {
       throw new HttpException(
         `events must include at least one of: ${WEBHOOK_EVENTS.join(', ')}`,
@@ -94,7 +100,8 @@ export class DevelopersController {
       .insert({ tenantId, url, events: validEvents, secret, active: true })
       .select('id, url, events, active, createdAt, secret')
       .single();
-    if (error) throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    if (error)
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
 
     // Secret is only ever returned in full on creation, like the API key.
     return { success: true, webhook: data };
@@ -123,14 +130,18 @@ export class DevelopersController {
     }
     if (body?.active !== undefined) patch.active = body.active;
     if (!Object.keys(patch).length) {
-      throw new HttpException('No updateable fields provided', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'No updateable fields provided',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     const { error } = await this.supabaseService.client
       .from('WebhookEndpoint')
       .update(patch)
       .eq('id', id)
       .eq('tenantId', tenantId);
-    if (error) throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    if (error)
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     return { success: true };
   }
 
@@ -141,7 +152,8 @@ export class DevelopersController {
       .delete()
       .eq('id', id)
       .eq('tenantId', req.tenantId);
-    if (error) throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    if (error)
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     return { success: true };
   }
 
@@ -151,7 +163,8 @@ export class DevelopersController {
     // Fire-and-forget through the same signing/retry/logging path real
     // events use, so the frontend "send test event" button exercises real code.
     const found = await this.webhookService.sendTest(tenantId, id);
-    if (!found) throw new HttpException('Webhook not found', HttpStatus.NOT_FOUND);
+    if (!found)
+      throw new HttpException('Webhook not found', HttpStatus.NOT_FOUND);
     return { success: true, message: 'Test event dispatched' };
   }
 }

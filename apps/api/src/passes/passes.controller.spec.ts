@@ -31,7 +31,9 @@ describe('PassesController.postGoogleWalletWebhook', () => {
     passRow = pass;
     logNotificationMock = jest.fn().mockResolvedValue(undefined);
     sendWalletSaveConfirmationMock = jest.fn().mockResolvedValue(undefined);
-    updateMock = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
+    updateMock = jest
+      .fn()
+      .mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
     insertMock = jest.fn().mockResolvedValue({ error: null });
     auditRecordMock = jest.fn().mockResolvedValue(undefined);
 
@@ -40,7 +42,9 @@ describe('PassesController.postGoogleWalletWebhook', () => {
         return {
           select: jest.fn().mockReturnValue({
             eq: jest.fn().mockReturnValue({
-              single: jest.fn().mockResolvedValue({ data: passRow, error: null }),
+              single: jest
+                .fn()
+                .mockResolvedValue({ data: passRow, error: null }),
             }),
           }),
           update: updateMock,
@@ -59,13 +63,21 @@ describe('PassesController.postGoogleWalletWebhook', () => {
         { provide: OtpService, useValue: {} },
         {
           provide: WhatsappService,
-          useValue: { sendWalletSaveConfirmationWithLog: sendWalletSaveConfirmationMock },
+          useValue: {
+            sendWalletSaveConfirmationWithLog: sendWalletSaveConfirmationMock,
+          },
         },
         { provide: WalletService, useValue: {} },
-        { provide: NotifyService, useValue: { logNotification: logNotificationMock } },
+        {
+          provide: NotifyService,
+          useValue: { logNotification: logNotificationMock },
+        },
         { provide: TenantGuard, useValue: {} },
         { provide: AuditService, useValue: { record: auditRecordMock } },
-        { provide: WebhookService, useValue: { dispatch: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: WebhookService,
+          useValue: { dispatch: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
     controller = module.get<PassesController>(PassesController);
@@ -80,7 +92,11 @@ describe('PassesController.postGoogleWalletWebhook', () => {
       Member: { phone: '+911234567890' },
       Tenant: { name: 'Acme' },
     });
-    const req: any = { body: { signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'save' }) } };
+    const req: any = {
+      body: {
+        signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'save' }),
+      },
+    };
     const res = mockRes();
 
     await controller.postGoogleWalletWebhook(req, res);
@@ -95,18 +111,33 @@ describe('PassesController.postGoogleWalletWebhook', () => {
 
   it('sets deletedAt and writes AuditLog on a del event, no WhatsApp', async () => {
     process.env.WALLET_WEBHOOK_SECRET = 'sekret';
-    await setup({ id: 'p1', tenantId: 't1', memberId: 'm1', fullPassId: 'obj1', Member: { phone: '+91' }, Tenant: {} });
+    await setup({
+      id: 'p1',
+      tenantId: 't1',
+      memberId: 'm1',
+      fullPassId: 'obj1',
+      Member: { phone: '+91' },
+      Tenant: {},
+    });
     const req: any = {
       params: { secret: 'sekret' },
-      body: { signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'del' }) },
+      body: {
+        signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'del' }),
+      },
     };
     const res = mockRes();
 
     await controller.postGoogleWalletWebhook(req, res);
 
-    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ deletedAt: expect.any(String) }));
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ deletedAt: expect.any(String) }),
+    );
     expect(auditRecordMock).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'pass_deleted', tenantId: 't1', passId: 'p1' }),
+      expect.objectContaining({
+        action: 'pass_deleted',
+        tenantId: 't1',
+        passId: 'p1',
+      }),
     );
     expect(sendWalletSaveConfirmationMock).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
@@ -116,8 +147,19 @@ describe('PassesController.postGoogleWalletWebhook', () => {
   // SEC-2 stopgap: an unsigned forged `del` must not soft-delete a pass.
   it('ignores a del event without the shared-secret path segment', async () => {
     process.env.WALLET_WEBHOOK_SECRET = 'sekret';
-    await setup({ id: 'p1', tenantId: 't1', memberId: 'm1', fullPassId: 'obj1', Member: { phone: '+91' }, Tenant: {} });
-    const req: any = { body: { signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'del' }) } };
+    await setup({
+      id: 'p1',
+      tenantId: 't1',
+      memberId: 'm1',
+      fullPassId: 'obj1',
+      Member: { phone: '+91' },
+      Tenant: {},
+    });
+    const req: any = {
+      body: {
+        signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'del' }),
+      },
+    };
     const res = mockRes();
 
     await controller.postGoogleWalletWebhook(req, res);
@@ -138,7 +180,11 @@ describe('PassesController.postGoogleWalletWebhook', () => {
       Member: { phone: '+911234567890' },
       Tenant: { name: 'Acme' },
     });
-    const req: any = { body: { signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'save' }) } };
+    const req: any = {
+      body: {
+        signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'save' }),
+      },
+    };
     const res = mockRes();
 
     await controller.postGoogleWalletWebhook(req, res);
@@ -150,7 +196,14 @@ describe('PassesController.postGoogleWalletWebhook', () => {
   it('warns (and never attempts a NotificationLog insert) for an unknown objectId', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     await setup(null);
-    const req: any = { body: { signedMessage: JSON.stringify({ objectId: 'missing', eventType: 'save' }) } };
+    const req: any = {
+      body: {
+        signedMessage: JSON.stringify({
+          objectId: 'missing',
+          eventType: 'save',
+        }),
+      },
+    };
     const res = mockRes();
 
     await controller.postGoogleWalletWebhook(req, res);
@@ -175,8 +228,22 @@ describe('PassesController.postGoogleWalletWebhook', () => {
   });
 
   it('returns 200 and logs a failed NotificationLog for an unhandled eventType', async () => {
-    await setup({ id: 'p1', tenantId: 't1', memberId: 'm1', fullPassId: 'obj1', Member: {}, Tenant: {} });
-    const req: any = { body: { signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'expire' }) } };
+    await setup({
+      id: 'p1',
+      tenantId: 't1',
+      memberId: 'm1',
+      fullPassId: 'obj1',
+      Member: {},
+      Tenant: {},
+    });
+    const req: any = {
+      body: {
+        signedMessage: JSON.stringify({
+          objectId: 'obj1',
+          eventType: 'expire',
+        }),
+      },
+    };
     const res = mockRes();
 
     await controller.postGoogleWalletWebhook(req, res);

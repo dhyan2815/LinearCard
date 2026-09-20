@@ -37,7 +37,8 @@ async function bootstrap() {
  */
 function printEnvironmentBanner() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '(unset)';
-  const projectRef = supabaseUrl.match(/https?:\/\/([^.]+)\./)?.[1] || supabaseUrl;
+  const projectRef =
+    supabaseUrl.match(/https?:\/\/([^.]+)\./)?.[1] || supabaseUrl;
   const envPrefix =
     process.env.WALLET_ENV_PREFIX?.trim() ||
     (process.env.VERCEL_ENV === 'production'

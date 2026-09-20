@@ -107,11 +107,9 @@ describe('TemplatesController.updateTemplate', () => {
 
     it('rejects a non-hex color name', async () => {
       await expect(
-        controller.updateTemplate(
-          'template-1',
-          { hexBackgroundColor: 'red' },
-          { tenantId: 'tenant-1' } as any,
-        ),
+        controller.updateTemplate('template-1', { hexBackgroundColor: 'red' }, {
+          tenantId: 'tenant-1',
+        } as any),
       ).rejects.toThrow('hexBackgroundColor must be a 6-digit hex code');
     });
 
@@ -131,11 +129,9 @@ describe('TemplatesController.updateTemplate', () => {
   describe('updateTemplate — tierThresholds validation', () => {
     it('rejects a non-array tierThresholds', async () => {
       await expect(
-        controller.updateTemplate(
-          'template-1',
-          { tierThresholds: 'Gold' },
-          { tenantId: 'tenant-1' } as any,
-        ),
+        controller.updateTemplate('template-1', { tierThresholds: 'Gold' }, {
+          tenantId: 'tenant-1',
+        } as any),
       ).rejects.toThrow('tierThresholds must be an array');
     });
 
@@ -205,11 +201,9 @@ describe('TemplatesController.updateTemplate', () => {
         longitude: 20 + i,
       }));
       await expect(
-        controller.updateTemplate(
-          'template-1',
-          { storeLocations: tooMany },
-          { tenantId: 'tenant-1' } as any,
-        ),
+        controller.updateTemplate('template-1', { storeLocations: tooMany }, {
+          tenantId: 'tenant-1',
+        } as any),
       ).rejects.toThrow('storeLocations must contain at most 10 entries');
     });
 
@@ -266,7 +260,9 @@ describe('TemplatesController — tenant scoping on :id routes', () => {
         eq: jest.fn().mockImplementation((field2: string, value2: string) => {
           selectChain[`__${field2}`] = value2;
           return {
-            single: jest.fn().mockImplementation(() => Promise.resolve(singleResult)),
+            single: jest
+              .fn()
+              .mockImplementation(() => Promise.resolve(singleResult)),
           };
         }),
       };
@@ -291,7 +287,7 @@ describe('TemplatesController — tenant scoping on :id routes', () => {
     controller = module.get<TemplatesController>(TemplatesController);
   });
 
-  it('filters the lookup by tenantId, so a foreign tenantId returns 404 instead of another tenant\'s template', async () => {
+  it("filters the lookup by tenantId, so a foreign tenantId returns 404 instead of another tenant's template", async () => {
     // The mocked query returns no row (as Supabase would when the eq('tenantId', ...)
     // filter excludes the row), proving the controller does not fetch by id alone.
     singleResult = { data: null, error: null };
@@ -337,9 +333,11 @@ describe('TemplatesController.createTemplate', () => {
       mockInsertPayload = payload;
       return {
         select: jest.fn().mockReturnValue({
-          single: jest.fn().mockImplementation(() =>
-            Promise.resolve({ data: mockInsertedRecord, error: null }),
-          ),
+          single: jest
+            .fn()
+            .mockImplementation(() =>
+              Promise.resolve({ data: mockInsertedRecord, error: null }),
+            ),
         }),
       };
     });
@@ -412,10 +410,16 @@ describe('TemplatesController.createTemplate', () => {
 describe('TemplatesController collection-route tenant scoping', () => {
   it('guards both collection routes with TenantGuard', () => {
     expect(
-      Reflect.getMetadata('__guards__', TemplatesController.prototype.getTemplates),
+      Reflect.getMetadata(
+        '__guards__',
+        TemplatesController.prototype.getTemplates,
+      ),
     ).toEqual([TenantGuard]);
     expect(
-      Reflect.getMetadata('__guards__', TemplatesController.prototype.createTemplate),
+      Reflect.getMetadata(
+        '__guards__',
+        TemplatesController.prototype.createTemplate,
+      ),
     ).toEqual([TenantGuard]);
   });
 
@@ -443,7 +447,10 @@ describe('TemplatesController collection-route tenant scoping', () => {
               payload = p;
               return {
                 select: () => ({
-                  single: async () => ({ data: { id: 'x', title: 'T' }, error: null }),
+                  single: async () => ({
+                    data: { id: 'x', title: 'T' },
+                    error: null,
+                  }),
                 }),
               };
             },
@@ -453,9 +460,12 @@ describe('TemplatesController collection-route tenant scoping', () => {
       {} as any,
     );
 
-    await controller.createTemplate({ name: 'T', tenantId: 'attacker-tenant' }, {
-      tenantId: 'guard-tenant',
-    } as any);
+    await controller.createTemplate(
+      { name: 'T', tenantId: 'attacker-tenant' },
+      {
+        tenantId: 'guard-tenant',
+      } as any,
+    );
 
     expect(payload.tenantId).toBe('guard-tenant');
   });

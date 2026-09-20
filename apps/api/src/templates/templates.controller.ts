@@ -60,7 +60,8 @@ export class TemplatesController {
         {
           success: false,
           error: 'hexBackgroundColor must be a 6-digit hex code, e.g. #1A365D',
-          message: 'hexBackgroundColor must be a 6-digit hex code, e.g. #1A365D',
+          message:
+            'hexBackgroundColor must be a 6-digit hex code, e.g. #1A365D',
         },
         HttpStatus.BAD_REQUEST,
       );
@@ -134,7 +135,13 @@ export class TemplatesController {
       redeemCapPercent: { min: 0, max: 100 },
     }[field];
     const num = Number(value);
-    if (value === null || value === '' || isNaN(num) || num < bounds.min || num > bounds.max) {
+    if (
+      value === null ||
+      value === '' ||
+      isNaN(num) ||
+      num < bounds.min ||
+      num > bounds.max
+    ) {
       const message = `${field} must be a number between ${bounds.min} and ${bounds.max}`;
       throw new HttpException(
         { success: false, error: message, message },
@@ -146,7 +153,11 @@ export class TemplatesController {
 
   /** Copies any provided loyalty-rule fields onto an insert/update payload. */
   private applyLoyaltyRules(body: any, payload: Record<string, any>): void {
-    for (const field of ['earnRate', 'redeemRate', 'redeemCapPercent'] as const) {
+    for (const field of [
+      'earnRate',
+      'redeemRate',
+      'redeemCapPercent',
+    ] as const) {
       if (body[field] !== undefined) {
         payload[field] = this.validateLoyaltyRule(field, body[field]);
       }
@@ -161,7 +172,11 @@ export class TemplatesController {
   private validateStoreLocations(value: any): void {
     if (!Array.isArray(value)) {
       throw new HttpException(
-        { success: false, error: 'storeLocations must be an array', message: 'storeLocations must be an array' },
+        {
+          success: false,
+          error: 'storeLocations must be an array',
+          message: 'storeLocations must be an array',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -178,7 +193,11 @@ export class TemplatesController {
     for (const loc of value) {
       if (!loc || typeof loc !== 'object') {
         throw new HttpException(
-          { success: false, error: 'Each store location must be an object', message: 'Each store location must be an object' },
+          {
+            success: false,
+            error: 'Each store location must be an object',
+            message: 'Each store location must be an object',
+          },
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -186,13 +205,21 @@ export class TemplatesController {
       const lng = Number(loc.longitude);
       if (isNaN(lat) || lat < -90 || lat > 90) {
         throw new HttpException(
-          { success: false, error: `Invalid latitude: ${loc.latitude}`, message: `Invalid latitude: ${loc.latitude}` },
+          {
+            success: false,
+            error: `Invalid latitude: ${loc.latitude}`,
+            message: `Invalid latitude: ${loc.latitude}`,
+          },
           HttpStatus.BAD_REQUEST,
         );
       }
       if (isNaN(lng) || lng < -180 || lng > 180) {
         throw new HttpException(
-          { success: false, error: `Invalid longitude: ${loc.longitude}`, message: `Invalid longitude: ${loc.longitude}` },
+          {
+            success: false,
+            error: `Invalid longitude: ${loc.longitude}`,
+            message: `Invalid longitude: ${loc.longitude}`,
+          },
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -330,7 +357,10 @@ export class TemplatesController {
         }
         if (url.startsWith('/')) {
           const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace('-api', '')}` : 'http://localhost:3000');
+            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ||
+            (process.env.VERCEL_URL
+              ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
+              : 'http://localhost:3000');
           if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
             return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
           }
@@ -520,11 +550,12 @@ export class TemplatesController {
           HttpStatus.NOT_FOUND,
         );
 
-      const { data: passes, error: passesError } = await this.supabaseService
-        .client.from('Pass')
-        .select('id, fullPassId')
-        .eq('tenantId', req.tenantId)
-        .is('deletedAt', null);
+      const { data: passes, error: passesError } =
+        await this.supabaseService.client
+          .from('Pass')
+          .select('id, fullPassId')
+          .eq('tenantId', req.tenantId)
+          .is('deletedAt', null);
       if (passesError) throw passesError;
 
       const tenantWallet = await this.walletService.forTenant(req.tenantId!);

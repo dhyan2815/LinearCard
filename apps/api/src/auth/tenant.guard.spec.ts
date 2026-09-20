@@ -13,7 +13,10 @@ function makeContext(req: any): ExecutionContext {
 }
 
 /** A from() mock that resolves every table's chained select/eq/is to `single`. */
-function makeSingleTableMock(byTable: Record<string, any>, fallback: any = { data: null, error: null }) {
+function makeSingleTableMock(
+  byTable: Record<string, any>,
+  fallback: any = { data: null, error: null },
+) {
   return jest.fn((table: string) => {
     const chain: any = {
       select: () => chain,
@@ -104,7 +107,10 @@ describe('TenantGuard', () => {
 
 describe('TenantGuard.resolveTenant — hashed ApiKey path', () => {
   function makeReq(token: string) {
-    return { headers: { authorization: `Bearer ${token}` }, cookies: {} } as any;
+    return {
+      headers: { authorization: `Bearer ${token}` },
+      cookies: {},
+    } as any;
   }
 
   it('resolves via the hashed ApiKey table when a live row matches, and touches lastUsedAt', async () => {
@@ -124,7 +130,11 @@ describe('TenantGuard.resolveTenant — hashed ApiKey path', () => {
           };
         }
         // Legacy Tenant.apiKey lookup should never be reached here.
-        return { select: () => client.from(table), eq: () => client.from(table), single: async () => ({ data: null }) };
+        return {
+          select: () => client.from(table),
+          eq: () => client.from(table),
+          single: async () => ({ data: null }),
+        };
       }),
     };
 
@@ -137,7 +147,10 @@ describe('TenantGuard.resolveTenant — hashed ApiKey path', () => {
 
   it('hashes the raw token with SHA-256 before looking it up', async () => {
     const rawKey = 'lc_live_xyz';
-    const expectedHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const expectedHash = crypto
+      .createHash('sha256')
+      .update(rawKey)
+      .digest('hex');
     let capturedHash: string | undefined;
     const client: any = {
       from: jest.fn((table: string) => {
@@ -152,7 +165,11 @@ describe('TenantGuard.resolveTenant — hashed ApiKey path', () => {
             single: async () => ({ data: null }),
           };
         }
-        return { select: () => client.from(table), eq: () => client.from(table), single: async () => ({ data: null }) };
+        return {
+          select: () => client.from(table),
+          eq: () => client.from(table),
+          single: async () => ({ data: null }),
+        };
       }),
     };
 

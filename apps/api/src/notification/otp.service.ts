@@ -74,10 +74,10 @@ export class OtpService {
     const fiveMins = 5 * 60 * 1000;
 
     // Check if 3 unconsumed requests were made within a 5-minute window
-    const isBurst = (newest - oldest) < fiveMins;
+    const isBurst = newest - oldest < fiveMins;
 
     // If they hit the burst limit, block until 5 minutes have passed since the newest request
-    if (isBurst && (now - newest) < fiveMins) {
+    if (isBurst && now - newest < fiveMins) {
       return true;
     }
 

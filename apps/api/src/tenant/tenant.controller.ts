@@ -111,7 +111,10 @@ export class TenantController {
         console.log('[TenantController] Supabase query error:', error.message);
         throw new Error(`DB Error: ${error.message}`);
       }
-      console.log('[TenantController] Tenants fetched successfully, count:', tenants?.length || 0);
+      console.log(
+        '[TenantController] Tenants fetched successfully, count:',
+        tenants?.length || 0,
+      );
       return { success: true, tenants };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);

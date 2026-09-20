@@ -42,7 +42,10 @@ describe('MembersController.getMembers', () => {
         { provide: SupabaseService, useValue: supabaseServiceMock },
         { provide: NotifyService, useValue: {} },
         { provide: WalletService, useValue: {} },
-        { provide: AuditService, useValue: { record: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: AuditService,
+          useValue: { record: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
     controller = module.get<MembersController>(MembersController);
@@ -79,11 +82,7 @@ describe('MembersController.getMembers', () => {
     buildChain({ data: [], error: null });
     await setup();
 
-    await controller.getMembers(
-      { tenantId: 'tenant-A' } as any,
-      '10',
-      '20',
-    );
+    await controller.getMembers({ tenantId: 'tenant-A' } as any, '10', '20');
 
     expect(rangeMock).toHaveBeenCalledWith(20, 29);
   });
@@ -106,17 +105,27 @@ describe('MembersController.getMembers', () => {
 describe('MembersController.adjustBalance', () => {
   it('writes the AuditLog via AuditService with the pass tenantId', async () => {
     const auditRecordMock = jest.fn().mockResolvedValue(undefined);
-    const passRow = { id: 'pass1', tenantId: 'tenant-A', balance: 10, fullPassId: 'obj1', tier: 'Bronze' };
+    const passRow = {
+      id: 'pass1',
+      tenantId: 'tenant-A',
+      balance: 10,
+      fullPassId: 'obj1',
+      tier: 'Bronze',
+    };
 
     const fromMock = jest.fn().mockImplementation((table: string) => {
       if (table === 'Pass') {
         return {
           select: jest.fn().mockReturnValue({
             eq: jest.fn().mockReturnValue({
-              single: jest.fn().mockResolvedValue({ data: passRow, error: null }),
+              single: jest
+                .fn()
+                .mockResolvedValue({ data: passRow, error: null }),
             }),
           }),
-          update: jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) }),
+          update: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ error: null }),
+          }),
         };
       }
       return {};
@@ -129,7 +138,9 @@ describe('MembersController.adjustBalance', () => {
         { provide: NotifyService, useValue: { logNotification: jest.fn() } },
         {
           provide: WalletService,
-          useValue: { updateGenericObject: jest.fn().mockResolvedValue(undefined) },
+          useValue: {
+            updateGenericObject: jest.fn().mockResolvedValue(undefined),
+          },
         },
         { provide: AuditService, useValue: { record: auditRecordMock } },
       ],

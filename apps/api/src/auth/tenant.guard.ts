@@ -65,11 +65,17 @@ export class TenantGuard implements CanActivate {
             finalTenantId = requestedTenant;
           }
         }
-        console.log('[TenantGuard] JWT verified successfully, tenantId:', finalTenantId);
+        console.log(
+          '[TenantGuard] JWT verified successfully, tenantId:',
+          finalTenantId,
+        );
         return { tenantId: finalTenantId, role: decoded.role ?? null };
       }
     } catch (jwtErr) {
-      console.log('[TenantGuard] JWT verification failed, falling back to API key lookup:', (jwtErr as Error).message);
+      console.log(
+        '[TenantGuard] JWT verification failed, falling back to API key lookup:',
+        (jwtErr as Error).message,
+      );
     }
 
     // Hashed ApiKey table first (current path for keys issued via
@@ -118,7 +124,9 @@ export class TenantGuard implements CanActivate {
       return { tenantId: tenant.id, role: null };
     }
 
-    console.log('[TenantGuard] No authentication found (token invalid or not in DB)');
+    console.log(
+      '[TenantGuard] No authentication found (token invalid or not in DB)',
+    );
     return null;
   }
 
@@ -139,7 +147,10 @@ export class TenantGuard implements CanActivate {
       console.log('[TenantGuard] Auth passed for tenantId:', resolved.tenantId);
       return true;
     } catch (err) {
-      console.log('[TenantGuard] Exception during canActivate:', err instanceof Error ? err.message : String(err));
+      console.log(
+        '[TenantGuard] Exception during canActivate:',
+        err instanceof Error ? err.message : String(err),
+      );
       throw err;
     }
   }

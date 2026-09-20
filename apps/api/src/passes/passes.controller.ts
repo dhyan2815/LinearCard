@@ -18,7 +18,11 @@ export function resolveImageUrl(url?: string): string | undefined {
     return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
   }
   if (url.startsWith('/')) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace('-api', '')}` : 'http://localhost:3000');
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
+        : 'http://localhost:3000');
     if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
       return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
     }
@@ -95,9 +99,8 @@ export class PassesController {
       // doesn't explicitly override a field — keeps this endpoint's
       // "whatever the caller sends" flexibility while still defaulting to
       // the single source of truth instead of a stale/undefined colour.
-      const passDesign = await this.walletService.resolveTenantPassDesign(
-        targetTenantId,
-      );
+      const passDesign =
+        await this.walletService.resolveTenantPassDesign(targetTenantId);
 
       // Demo-status tenants may only issue passes to registered test
       // members — a minimal gate ahead of the production-approval flow.
@@ -130,7 +133,9 @@ export class PassesController {
         barcodeAltText: body.barcodeAltText, // will fallback to passId if not provided
         classSuffix: body.classSuffix ?? passDesign.classSuffix,
         logoUrl: resolveImageUrl(body.logoUrl ?? passDesign.logoUrl),
-        heroImageUrl: resolveImageUrl(body.heroImageUrl ?? passDesign.heroImageUrl),
+        heroImageUrl: resolveImageUrl(
+          body.heroImageUrl ?? passDesign.heroImageUrl,
+        ),
         rows: body.rows,
       });
 
@@ -162,7 +167,10 @@ export class PassesController {
         // 5. Trigger WhatsApp delivery if reqed
         if (body.deliverWhatsapp && body.phone && passRecordId) {
           const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace('-api', '')}` : 'http://localhost:3000');
+            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ||
+            (process.env.VERCEL_URL
+              ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
+              : 'http://localhost:3000');
           const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
 
           this.whatsappService
@@ -442,7 +450,8 @@ export class PassesController {
       if (!template) {
         return res.status(404).json({
           success: false,
-          error: 'templateId is required and must reference a template this tenant owns.',
+          error:
+            'templateId is required and must reference a template this tenant owns.',
         });
       }
 
@@ -479,7 +488,8 @@ export class PassesController {
 
       // No tenant context on this legacy diagnostic endpoint — falls back to
       // the shared env issuer (no more hardcoded literal fallback).
-      const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID;
+      const issuerId =
+        process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID;
       if (!issuerId) {
         return res.status(500).json({
           success: false,
@@ -510,7 +520,7 @@ export class PassesController {
   @UseGuards(TenantGuard)
   async postsendpromomessage(@Req() req: TenantRequest, @Res() res: Response) {
     try {
-      const { passId, header, body, bypassQuota } = req.body;
+      const { passId, header, body } = req.body;
 
       if (!passId || !header || !body) {
         return res.status(400).json({
@@ -574,7 +584,6 @@ export class PassesController {
         pass.tenantId,
         header,
         body,
-        bypassQuota === true || bypassQuota === 'true',
       );
 
       return res.status(200).json({
@@ -602,7 +611,7 @@ export class PassesController {
       const authenticatedTenantId = req.tenantId;
 
       const { timeFilter } = req.query; // 'today', 'this_week', 'this_month', 'last_month', 'all'
-      
+
       let query = this.supabaseService.client
         .from('AuditLog')
         .select('*, Member(name, phone)')
@@ -618,7 +627,11 @@ export class PassesController {
 
         switch (timeFilter) {
           case 'today':
-            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            startDate = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate(),
+            );
             break;
           case 'this_week':
             startDate = new Date(now);
@@ -630,7 +643,15 @@ export class PassesController {
             break;
           case 'last_month':
             startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+            endDate = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              0,
+              23,
+              59,
+              59,
+              999,
+            );
             break;
           default:
             startDate = null; // 'all' or unknown falls back to no filter
@@ -736,12 +757,16 @@ export class PassesController {
           .single();
 
         if (fullPass && fullPass.Member?.phone) {
-          this.whatsappService.sendRedemptionReceiptWithLog(
-            fullPass.Member.phone,
-            result.newBalance.toString() + ' Pts',
-            fullPass.Tenant?.name || 'LinearCard',
-            { tenantId: fullPass.tenantId, memberId: fullPass.memberId }
-          ).catch(err => console.error('WhatsApp receipt failed (non-fatal):', err));
+          this.whatsappService
+            .sendRedemptionReceiptWithLog(
+              fullPass.Member.phone,
+              result.newBalance.toString() + ' Pts',
+              fullPass.Tenant?.name || 'LinearCard',
+              { tenantId: fullPass.tenantId, memberId: fullPass.memberId },
+            )
+            .catch((err) =>
+              console.error('WhatsApp receipt failed (non-fatal):', err),
+            );
         }
       }
 
@@ -821,14 +846,18 @@ export class PassesController {
         .select('*, Member(*), Tenant(*)')
         .eq('id', pass.id)
         .single();
-        
+
       if (fullPass && fullPass.Member?.phone) {
-        this.whatsappService.sendRedemptionReceiptWithLog(
-          fullPass.Member.phone,
-          result.newBalance.toString(),
-          fullPass.Tenant?.name || 'LinearCard',
-          { tenantId: fullPass.tenantId, memberId: fullPass.memberId }
-        ).catch(err => console.error('WhatsApp webhook receipt failed (non-fatal):', err));
+        this.whatsappService
+          .sendRedemptionReceiptWithLog(
+            fullPass.Member.phone,
+            result.newBalance.toString(),
+            fullPass.Tenant?.name || 'LinearCard',
+            { tenantId: fullPass.tenantId, memberId: fullPass.memberId },
+          )
+          .catch((err) =>
+            console.error('WhatsApp webhook receipt failed (non-fatal):', err),
+          );
       }
 
       return res.status(200).json(result);
@@ -854,7 +883,8 @@ export class PassesController {
       const expectedSecret = process.env.WALLET_WEBHOOK_SECRET;
       const secretOk =
         !!expectedSecret && req.params?.['secret'] === expectedSecret;
-      const raw = typeof req.body === 'string' ? req.body : req.body?.signedMessage;
+      const raw =
+        typeof req.body === 'string' ? req.body : req.body?.signedMessage;
       if (!raw) {
         return res.status(400).send('Missing signedMessage');
       }
@@ -868,7 +898,8 @@ export class PassesController {
         return res.status(400).send('Invalid signedMessage JSON');
       }
 
-      const { classId, objectId, eventType, expTimeMillis, nonce } = decoded || {};
+      const { classId, objectId, eventType, expTimeMillis, nonce } =
+        decoded || {};
       const typeStr = (eventType || '').toLowerCase();
 
       if (!objectId) {
@@ -914,11 +945,18 @@ export class PassesController {
             details: { objectId, classId, nonce },
           });
         } catch (auditErr: any) {
-          console.error(`AuditLog insertion warning for pass ${pass.id}:`, auditErr.message);
+          console.error(
+            `AuditLog insertion warning for pass ${pass.id}:`,
+            auditErr.message,
+          );
         }
 
         this.webhookService
-          .dispatch(pass.tenantId, 'pass.deleted', { passId: pass.id, objectId, memberId: pass.memberId })
+          .dispatch(pass.tenantId, 'pass.deleted', {
+            passId: pass.id,
+            objectId,
+            memberId: pass.memberId,
+          })
           .catch(() => {});
 
         return res.status(200).send('OK');
@@ -947,15 +985,26 @@ export class PassesController {
       }
 
       if (pass.Member?.phone) {
-        await this.whatsappService.sendWalletSaveConfirmationWithLog(
-          pass.Member.phone,
-          pass.Tenant?.name || 'LinearCard',
-          { tenantId: pass.tenantId, memberId: pass.memberId }
-        ).catch(err => console.error('WhatsApp save confirmation failed (non-fatal):', err));
+        await this.whatsappService
+          .sendWalletSaveConfirmationWithLog(
+            pass.Member.phone,
+            pass.Tenant?.name || 'LinearCard',
+            { tenantId: pass.tenantId, memberId: pass.memberId },
+          )
+          .catch((err) =>
+            console.error(
+              'WhatsApp save confirmation failed (non-fatal):',
+              err,
+            ),
+          );
       }
 
       this.webhookService
-        .dispatch(pass.tenantId, 'pass.installed', { passId: pass.id, objectId, memberId: pass.memberId })
+        .dispatch(pass.tenantId, 'pass.installed', {
+          passId: pass.id,
+          objectId,
+          memberId: pass.memberId,
+        })
         .catch(() => {});
 
       return res.status(200).send('OK');
@@ -965,4 +1014,3 @@ export class PassesController {
     }
   }
 }
-

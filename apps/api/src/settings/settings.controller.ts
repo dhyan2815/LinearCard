@@ -70,13 +70,20 @@ export class SettingsController {
       .eq('id', tenantId)
       .single();
     if (!tenant?.webhookUrl) {
-      throw new HttpException('No webhook URL saved yet', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'No webhook URL saved yet',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     try {
       const res = await fetch(tenant.webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'test.ping', tenantId, sentAt: new Date().toISOString() }),
+        body: JSON.stringify({
+          event: 'test.ping',
+          tenantId,
+          sentAt: new Date().toISOString(),
+        }),
       });
       return { success: res.ok, status: res.status };
     } catch (err: any) {

@@ -1,4 +1,5 @@
 import { NotificationsModule } from './notifications/notifications.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 import { SettingsModule } from './settings/settings.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PassesModule } from './passes/passes.module';
@@ -27,6 +28,7 @@ import { NotificationModule } from './notification/notification.module';
     DashboardModule,
     SettingsModule,
     NotificationsModule,
+    CampaignsModule,
     DevelopersModule,
   ],
   controllers: [AppController],

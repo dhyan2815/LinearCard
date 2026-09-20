@@ -28,10 +28,15 @@ describe('WhatsappService', () => {
         json: async () => ({ id: 'msg-1' }),
       });
 
-      await service.sendTierUpgradeMessage('+919876543210', 'Silver', 'Acme Cafe', {
-        tenantId: 'tenant-1',
-        memberId: 'member-1',
-      });
+      await service.sendTierUpgradeMessage(
+        '+919876543210',
+        'Silver',
+        'Acme Cafe',
+        {
+          tenantId: 'tenant-1',
+          memberId: 'member-1',
+        },
+      );
 
       const [, requestInit] = (global.fetch as jest.Mock).mock.calls[0];
       const body = JSON.parse(requestInit.body);

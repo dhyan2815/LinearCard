@@ -72,7 +72,9 @@ export function resolveLoyaltyRules(templates: any): LoyaltyRules {
       : [];
   const published = rows
     .filter((t) => t?.status === 'published')
-    .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+    .sort((a, b) =>
+      String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')),
+    );
   const template = published[0] || rows[0];
   if (!template) return DEFAULT_LOYALTY_RULES;
 
@@ -158,7 +160,8 @@ export class WalletService {
       .single();
 
     const issuerId = tenant?.issuerId || process.env.ISSUER_ID;
-    const clientEmail = tenant?.googleClientEmail || process.env.GOOGLE_CLIENT_EMAIL;
+    const clientEmail =
+      tenant?.googleClientEmail || process.env.GOOGLE_CLIENT_EMAIL;
     const rawKey = tenant?.googlePrivateKeyEncrypted
       ? decryptSecret(tenant.googlePrivateKeyEncrypted)
       : process.env.GOOGLE_PRIVATE_KEY;
@@ -319,7 +322,8 @@ export class WalletService {
     const explicit = process.env.WALLET_ENV_PREFIX?.trim();
     if (explicit) return explicit === 'none' ? '' : explicit;
 
-    const vercelEnv = process.env.VERCEL_ENV || process.env.NEXT_PUBLIC_VERCEL_ENV;
+    const vercelEnv =
+      process.env.VERCEL_ENV || process.env.NEXT_PUBLIC_VERCEL_ENV;
     if (vercelEnv === 'production') return '';
     if (vercelEnv === 'preview') return 'preview';
     return 'dev';
@@ -417,7 +421,9 @@ export class WalletService {
     // To match the frontend preview card's behavior, we generate a fallback initials logo.
     let finalLogoUrl = templateData.logoUrl;
     if (!finalLogoUrl) {
-      const initials = (templateData.cardTitle || 'LC').substring(0, 2).toUpperCase();
+      const initials = (templateData.cardTitle || 'LC')
+        .substring(0, 2)
+        .toUpperCase();
       finalLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=f1f5f9&color=94a3b8&size=128&font-size=0.45`;
     }
 
@@ -449,10 +455,12 @@ export class WalletService {
     ) {
       classPayload.merchantLocations = templateData.storeLocations
         .slice(0, 10)
-        .map((l: { latitude: number | string; longitude: number | string }) => ({
-          latitude: Number(l.latitude),
-          longitude: Number(l.longitude),
-        }));
+        .map(
+          (l: { latitude: number | string; longitude: number | string }) => ({
+            latitude: Number(l.latitude),
+            longitude: Number(l.longitude),
+          }),
+        );
     }
 
     // Throws on a localhost URL rather than poisoning a live class (ENV-4).
@@ -839,14 +847,19 @@ export class WalletService {
       payload: {
         genericObjects: [
           {
-            id: fullPassId.includes('.') ? fullPassId : `${issuerId}.${fullPassId}`,
+            id: fullPassId.includes('.')
+              ? fullPassId
+              : `${issuerId}.${fullPassId}`,
             classId: this.resolveClassId(issuerId, classSuffix),
           },
         ],
       },
     };
     const token = jwt.sign(claims, privateKey, { algorithm: 'RS256' });
-    return { token, googleWalletUrl: `https://pay.google.com/gp/v/save/${token}` };
+    return {
+      token,
+      googleWalletUrl: `https://pay.google.com/gp/v/save/${token}`,
+    };
   }
 
   public async verifyMarketingConsent(memberId: string): Promise<void> {
@@ -863,14 +876,55 @@ export class WalletService {
         'Member has not consented to promotional notifications.',
       );
     }
+
+    // 2.4 — a grant on file is not enough; a later STOP overrides it.
+    const { data: member } = await this.supabaseService.client
+      .from('Member')
+      .select('marketingOptOutAt')
+      .eq('id', memberId)
+      .single();
+
+    if (member?.marketingOptOutAt) {
+      throw new ForbiddenException(
+        'Member has opted out of promotional notifications.',
+      );
+    }
   }
 
-  public async checkNotificationQuota(
-    memberId: string,
-    bypassQuota = false,
+  /** `resolveClassId` with this instance's own issuer already applied. */
+  public classIdForSuffix(classSuffix?: string): string {
+    return this.resolveClassId(
+      this.getCredentialsOrThrow().issuerId,
+      classSuffix,
+    );
+  }
+
+  /**
+   * Class-level broadcast (Phase 2.3). One `addMessage` on the class reaches
+   * every holder of it, instead of N calls — but it is indiscriminate: there
+   * is no way to exclude an opted-out member from a class message. Callers
+   * must therefore only use this when the audience is genuinely everyone.
+   */
+  public async sendClassMessage(
+    classId: string,
+    messageId: string,
+    header: string,
+    body: string,
   ): Promise<void> {
-    // Note: The 3 wallet notifications per 24hr limit has been permanently removed.
-    return;
+    const client = await this.getGoogleAuthClient();
+    await client.request({
+      url: `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${classId}/addMessage`,
+      method: 'POST',
+      data: {
+        message: {
+          id: messageId,
+          header,
+          body,
+          messageType: 'TEXT_AND_NOTIFY',
+        },
+      },
+    });
+    this.logger.log(`Class message sent: ${messageId} to ${classId}`);
   }
 
   public async sendOfferMessage(
@@ -920,7 +974,6 @@ export class WalletService {
     tenantId: string,
     header: string,
     body: string,
-    bypassQuota = false,
   ): Promise<{ success: boolean; messageId: string }> {
     const messageId = `msg_${Date.now()}`;
     const { issuerId } = this.getCredentialsOrThrow();
@@ -932,10 +985,9 @@ export class WalletService {
       // 1. Check consent
       await this.verifyMarketingConsent(memberId);
 
-      // 2. Check quota
-      await this.checkNotificationQuota(memberId, bypassQuota);
-
-      // 3. Send to Google Wallet
+      // 2. Send to Google Wallet. There is deliberately no 24h quota check —
+      // the stub that used to sit here read as a safeguard and enforced
+      // nothing (WAL-2). Removed in Phase 2.4 rather than left lying.
       await this.sendOfferMessage(resourceId, messageId, header, body);
 
       // 4. Log success
@@ -1123,11 +1175,7 @@ export class WalletService {
     // the very next scan.
     if (tiers.length === 0) {
       const { walletPushed, directNotified, warning } =
-        await scoped.sendTransactionNotification(
-          pass,
-          transaction,
-          tenantName,
-        );
+        await scoped.sendTransactionNotification(pass, transaction, tenantName);
 
       if (pass.phone) {
         try {
@@ -1327,7 +1375,9 @@ export class WalletService {
     if (isUUID) {
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select(`*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`)
+        .select(
+          `*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`,
+        )
         .eq('id', cleanId)
         .single();
       pass = data;
@@ -1339,7 +1389,9 @@ export class WalletService {
         : `${this.getCredentialsOrThrow().issuerId}.${cleanId}`;
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select(`*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`)
+        .select(
+          `*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`,
+        )
         .eq('fullPassId', fullPassId)
         .single();
       pass = data;
@@ -1348,7 +1400,9 @@ export class WalletService {
     if (!pass) {
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select(`*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`)
+        .select(
+          `*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`,
+        )
         .ilike('fullPassId', `%${cleanId}%`)
         .limit(1)
         .single();
@@ -1358,7 +1412,9 @@ export class WalletService {
     if (!pass && (/^\d{8,}$/.test(cleanId) || /^\+\d+$/.test(cleanId))) {
       const { data: phonePasses } = await this.supabaseService.client
         .from('Pass')
-        .select(`*, Member!inner(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`)
+        .select(
+          `*, Member!inner(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`,
+        )
         .ilike('Member.phone', `%${cleanId}%`)
         .order('createdAt', { ascending: false });
       if (phonePasses && phonePasses.length > 0) {
@@ -1442,7 +1498,9 @@ export class WalletService {
     }
 
     if (rpcBalance !== null && rpcBalance !== undefined) {
-      newBalance = Number(Array.isArray(rpcBalance) ? rpcBalance[0] : rpcBalance);
+      newBalance = Number(
+        Array.isArray(rpcBalance) ? rpcBalance[0] : rpcBalance,
+      );
     }
 
     // 2. Insert immutable AuditLog entry

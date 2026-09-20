@@ -1,5 +1,9 @@
 import * as crypto from 'crypto';
-import { WebhookService, signPayload, isPublicWebhookUrl } from './webhook.service';
+import {
+  WebhookService,
+  signPayload,
+  isPublicWebhookUrl,
+} from './webhook.service';
 
 function makeSupabaseMock() {
   const deliveryInserts: any[] = [];
@@ -35,16 +39,27 @@ describe('WebhookService', () => {
 
   it('signs the payload with HMAC-SHA256 verifiable independently', () => {
     const secret = 'shh';
-    const body = JSON.stringify({ event: 'test.ping', payload: {}, timestamp: 1 });
+    const body = JSON.stringify({
+      event: 'test.ping',
+      payload: {},
+      timestamp: 1,
+    });
     const sig = signPayload(secret, body);
-    const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(body)
+      .digest('hex');
     expect(sig).toBe(expected);
   });
 
   it('retries up to 3 times on failure then gives up without throwing', async () => {
     jest.useFakeTimers();
     const { client, deliveryInserts } = makeSupabaseMock();
-    client.__endpoint = { id: 'ep1', url: 'https://example.com/hook', secret: 's3cret' };
+    client.__endpoint = {
+      id: 'ep1',
+      url: 'https://example.com/hook',
+      secret: 's3cret',
+    };
 
     const fetchMock = jest.fn().mockResolvedValue({
       ok: false,
@@ -78,14 +93,28 @@ describe('WebhookService', () => {
   });
 
   it('dispatch only calls endpoints subscribed to the event', async () => {
-    const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200, text: async () => 'ok' });
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, text: async () => 'ok' });
     global.fetch = fetchMock as any;
 
     const insert = jest.fn().mockResolvedValue({ error: null });
     const endpointsResult = {
       data: [
-        { id: 'ep1', url: 'https://a.test', secret: 's1', events: ['points.awarded'], active: true },
-        { id: 'ep2', url: 'https://b.test', secret: 's2', events: ['tier.changed'], active: true },
+        {
+          id: 'ep1',
+          url: 'https://a.test',
+          secret: 's1',
+          events: ['points.awarded'],
+          active: true,
+        },
+        {
+          id: 'ep2',
+          url: 'https://b.test',
+          secret: 's2',
+          events: ['tier.changed'],
+          active: true,
+        },
       ],
       error: null,
     };
@@ -105,7 +134,10 @@ describe('WebhookService', () => {
     await service.dispatch('t1', 'points.awarded', { amount: 1 });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith('https://a.test', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://a.test',
+      expect.any(Object),
+    );
   });
 });
 
@@ -162,7 +194,9 @@ describe('WebhookService delivery hardening', () => {
     const endpointQuery: any = {
       select: () => endpointQuery,
       eq: () => endpointQuery,
-      single: async () => ({ data: { id: 'ep1', url: 'https://example.com/h', secret: 's' } }),
+      single: async () => ({
+        data: { id: 'ep1', url: 'https://example.com/h', secret: 's' },
+      }),
     };
     client.from = jest.fn((table: string) =>
       table === 'WebhookEndpoint'
