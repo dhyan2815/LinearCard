@@ -7,8 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run kill-ports && turbo run dev",
-    "dev:clean": "npm run kill-ports && turbo run dev",
+    "dev": "npm run kill-ports && npm run build -w packages/types && turbo run dev",
+    "dev:clean": "npm run kill-ports && npm run build -w packages/types && turbo run dev",
     "kill-ports": "npx -y kill-port 3000 3001 || true",
     "build": "turbo run build",
     "start": "turbo run start",
