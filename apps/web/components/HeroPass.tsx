@@ -131,9 +131,9 @@ export function HeroPass() {
               <div className="bg-white px-6 py-8 flex flex-col items-center justify-center flex-1">
                  <QRCodeSVG 
                    value="https://linearcard.com/p/demo" 
-                   size={160} 
-                   level="H" 
-                   includeMargin={false}
+                   size={170} 
+                   level="Q" 
+                   includeMargin={true}
                  />
               </div>
 

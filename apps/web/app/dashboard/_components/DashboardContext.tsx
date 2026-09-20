@@ -16,6 +16,10 @@ export interface DesignData {
   rows: Array<{ id: string; columns: Array<{ key: string; header: string; body: string }> }>;
   tierThresholds: Array<{ name: string; min: number }>;
   storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }>;
+  /** Loyalty economics (Phase 1.3) — interim home is the template row. */
+  earnRate: number;
+  redeemRate: number;
+  redeemCapPercent: number;
 }
 
 export interface StatsData {
@@ -86,7 +90,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
     ],
     tierThresholds: [],
-    storeLocations: []
+    storeLocations: [],
+    earnRate: 0.1,
+    redeemRate: 1,
+    redeemCapPercent: 50
   });
 
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
@@ -189,7 +196,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
       ],
       tierThresholds: [],
-      storeLocations: []
+      storeLocations: [],
+      earnRate: 0.1,
+      redeemRate: 1,
+      redeemCapPercent: 50
     });
     setSavedTemplateId(null);
     setTemplateStatus('unsaved');
@@ -225,7 +235,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                 })),
               })),
               tierThresholds: t.tierThresholds || [],
-              storeLocations: t.storeLocations || []
+              storeLocations: t.storeLocations || [],
+              earnRate: t.earnRate ?? 0.1,
+              redeemRate: t.redeemRate ?? 1,
+              redeemCapPercent: t.redeemCapPercent ?? 50
             });
           } else {
             setSavedTemplateId(null);
@@ -241,7 +254,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                 { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
               ],
               tierThresholds: [],
-              storeLocations: []
+              storeLocations: [],
+              earnRate: 0.1,
+              redeemRate: 1,
+              redeemCapPercent: 50
             });
           }
         })

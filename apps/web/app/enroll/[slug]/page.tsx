@@ -137,7 +137,7 @@ export default function TenantEnrollPage() {
                 <Input type="text" value={onboardingName} onChange={(e) => setOnboardingName(e.target.value)} placeholder="Jane Doe" autoFocus required />
               </div>
               <div className="flex flex-row gap-3 relative">
-                <div className="w-[30%] sm:w-1/3">
+                <div className="w-[30%] sm:w-1/3 space-y-1">
                   <Label>Country Code</Label>
                   <Input
                     type="text"
@@ -187,7 +187,7 @@ export default function TenantEnrollPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex-1 sm:w-2/3">
+                <div className="flex-1 sm:w-2/3 space-y-1">
                   <Label>Phone Number</Label>
                   <Input type="tel" inputMode="numeric" pattern="[0-9]*" value={onboardingPhone} onChange={(e) => setOnboardingPhone(e.target.value)} placeholder="(555) 000-0000" required />
                 </div>

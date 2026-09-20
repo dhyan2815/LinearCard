@@ -53,6 +53,8 @@ export interface Member {
   tenantId: string;
   createdAt?: string;
   passes?: Pass[];
+  /** Demo-mode issuance gate: only test accounts get passes while the tenant is in demo. */
+  isTestAccount?: boolean;
 }
 
 // Legacy JSONB shape stored on PassTemplate.tierThresholds. Kept as a
@@ -99,6 +101,10 @@ export interface PassTemplate {
   hexBackgroundColor?: string;
   logoUrl?: string;
   heroImageUrl?: string;
+  /** Loyalty economics (Phase 1.3). Move onto `Program` in Phase 3. */
+  earnRate?: number;
+  redeemRate?: number;
+  redeemCapPercent?: number;
   createdAt?: string;
   updatedAt?: string;
 }

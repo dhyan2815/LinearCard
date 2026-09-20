@@ -16,6 +16,81 @@ import { WebhookService } from '../developers/webhook.service';
 import { DEFAULT_PASS_HEX, Tier } from '@linearcard/types';
 import { decryptSecret } from '../env';
 
+/**
+ * Canonical field keys (Phase 1.2, the Passlet pattern).
+ *
+ * `textModulesData[].id` is the stable binding between a template column and
+ * the live Google Wallet object. Updates match on these ids and NEVER on the
+ * display header — renaming "Points" to "Stars" in the designer used to
+ * silently stop balance updates on every issued pass (WAL-1).
+ *
+ * The `*_LEGACY` entries are ids written by older code paths, kept so passes
+ * issued before this change keep updating.
+ */
+export const POINTS_FIELD_KEYS = ['points', 'balance'];
+export const TIER_FIELD_KEYS = ['tier', 'tier_info'];
+export const MEMBER_ID_FIELD_KEY = 'memberId';
+export const MEMBER_NAME_FIELD_KEY = 'memberName';
+
+/**
+ * Per-brand loyalty economics (Phase 1.3, WAL-4). These live on
+ * `PassTemplate` as the interim home — they move onto `Program` in Phase 3.
+ * The defaults are exactly what used to be hardcoded in
+ * `processOrderTransaction`, so a template that predates the columns behaves
+ * as before.
+ */
+export interface LoyaltyRules {
+  /** Points earned per currency unit spent. 0.1 = 10%. */
+  earnRate: number;
+  /** Currency discount per point redeemed. 1 = 1 point : ₹1. */
+  redeemRate: number;
+  /** Max share of an order that points may cover, 0–100. */
+  redeemCapPercent: number;
+}
+
+export const DEFAULT_LOYALTY_RULES: LoyaltyRules = {
+  earnRate: 0.1,
+  redeemRate: 1,
+  redeemCapPercent: 50,
+};
+
+/** Columns pulled from the embedded PassTemplate rows when scoring a scan. */
+export const PASS_TEMPLATE_RULE_FIELDS =
+  'id, status, updatedAt, tierThresholds, earnRate, redeemRate, redeemCapPercent';
+
+/**
+ * Picks the loyalty rules a transaction is scored against: the tenant's
+ * published template (most recently updated), else any template, else the
+ * defaults. Mirrors `resolveTenantPassDesign`'s resolution order so the rules
+ * and the design a member sees always come from the same template.
+ */
+export function resolveLoyaltyRules(templates: any): LoyaltyRules {
+  const rows: any[] = Array.isArray(templates)
+    ? templates
+    : templates
+      ? [templates]
+      : [];
+  const published = rows
+    .filter((t) => t?.status === 'published')
+    .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  const template = published[0] || rows[0];
+  if (!template) return DEFAULT_LOYALTY_RULES;
+
+  const num = (value: any, fallback: number) =>
+    value === null || value === undefined || isNaN(Number(value))
+      ? fallback
+      : Number(value);
+
+  return {
+    earnRate: num(template.earnRate, DEFAULT_LOYALTY_RULES.earnRate),
+    redeemRate: num(template.redeemRate, DEFAULT_LOYALTY_RULES.redeemRate),
+    redeemCapPercent: num(
+      template.redeemCapPercent,
+      DEFAULT_LOYALTY_RULES.redeemCapPercent,
+    ),
+  };
+}
+
 export interface WalletCredentials {
   issuerId: string;
   clientEmail: string;
@@ -471,11 +546,11 @@ export class WalletService {
         patchPayload.textModulesData = [];
         genericObject.textModulesData.forEach((mod: any) => {
           let newBody = mod.body;
-          if (mod.header.toLowerCase().includes('tier') && updateData.tier)
+          // Match on the stable key, never the display header (WAL-1).
+          if (TIER_FIELD_KEYS.includes(mod.id) && updateData.tier)
             newBody = updateData.tier;
           if (
-            (mod.header.toLowerCase().includes('balance') ||
-              mod.header.toLowerCase().includes('points')) &&
+            POINTS_FIELD_KEYS.includes(mod.id) &&
             formattedBalance !== undefined
           )
             newBody = formattedBalance;
@@ -522,10 +597,8 @@ export class WalletService {
         let displayBalance = formattedBalance;
         if (displayBalance === undefined) {
           if (genericObject.textModulesData) {
-            const balMod = genericObject.textModulesData.find(
-              (m: any) =>
-                m.header.toLowerCase().includes('balance') ||
-                m.header.toLowerCase().includes('points'),
+            const balMod = genericObject.textModulesData.find((m: any) =>
+              POINTS_FIELD_KEYS.includes(m.id),
             );
             if (balMod) displayBalance = balMod.body;
           }
@@ -608,16 +681,17 @@ export class WalletService {
     if (rows && rows.length > 0) {
       rows.forEach((row: any) => {
         row.columns.forEach((col: any, idx: number) => {
+          const fieldId = col.key || `${row.id}_${idx}`;
+          // Seed live values by the same stable key that updates match on,
+          // so creation and update agree on which module holds what.
           let displayBody = col.body;
-          if (col.header.toLowerCase().includes('tier')) displayBody = tier;
-          if (
-            col.header.toLowerCase().includes('balance') ||
-            col.header.toLowerCase().includes('points')
-          )
-            displayBody = balance;
+          if (TIER_FIELD_KEYS.includes(fieldId)) displayBody = tier;
+          if (POINTS_FIELD_KEYS.includes(fieldId)) displayBody = balance;
+          if (fieldId === MEMBER_NAME_FIELD_KEY) displayBody = memberName;
+          if (fieldId === MEMBER_ID_FIELD_KEY) displayBody = passId;
 
           textModulesData.push({
-            id: col.key || `${row.id}_${idx}`,
+            id: fieldId,
             header: col.header,
             body: displayBody,
           });
@@ -1253,7 +1327,7 @@ export class WalletService {
     if (isUUID) {
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*, PassTemplate(tierThresholds))')
+        .select(`*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`)
         .eq('id', cleanId)
         .single();
       pass = data;
@@ -1265,7 +1339,7 @@ export class WalletService {
         : `${this.getCredentialsOrThrow().issuerId}.${cleanId}`;
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*, PassTemplate(tierThresholds))')
+        .select(`*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`)
         .eq('fullPassId', fullPassId)
         .single();
       pass = data;
@@ -1274,7 +1348,7 @@ export class WalletService {
     if (!pass) {
       const { data } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*, PassTemplate(tierThresholds))')
+        .select(`*, Member(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`)
         .ilike('fullPassId', `%${cleanId}%`)
         .limit(1)
         .single();
@@ -1284,7 +1358,7 @@ export class WalletService {
     if (!pass && (/^\d{8,}$/.test(cleanId) || /^\+\d+$/.test(cleanId))) {
       const { data: phonePasses } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member!inner(*), Tenant(*, PassTemplate(tierThresholds))')
+        .select(`*, Member!inner(*), Tenant(*, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`)
         .ilike('Member.phone', `%${cleanId}%`)
         .order('createdAt', { ascending: false });
       if (phonePasses && phonePasses.length > 0) {
@@ -1307,6 +1381,9 @@ export class WalletService {
       );
     }
 
+    // Per-brand economics (WAL-4), not the old hardcoded 10% / 1:₹1 / 50%.
+    const rules = resolveLoyaltyRules(pass.Tenant?.PassTemplate);
+
     const currentBalance = Number(pass.balance) || 0;
     let pointsChanged = 0;
     let newBalance = currentBalance;
@@ -1314,13 +1391,11 @@ export class WalletService {
     let payableAmount = amount;
 
     if (transactionType === 'award') {
-      // 10% Earning Rule
-      pointsChanged = Math.floor(amount * 0.1);
+      pointsChanged = Math.floor(amount * rules.earnRate);
       newBalance = currentBalance + pointsChanged;
       discountApplied = 0;
       payableAmount = amount;
     } else {
-      // Redeem Rule: 1 Point = ₹1, Max 50% Cap
       if (currentBalance <= 0) {
         throw new HttpException(
           'Customer has 0 points available. Point redemption cannot be applied to this order.',
@@ -1328,25 +1403,32 @@ export class WalletService {
         );
       }
 
-      const maxDeductible = Math.floor(amount * 0.5);
+      // Points redeemable = the capped share of the order, converted back to
+      // points at the brand's redeem rate.
+      const maxDiscount = Math.floor(amount * (rules.redeemCapPercent / 100));
+      const maxDeductible = Math.floor(maxDiscount / rules.redeemRate);
       if (maxDeductible <= 0) {
         throw new HttpException(
-          'Order amount is too small for point redemption (minimum ₹2 order).',
+          'Order amount is too small for point redemption.',
           HttpStatus.BAD_REQUEST,
         );
       }
 
       pointsChanged = Math.min(currentBalance, maxDeductible);
-      discountApplied = pointsChanged;
+      discountApplied = Math.floor(pointsChanged * rules.redeemRate);
       payableAmount = amount - discountApplied;
       newBalance = currentBalance - pointsChanged;
     }
 
-    // 1. Update Pass balance in database
-    const { error: dbError } = await this.supabaseService.client
-      .from('Pass')
-      .update({ balance: newBalance })
-      .eq('id', pass.id);
+    // 1. Apply the delta atomically in Postgres (WAL-5). A read-modify-write
+    // loses one of two concurrent scans; this returns the authoritative
+    // balance, which every downstream step (audit, wallet push, tier) uses.
+    const delta = transactionType === 'award' ? pointsChanged : -pointsChanged;
+    const { data: rpcBalance, error: dbError } =
+      await this.supabaseService.client.rpc('increment_pass_balance', {
+        p_pass_id: pass.id,
+        p_delta: delta,
+      });
 
     if (dbError) {
       this.logger.error(
@@ -1357,6 +1439,10 @@ export class WalletService {
         `Database error updating balance: ${dbError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
+    }
+
+    if (rpcBalance !== null && rpcBalance !== undefined) {
+      newBalance = Number(Array.isArray(rpcBalance) ? rpcBalance[0] : rpcBalance);
     }
 
     // 2. Insert immutable AuditLog entry

@@ -67,6 +67,8 @@ export function TemplateWorkspace({
 }: any) {
   const [fieldsExpanded, setFieldsExpanded] = React.useState(true);
   const [tiersExpanded, setTiersExpanded] = React.useState(false);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
 
   // Any design edit invalidates whatever is currently published (or makes an
   // unsaved template as-yet-unpublished), so every mutation routes through
@@ -178,47 +180,50 @@ export function TemplateWorkspace({
     updateDesignData({ ...designData, storeLocations: storeLocations.filter((_, i) => i !== index) });
   };
 
-  const handleSaveDraft = async () => {
-    const savePromise = async () => {
-      if (savedTemplateId) {
-        const data = await apiClient(`/templates/${savedTemplateId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            name: designData.cardTitle,
-            archetype: designData.archetype,
-            fieldRows: designData.rows,
-            tierThresholds,
-            storeLocations,
-            hexBackgroundColor: designData.hexBackgroundColor,
-            logoUrl: designData.logoUrl || null,
-            heroImageUrl: designData.heroImageUrl || null,
-          }),
-        });
-        if (!data.success) throw new Error(data.error || 'Error saving draft');
-        setTemplateStatus('draft');
-      } else {
-        const data = await apiClient('/templates', {
-          method: 'POST',
-          body: JSON.stringify({
-            tenantId: currentTenant?.id || selectedTenantId,
-            classSuffix: designData.classSuffix,
-            name: designData.cardTitle,
-            archetype: designData.archetype,
-            fieldRows: designData.rows,
-            tierThresholds,
-            storeLocations,
-            hexBackgroundColor: designData.hexBackgroundColor,
-            logoUrl: designData.logoUrl || null,
-            heroImageUrl: designData.heroImageUrl || null,
-          }),
-        });
-        if (!data.success) throw new Error(data.error || 'Error saving draft');
-        setSavedTemplateId(data.template.id);
-        setTemplateStatus('draft');
-      }
+  // Saves the current design and returns the template id, so callers that
+  // need a persisted template (publish, preview-on-device) don't each
+  // re-implement the create-or-update dance.
+  const saveTemplate = async (): Promise<string> => {
+    const payload = {
+      name: designData.cardTitle,
+      archetype: designData.archetype,
+      fieldRows: designData.rows,
+      tierThresholds,
+      storeLocations,
+      earnRate: designData.earnRate,
+      redeemRate: designData.redeemRate,
+      redeemCapPercent: designData.redeemCapPercent,
+      hexBackgroundColor: designData.hexBackgroundColor,
+      logoUrl: designData.logoUrl || null,
+      heroImageUrl: designData.heroImageUrl || null,
     };
 
-    toast.promise(savePromise(), {
+    if (savedTemplateId) {
+      const data = await apiClient(`/templates/${savedTemplateId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      if (!data.success) throw new Error(data.error || 'Error saving draft');
+      setTemplateStatus('draft');
+      return savedTemplateId;
+    }
+
+    const data = await apiClient('/templates', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...payload,
+        tenantId: currentTenant?.id || selectedTenantId,
+        classSuffix: designData.classSuffix,
+      }),
+    });
+    if (!data.success) throw new Error(data.error || 'Error saving draft');
+    setSavedTemplateId(data.template.id);
+    setTemplateStatus('draft');
+    return data.template.id;
+  };
+
+  const handleSaveDraft = async () => {
+    toast.promise(saveTemplate(), {
       loading: 'Saving draft...',
       success: 'Draft saved successfully!',
       error: (err: any) => err.message || 'Error saving draft'
@@ -227,44 +232,7 @@ export function TemplateWorkspace({
 
   const handlePublish = async () => {
     const publishPromise = async () => {
-      let tplId = savedTemplateId;
-      if (!tplId) {
-        const data = await apiClient('/templates', {
-          method: 'POST',
-          body: JSON.stringify({
-            tenantId: currentTenant?.id || selectedTenantId,
-            name: designData.cardTitle || 'New Template',
-            archetype: designData.archetype,
-            classSuffix: designData.classSuffix,
-            fieldRows: designData.rows,
-            tierThresholds,
-            storeLocations,
-            hexBackgroundColor: designData.hexBackgroundColor,
-            logoUrl: designData.logoUrl || null,
-            heroImageUrl: designData.heroImageUrl || null,
-          }),
-        });
-        if (!data.success) throw new Error(data.error || 'Failed to create template');
-        tplId = data.template.id;
-        setSavedTemplateId(tplId);
-      } else {
-        const data = await apiClient(`/templates/${tplId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            name: designData.cardTitle,
-            archetype: designData.archetype,
-            fieldRows: designData.rows,
-            tierThresholds,
-            storeLocations,
-            hexBackgroundColor: designData.hexBackgroundColor,
-            logoUrl: designData.logoUrl || null,
-            heroImageUrl: designData.heroImageUrl || null,
-          }),
-        });
-        if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
-        setTemplateStatus('draft');
-      }
-      
+      const tplId = await saveTemplate();
       const publishData = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
       if (!publishData.success) throw new Error(publishData.error || 'Failed to publish');
       setTemplateStatus('published');
@@ -274,6 +242,26 @@ export function TemplateWorkspace({
       loading: 'Publishing to Google Wallet API...',
       success: 'Published to Google Wallet API successfully!',
       error: (err: any) => err.message || 'Publish failed'
+    });
+  };
+
+  // Phase 1.1 — saves the current design, then mints a throwaway pass against
+  // the template's `_preview` class so the admin can scan it onto their own
+  // phone. Saving first is what makes the QR show the edit they just made.
+  const handlePreviewOnDevice = async () => {
+    setPreviewLoading(true);
+    const previewPromise = async () => {
+      const tplId = await saveTemplate();
+      const data = await apiClient(`/templates/${tplId}/preview-pass`, { method: 'POST' });
+      if (!data.success) throw new Error(data.error || 'Failed to build preview pass');
+      setPreviewUrl(data.googleWalletUrl);
+      return data;
+    };
+
+    toast.promise(previewPromise().finally(() => setPreviewLoading(false)), {
+      loading: 'Building preview pass...',
+      success: 'Scan the QR to add it to your Wallet.',
+      error: (err: any) => err.message || 'Preview failed',
     });
   };
 
@@ -294,8 +282,47 @@ export function TemplateWorkspace({
     });
   };
 
+  const previewModal = previewUrl ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-surface-card border border-border-subtle rounded-2xl p-6 shadow-xl text-center">
+        <div className="flex items-start justify-between mb-4">
+          <div className="text-left">
+            <h3 className="text-sm font-semibold text-ink-dark">Preview on device</h3>
+            <p className="text-xs text-ink-muted mt-1">
+              Scan with the phone you want the pass on. This is a throwaway
+              pass — it never counts in your stats.
+            </p>
+          </div>
+          <button type="button" onClick={() => setPreviewUrl(null)} className="text-ink-muted hover:text-ink-dark shrink-0" aria-label="Close preview">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="inline-block p-3 bg-white rounded-xl">
+          <QRCodeSVG value={previewUrl} size={256} level="Q" includeMargin={true} />
+        </div>
+        <div className="mt-4 flex gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="flex-1"
+            onClick={() => {
+              navigator.clipboard.writeText(previewUrl);
+              toast.success('Preview link copied');
+            }}
+          >
+            Copy link
+          </Button>
+          <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button type="button" className="w-full">Open</Button>
+          </a>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="flex flex-col gap-8 w-full max-w-3xl">
+      {previewModal}
 
 
       {origin && (
@@ -319,8 +346,8 @@ export function TemplateWorkspace({
               </Button>
             </div>
           </div>
-          <div className="p-2 bg-white rounded-lg shrink-0 shadow-sm">
-            <QRCodeSVG value={`${origin}/enroll/${designData.classSuffix}`} size={64} level="L" includeMargin={false} />
+          <div className="p-2 bg-white rounded-lg shrink-0 shadow-sm flex items-center justify-center">
+            <QRCodeSVG value={`${origin}/enroll/${designData.classSuffix}`} size={90} level="Q" includeMargin={true} />
           </div>
         </div>
       )}
@@ -516,6 +543,38 @@ export function TemplateWorkspace({
           )}
         </div>
 
+        <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
+          <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Loyalty Economics</h3>
+          <p className="text-xs text-ink-muted mb-3">
+            Applied on every scan. Earn rate is points per ₹1 spent; redeem
+            rate is the ₹ discount each point buys; the cap limits how much of
+            an order points may cover.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {([
+              { field: 'earnRate', label: 'Earn rate (pts per ₹1)', step: 0.01, min: 0, max: 10 },
+              { field: 'redeemRate', label: 'Redeem rate (₹ per pt)', step: 0.01, min: 0.01, max: 1000 },
+              { field: 'redeemCapPercent', label: 'Redeem cap (% of order)', step: 1, min: 0, max: 100 },
+            ] as const).map(({ field, label, step, min, max }) => (
+              <div key={field} className="space-y-1.5">
+                <Label className="text-[11px] font-semibold text-ink-secondary">{label}</Label>
+                <Input
+                  type="number"
+                  step={step}
+                  min={min}
+                  max={max}
+                  value={designData[field]}
+                  onChange={(e) => updateDesignData({ ...designData, [field]: Number(e.target.value) })}
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-3">
+            A ₹1,000 order earns {Math.floor(1000 * (Number(designData.earnRate) || 0))} pts, and points may
+            cover at most ₹{Math.floor(1000 * ((Number(designData.redeemCapPercent) || 0) / 100))} of it.
+          </p>
+        </div>
+
         <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm">
           <button type="button" onClick={() => setTiersExpanded(!tiersExpanded)} className="w-full flex items-center justify-between p-4">
             <span className="flex items-center gap-2 text-xs font-semibold text-ink-dark">
@@ -572,27 +631,30 @@ export function TemplateWorkspace({
         </div>
       </div>
 
-      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-1 bg-linear-to-t from-canvas via-canvas/95 to-transparent">
+      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-4 bg-linear-to-t from-canvas via-canvas/95 to-transparent">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle pt-4 gap-4">
-          <div>
+          <div className="shrink-0">
             {templateStatus !== 'unsaved' && (
               <Badge tone={templateStatus === 'published' ? 'success' : 'warning'}>
                 {templateStatus === 'published' ? 'Published Live' : 'Draft Saved'}
               </Badge>
             )}
           </div>
-          <div className="flex gap-3 flex-wrap justify-end">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
             {templateStatus === 'published' && savedTemplateId && (
-              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="flex-1 sm:flex-none">
+              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="w-full sm:w-auto">
                 Sync Existing Passes {passCount > 0 ? `(${passCount})` : ''}
               </Button>
             )}
             {templateStatus !== 'published' && (
-              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="flex-1 sm:flex-none">
+              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="w-full sm:w-auto">
                 Save Draft
               </Button>
             )}
-            <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="flex-1 sm:flex-none">
+            <Button type="button" variant="secondary" disabled={previewLoading} onClick={handlePreviewOnDevice} className="w-full sm:w-auto">
+              Preview on device
+            </Button>
+            <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="w-full sm:w-auto">
               Publish Template
             </Button>
           </div>

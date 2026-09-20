@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Param,
   Body,
@@ -41,7 +42,7 @@ export class MembersController {
       let query = this.supabaseService.client
         .from('Member')
         .select(
-          'id, name, phone, tenantId, createdAt, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
+          'id, name, phone, tenantId, createdAt, isTestAccount, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
         )
         .eq('tenantId', req.tenantId);
 
@@ -157,6 +158,59 @@ export class MembersController {
           consentLog: consentLog || [],
         },
       };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Phase 1.5 — marks a member as a test account (§1.7). While the tenant's
+   * `publishStatus` is 'demo', only test accounts may be issued passes; until
+   * now that flag was settable only by a direct DB edit.
+   */
+  @Patch(':id/test-account')
+  @UseGuards(TenantGuard)
+  async setTestAccount(
+    @Param('id') id: string,
+    @Body() body: { isTestAccount: boolean },
+    @Req() req: TenantRequest,
+  ) {
+    try {
+      if (typeof body?.isTestAccount !== 'boolean') {
+        throw new HttpException(
+          { success: false, error: 'isTestAccount must be a boolean' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const { data, error } = await this.supabaseService.client
+        .from('Member')
+        .update({ isTestAccount: body.isTestAccount })
+        .eq('id', id)
+        .eq('tenantId', req.tenantId)
+        .select('id, isTestAccount')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data)
+        throw new HttpException(
+          { success: false, error: 'Member not found' },
+          HttpStatus.NOT_FOUND,
+        );
+
+      await this.auditService.record({
+        tenantId: req.tenantId!,
+        memberId: id,
+        actor: 'admin',
+        action: 'test_account_updated',
+        details: { isTestAccount: body.isTestAccount },
+      });
+
+      return { success: true, member: data };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(

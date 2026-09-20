@@ -120,6 +120,40 @@ export class TemplatesController {
   }
 
   /**
+   * Validates one loyalty-economics field (Phase 1.3, WAL-4) against the
+   * same bounds as the DB CHECK constraint, so a bad value is a 400 here
+   * rather than a 500 from Postgres.
+   */
+  private validateLoyaltyRule(
+    field: 'earnRate' | 'redeemRate' | 'redeemCapPercent',
+    value: any,
+  ): number {
+    const bounds = {
+      earnRate: { min: 0, max: 10 },
+      redeemRate: { min: 0.0001, max: 1000 },
+      redeemCapPercent: { min: 0, max: 100 },
+    }[field];
+    const num = Number(value);
+    if (value === null || value === '' || isNaN(num) || num < bounds.min || num > bounds.max) {
+      const message = `${field} must be a number between ${bounds.min} and ${bounds.max}`;
+      throw new HttpException(
+        { success: false, error: message, message },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return num;
+  }
+
+  /** Copies any provided loyalty-rule fields onto an insert/update payload. */
+  private applyLoyaltyRules(body: any, payload: Record<string, any>): void {
+    for (const field of ['earnRate', 'redeemRate', 'redeemCapPercent'] as const) {
+      if (body[field] !== undefined) {
+        payload[field] = this.validateLoyaltyRule(field, body[field]);
+      }
+    }
+  }
+
+  /**
    * Validates a storeLocations payload (max 10 pins, lat/lng in range),
    * throwing an HttpException with the same shape/message used across
    * createTemplate and updateTemplate.
@@ -200,6 +234,8 @@ export class TemplatesController {
         this.validateStoreLocations(body.storeLocations);
         insertPayload.storeLocations = body.storeLocations;
       }
+
+      this.applyLoyaltyRules(body, insertPayload);
 
       const { data: template, error } = await this.supabaseService.client
         .from('PassTemplate')
@@ -379,6 +415,89 @@ export class TemplatesController {
   }
 
   /**
+   * Phase 1.1 — "Preview on device".
+   *
+   * Issues a throwaway GenericObject against a dedicated `_preview` class so
+   * an admin can scan a QR and see the real pass in their own Wallet before
+   * publishing. Deliberately writes **no** `Pass` row: nothing to flag as a
+   * preview and nothing that can ever count in member/pass statistics.
+   */
+  @Post(':id/preview-pass')
+  @UseGuards(TenantGuard)
+  async previewPass(@Param('id') id: string, @Req() req: TenantRequest) {
+    try {
+      const { data: template, error: fetchError } =
+        await this.supabaseService.client
+          .from('PassTemplate')
+          .select('*, tenant:Tenant(*)')
+          .eq('id', id)
+          .eq('tenantId', req.tenantId)
+          .single();
+      if (fetchError || !template)
+        throw new HttpException(
+          { success: false, error: 'Template not found' },
+          HttpStatus.NOT_FOUND,
+        );
+
+      const rowsWithKeys = (template.fieldRows || []).map((row: any) => ({
+        ...row,
+        columns: row.columns.map((col: any, idx: number) => ({
+          ...col,
+          key: col.key || `${row.id}_${idx}`,
+        })),
+      }));
+
+      const previewSuffix = `${template.classSuffix || template.tenant?.classSuffix || 'linearcard'}_preview`;
+      const cardTitle = template.tenant?.name || template.title;
+      const hexBackgroundColor =
+        template.hexBackgroundColor || template.tenant?.brandHexColor;
+      const logoUrl = template.logoUrl || template.tenant?.logoUrl;
+      const heroImageUrl = template.heroImageUrl || template.tenant?.heroUrl;
+
+      const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+
+      // The preview class is disposable: always PATCH/create it so the QR
+      // reflects the design as it stands right now, published or not.
+      await tenantWallet.createGenericClass({
+        classSuffix: previewSuffix,
+        cardTitle,
+        hexBackgroundColor,
+        rows: rowsWithKeys,
+        logoUrl,
+        heroImageUrl,
+        storeLocations: template.storeLocations ?? [],
+        isUpdate: false,
+      });
+
+      const result = await tenantWallet.createGoogleWalletPass({
+        passId: `preview_${id}_${Date.now()}`,
+        memberName: 'Preview',
+        cardTitle,
+        balance: '500 Pts',
+        tier: 'Preview',
+        hexBackgroundColor,
+        classSuffix: previewSuffix,
+        logoUrl,
+        heroImageUrl,
+        rows: rowsWithKeys,
+      });
+
+      return {
+        success: true,
+        preview: true,
+        googleWalletUrl: result.googleWalletUrl,
+        passId: result.passId,
+      };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
    * Pushes the template's current design (currently: colour) onto every
    * already-issued, non-deleted Pass of the calling tenant. A colour fix on
    * the template only reaches passes issued *after* the fix unless this is
@@ -478,6 +597,8 @@ export class TemplatesController {
         this.validateStoreLocations(body.storeLocations);
         updatePayload.storeLocations = body.storeLocations;
       }
+
+      this.applyLoyaltyRules(body, updatePayload);
 
       const { data: updated, error } = await this.supabaseService.client
         .from('PassTemplate')

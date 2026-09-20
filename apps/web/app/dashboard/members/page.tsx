@@ -38,6 +38,24 @@ export default function MembersPage() {
     setTimeout(() => setCopiedId((cur) => (cur === passId ? null : cur)), 1500);
   };
 
+  // Phase 1.5 — the demo-mode issuance gate reads Member.isTestAccount; this
+  // is the only way to set it outside a direct DB edit.
+  const toggleTestAccount = async (memberId: string, next: boolean) => {
+    const previous = members;
+    setMembers((cur) => cur.map((m) => (m.id === memberId ? { ...m, isTestAccount: next } : m)));
+    try {
+      const data = await apiClient(`/members/${memberId}/test-account`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isTestAccount: next }),
+      });
+      if (!data.success) throw new Error(data.error || 'Failed to update');
+      toast.success(next ? 'Marked as test account' : 'Test account removed');
+    } catch (err: any) {
+      setMembers(previous);
+      toast.error(err.message || 'Failed to update test account');
+    }
+  };
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -135,6 +153,23 @@ export default function MembersPage() {
     },
     { header: 'Tier', render: (item) => <span className="text-ink-secondary">{item.pass ? item.pass.tier : '—'}</span> },
     { header: <SortHeader label="Balance" sortField="balance" />, render: (item) => <span className="text-ink-secondary">{item.pass ? item.pass.balance : '—'}</span> },
+    {
+      header: 'Test acct',
+      render: (item) => (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); toggleTestAccount(item.id, !item.isTestAccount); }}
+          className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+            item.isTestAccount
+              ? 'bg-amber-500/10 border-amber-500/40 text-amber-600'
+              : 'bg-surface-card border-border-subtle text-ink-muted hover:border-border-strong'
+          }`}
+          title={item.isTestAccount ? 'Test account — click to unset' : 'Mark as test account'}
+        >
+          {item.isTestAccount ? 'Test' : 'Live'}
+        </button>
+      ),
+    },
     {
       header: 'Actions',
       align: 'right',

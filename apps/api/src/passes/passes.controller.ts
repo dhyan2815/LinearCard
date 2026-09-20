@@ -216,7 +216,7 @@ export class PassesController {
           .from('Pass')
           .select('*, Member!inner(*), Tenant(name)')
           .eq('tenantId', tenantId)
-          .eq('Member.phone', passId)
+          .ilike('Member.phone', '%' + passId)
           .order('createdAt', { ascending: false });
 
         pass = phonePasses?.[0] || null;
@@ -252,7 +252,7 @@ export class PassesController {
 
       if (!pass) {
         return res
-          .status(404)
+          .status(200)
           .json({ valid: false, error: 'Pass not found or invalid' });
       }
 
@@ -792,7 +792,7 @@ export class PassesController {
         .from('Pass')
         .select('id, Member!inner(phone)')
         .eq('tenantId', tenantId)
-        .eq('Member.phone', phone)
+        .ilike('Member.phone', '%' + phone)
         .single();
 
       if (!pass) {

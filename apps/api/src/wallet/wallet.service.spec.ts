@@ -707,6 +707,10 @@ describe('processOrderTransaction — tier propagation', () => {
     supabaseServiceMock = {
       client: {
         from: jest.fn(),
+        // Phase 1.4: balance mutation goes through the atomic RPC. `data:
+        // null` means "no authoritative balance returned", so these tests
+        // keep asserting against the locally computed one.
+        rpc: jest.fn().mockResolvedValue({ data: null, error: null }),
       },
     };
     const mockNotifyService: any = {

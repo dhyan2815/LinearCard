@@ -215,6 +215,8 @@ export default function ScanPage() {
     resetOrderForm();
     setPassId('');
     setPassData(null);
+    setShowScanner(true);
+    setShowManualLookup(false);
   };
 
   return (
@@ -357,6 +359,32 @@ export default function ScanPage() {
               <p className="text-xs text-ink-secondary leading-relaxed pt-1">
                 Point the camera at the customer's Google Wallet pass QR code, or use manual lookup by phone number.
               </p>
+
+              {/* Fallback when Scanner hides on error */}
+              {!showScanner && !showManualLookup && !passData && (
+                <div className="rounded-xl border border-dashed border-border-subtle aspect-square flex flex-col items-center justify-center bg-surface-bone/30 animate-in fade-in space-y-3 p-6 text-center mt-4">
+                  <div className="w-12 h-12 rounded-full bg-surface-card border border-border-subtle flex items-center justify-center text-ink-secondary">
+                    <QrCode className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-ink-dark mb-1">Scanner Closed</h3>
+                    <p className="text-xs text-ink-secondary mb-4 max-w-50 mx-auto">
+                      Tap the button below to open the camera and scan another pass.
+                    </p>
+                    <Button 
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setShowScanner(true);
+                        setError('');
+                      }}
+                      className="w-full text-xs font-semibold"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" /> Rescan QR Code
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Active Customer Indicator on Left Column */}

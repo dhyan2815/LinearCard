@@ -82,8 +82,8 @@ export default function WalletModal({ isOpen, onClose, passResult }: WalletModal
           <div className="p-1 bg-white rounded-xl">
             <QRCodeSVG
               value={googleWalletUrl}
-              size={150}
-              level="L"
+              size={256}
+              level="Q"
               includeMargin={true}
             />
           </div>
