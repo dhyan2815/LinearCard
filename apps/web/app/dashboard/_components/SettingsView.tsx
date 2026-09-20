@@ -16,6 +16,8 @@ export function SettingsView() {
   const [isSaving, setIsSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [authError, setAuthError] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState('');
 
   useEffect(() => {
     apiClient('/settings').then(d => {
@@ -44,6 +46,18 @@ export function SettingsView() {
       else { setMsg(`Error: ${err.message}`); }
     }
     finally { setIsSaving(false); }
+  };
+
+  const handleTestWebhook = async () => {
+    setIsTesting(true); setTestMsg('');
+    try {
+      const data = await apiClient('/settings/test-webhook', { method: 'POST' });
+      setTestMsg(data.success ? `Test event sent (HTTP ${data.status}).` : `Endpoint responded with HTTP ${data.status}.`);
+    } catch (err: any) {
+      setTestMsg(`Error: ${err.message}`);
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   if (authError) return <Alert variant="warning">Session expired. Redirecting to login…</Alert>;
@@ -78,10 +92,16 @@ export function SettingsView() {
         <h3 className="text-base font-semibold text-ink-dark">Webhook URL</h3>
         <div className="space-y-1.5">
           <Label>Endpoint URL</Label>
-          <Input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
-            placeholder="http://127.0.0.1:3001/passes/webhooks/external-order" />
+          <div className="flex gap-2">
+            <Input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
+              placeholder="http://127.0.0.1:3001/passes/webhooks/external-order" className="flex-1" />
+            <Button type="button" variant="secondary" disabled={isTesting || !webhookUrl} onClick={handleTestWebhook}>
+              {isTesting ? 'Sending…' : 'Test'}
+            </Button>
+          </div>
         </div>
         <p className="text-xs text-ink-muted">LinearCard will POST signed events here.</p>
+        {testMsg && <Alert variant={testMsg.startsWith('Error') ? 'error' : 'info'}>{testMsg}</Alert>}
         {msg && <Alert variant={msg.startsWith('Error') ? 'error' : 'success'}>{msg}</Alert>}
         <Button onClick={handleSaveWebhook} disabled={isSaving} className="w-full">
           {isSaving ? 'Saving...' : 'Save Webhook URL'}

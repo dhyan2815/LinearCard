@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ShieldCheck, History, Edit3, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -15,6 +15,7 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 
 export default function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const [member, setMember] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,7 +26,7 @@ export default function MemberDetailPage() {
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [adjustMsg, setAdjustMsg] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(searchParams.get('revoke') === '1');
   const router = useRouter();
 
   const loadMember = async () => {

@@ -38,8 +38,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex flex-1 overflow-hidden bg-canvas min-h-0">
             <DashboardSidebar />
             <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-canvas">
-              <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                {children}
+              <main className="flex-1 overflow-y-auto">
+                <div className="max-w-[1120px] mx-auto px-8 py-6 lg:py-8">
+                  {children}
+                </div>
               </main>
             </div>
           </div>

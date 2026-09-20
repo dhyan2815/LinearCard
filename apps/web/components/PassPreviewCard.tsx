@@ -19,6 +19,7 @@ export interface PassPreviewCardProps {
   passId?: string;
   archetype?: string;
   setDesignData?: any;
+  platform?: 'apple' | 'google';
 }
 
 export default function PassPreviewCard({
@@ -35,7 +36,8 @@ export default function PassPreviewCard({
   isManageTab = false,
   passId = '',
   archetype = 'membership',
-  setDesignData
+  setDesignData,
+  platform = 'google'
 }: PassPreviewCardProps): React.JSX.Element {
   const [isDarkMode, setIsDarkMode] = useState(false);
 
@@ -87,129 +89,164 @@ export default function PassPreviewCard({
     });
   };
 
-  return (
-    <div className="w-full max-w-90 mx-auto select-none sm:rounded-[40px] rounded-3xl sm:border-10px border-zinc-950 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col transition-all duration-500 relative bg-black ring-1 ring-white/10 h-187.5">
-      {/* Phone status bar placeholder */}
-      <div className="hidden sm:flex h-8 w-full justify-center items-start bg-transparent z-20 absolute top-0 pt-2.5 pointer-events-none">
-        <div className="w-28 h-6 bg-zinc-950 rounded-full"></div>
-      </div>
-      
-      {/* Google Wallet App Background */}
-      <div 
-        className="w-full flex-1 pt-12 pb-6 flex flex-col items-center overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none transition-colors duration-500 relative"
-        style={{ backgroundColor: isDarkMode ? '#000000' : '#f8f9fa' }}
-      >
-        {/* Google Wallet Top Bar */}
-        <div className="w-full h-12 flex items-center justify-between px-6 mb-2 shrink-0">
-          <span className="font-medium text-lg transition-colors duration-500 tracking-tight" style={{color: textColor}}>Google Wallet</span>
-          <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center shrink-0">
-             <svg className="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-          </div>
-        </div>
+  const renderRows = () => rows && rows.length > 0 && (
+    <div className="px-6 py-6 space-y-7 transition-all duration-500 flex-1">
+       {rows.map((row: any, rIdx: number) => (
+         <div key={row.id || rIdx} className="grid gap-4" style={{ gridTemplateColumns: `repeat(${row.columns.length}, minmax(0, 1fr))` }}>
+           {row.columns.map((col: any, cIdx: number) => {
+             let displayBody = col.body;
 
-        <div className="w-[92%] mx-auto rounded-3xl overflow-hidden flex flex-col transition-all duration-500 relative border border-black/5 dark:border-white/5" style={{ backgroundColor: containerBg }}>
-          
-          {/* Top colored strip for GenericObject */}
-          <div className="w-full flex flex-col pt-5 pb-6 px-6 relative transition-colors duration-500" style={{ backgroundColor: headerBg }}>
-             <div className="flex items-start justify-between mb-8">
-               <div className="w-12 h-12 rounded-full bg-white overflow-hidden flex items-center justify-center shrink-0 shadow-sm border border-black/5">
-                 {logoUrl ? (
-                   // eslint-disable-next-line @next/next/no-img-element
-                   <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                 ) : (
-                   <div className="w-full h-full bg-slate-100 flex items-center justify-center font-bold text-slate-400 text-sm">
-                     {cardTitle ? cardTitle.substring(0, 2).toUpperCase() : 'LC'}
-                   </div>
-                 )}
-               </div>
-               
-               <div className="ml-4 flex-1 min-w-0 mt-1">
-                 <EditableField 
-                   value={cardTitle} 
-                   onChange={(v: string) => setDesignData?.((prev: any) => ({...prev, cardTitle: v}))}
-                   className="text-white font-medium text-base text-right"
-                   placeholder="Program Title"
+             if (isManageTab && col.header.toLowerCase().includes('tier') && manageTier) displayBody = manageTier;
+             if (isManageTab && (col.header.toLowerCase().includes('balance') || col.header.toLowerCase().includes('points')) && manageBalance) displayBody = manageBalance;
+
+             return (
+               <div key={cIdx} className="min-w-0 flex flex-col">
+                 <EditableField
+                   value={col.header}
+                   onChange={(v: string) => handleUpdateRow(rIdx, cIdx, 'header', v)}
+                   className="text-xs font-medium mb-1 transition-colors duration-500"
+                   style={{ color: secondaryTextColor }}
+                   placeholder="Field Label"
                    isEditable={!!setDesignData}
                  />
+                 {isManageTab ? (
+                   <span className="text-[15px] font-medium truncate block transition-colors duration-500" style={{ color: textColor }}>
+                     {displayBody || '-'}
+                   </span>
+                 ) : (
+                   <EditableField
+                     value={col.body}
+                     onChange={(v: string) => handleUpdateRow(rIdx, cIdx, 'body', v)}
+                     className="text-[15px] font-medium transition-colors duration-500"
+                     style={{ color: textColor }}
+                     placeholder="Value"
+                     isEditable={!!setDesignData}
+                   />
+                 )}
                </div>
-             </div>
-             
-             {/* Main Title text (User Name usually for Generic/Loyalty) */}
-             <div className="w-full min-w-0 flex flex-col items-start">
-                <span className="text-white/80 text-[13px] font-medium block mb-1">
-                  {isManageTab && manageTier ? manageTier : (rows.find((r: any) => r.columns.some((c: any) => c.header.toLowerCase().includes('tier')))?.columns.find((c: any) => c.header.toLowerCase().includes('tier'))?.body || 'Member')}
-                </span>
-                <span className="text-white text-[28px] font-normal truncate block w-full leading-tight">
-                  {memberName || 'Your Name'}
-                </span>
-             </div>
-          </div>
-          
-          {/* Hero Image */}
-          {heroImageUrl && (
-            <div className="w-full h-45 bg-neutral-200 overflow-hidden shrink-0 border-b border-black/5">
-               {/* eslint-disable-next-line @next/next/no-img-element */}
-               <img src={heroImageUrl} alt="Hero" className="w-full h-full object-cover transition-opacity duration-500" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-            </div>
-          )}
+             );
+           })}
+         </div>
+       ))}
+    </div>
+  );
 
-          {/* Dynamic Rows */}
-          {rows && rows.length > 0 && (
-            <div className="px-6 py-6 space-y-7 transition-all duration-500 flex-1">
-               {rows.map((row: any, rIdx: number) => (
-                 <div key={row.id || rIdx} className="grid gap-4" style={{ gridTemplateColumns: `repeat(${row.columns.length}, minmax(0, 1fr))` }}>
-                   {row.columns.map((col: any, cIdx: number) => {
-                     let displayBody = col.body;
-                     
-                     if (isManageTab && col.header.toLowerCase().includes('tier') && manageTier) displayBody = manageTier;
-                     if (isManageTab && (col.header.toLowerCase().includes('balance') || col.header.toLowerCase().includes('points')) && manageBalance) displayBody = manageBalance;
-                     
-                     return (
-                       <div key={cIdx} className="min-w-0 flex flex-col">
-                         <EditableField
-                           value={col.header}
-                           onChange={(v: string) => handleUpdateRow(rIdx, cIdx, 'header', v)}
-                           className="text-xs font-medium mb-1 transition-colors duration-500"
-                           style={{ color: secondaryTextColor }}
-                           placeholder="Field Label"
-                           isEditable={!!setDesignData}
-                         />
-                         {isManageTab ? (
-                           <span className="text-[15px] font-medium truncate block transition-colors duration-500" style={{ color: textColor }}>
-                             {displayBody || '-'}
-                           </span>
-                         ) : (
-                           <EditableField
-                             value={col.body}
-                             onChange={(v: string) => handleUpdateRow(rIdx, cIdx, 'body', v)}
-                             className="text-[15px] font-medium transition-colors duration-500"
-                             style={{ color: textColor }}
-                             placeholder="Value"
-                             isEditable={!!setDesignData}
-                           />
-                         )}
-                       </div>
-                     );
-                   })}
-                 </div>
-               ))}
-            </div>
-          )}
-
-          {/* Barcode Section */}
-          <div className={`px-6 py-8 flex flex-col items-center justify-center bg-white transition-colors duration-500 mt-auto border-t border-black/5`}>
-             <div className="w-42.5 h-42.5 flex items-center justify-center mb-3">
-               <QRCodeSVG
-                  value={displayBarcodeValue}
-                  size={160}
-                  level="M"
-                  includeMargin={false}
-                />
-             </div>
-             <span className="text-zinc-600 font-mono text-[13px] tracking-widest mt-1">{shortPassId}</span>
-          </div>
-
+  const logo = (
+    <div className="w-12 h-12 rounded-full bg-white overflow-hidden flex items-center justify-center shrink-0 shadow-sm border border-black/5">
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+      ) : (
+        <div className="w-full h-full bg-slate-100 flex items-center justify-center font-bold text-slate-400 text-sm">
+          {cardTitle ? cardTitle.substring(0, 2).toUpperCase() : 'LC'}
         </div>
+      )}
+    </div>
+  );
+
+  const tierLabel = isManageTab && manageTier
+    ? manageTier
+    : (rows.find((r: any) => r.columns.some((c: any) => c.header.toLowerCase().includes('tier')))?.columns.find((c: any) => c.header.toLowerCase().includes('tier'))?.body || 'Member');
+
+  if (platform === 'apple') {
+    return (
+      <div className="w-full max-w-90 mx-auto select-none">
+        <div className="rounded-3xl overflow-hidden flex flex-col shadow-[0_20px_45px_-15px_rgba(0,0,0,0.4)] relative transition-colors duration-500" style={{ backgroundColor: headerBg }}>
+          {/* Punch hole notch */}
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-6 bg-black/20 rounded-full z-10" />
+
+          <div className="px-5 pt-6 pb-4">
+            <div className="flex items-start justify-between mb-6">
+              {logo}
+              <div className="text-right max-w-[55%]">
+                <EditableField
+                  value={cardTitle}
+                  onChange={(v: string) => setDesignData?.((prev: any) => ({ ...prev, cardTitle: v }))}
+                  className="text-white/90 font-medium text-xs uppercase tracking-wide"
+                  placeholder="Header"
+                  isEditable={!!setDesignData}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-end justify-between gap-4">
+              <div className="min-w-0">
+                <span className="text-white/70 text-[11px] font-medium uppercase tracking-wide block mb-1">{tierLabel}</span>
+                <span className="text-white text-2xl font-semibold truncate block leading-tight">{memberName || 'Your Name'}</span>
+              </div>
+              {heroImageUrl && (
+                <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-white/20">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={heroImageUrl} alt="Strip" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="transition-colors duration-500" style={{ backgroundColor: containerBg }}>
+            {renderRows()}
+
+            <div className="px-6 py-8 flex flex-col items-center justify-center bg-white border-t border-black/5">
+              <div className="w-42.5 h-42.5 flex items-center justify-center mb-3">
+                <QRCodeSVG value={displayBarcodeValue} size={160} level="M" includeMargin={false} />
+              </div>
+              <span className="text-zinc-600 font-mono text-[13px] tracking-widest mt-1">{shortPassId}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-90 mx-auto select-none rounded-3xl overflow-hidden flex flex-col transition-all duration-500 relative border border-black/5 dark:border-white/5" style={{ backgroundColor: containerBg }}>
+
+      {/* Top colored strip for GenericObject */}
+      <div className="w-full flex flex-col pt-5 pb-6 px-6 relative transition-colors duration-500" style={{ backgroundColor: headerBg }}>
+         <div className="flex items-start justify-between mb-8">
+           {logo}
+
+           <div className="ml-4 flex-1 min-w-0 mt-1">
+             <EditableField
+               value={cardTitle}
+               onChange={(v: string) => setDesignData?.((prev: any) => ({...prev, cardTitle: v}))}
+               className="text-white font-medium text-base text-right"
+               placeholder="Program Title"
+               isEditable={!!setDesignData}
+             />
+           </div>
+         </div>
+
+         {/* Main Title text (User Name usually for Generic/Loyalty) */}
+         <div className="w-full min-w-0 flex flex-col items-start">
+            <span className="text-white/80 text-[13px] font-medium block mb-1">{tierLabel}</span>
+            <span className="text-white text-[28px] font-normal truncate block w-full leading-tight">
+              {memberName || 'Your Name'}
+            </span>
+         </div>
+      </div>
+
+      {/* Hero Image */}
+      {heroImageUrl && (
+        <div className="w-full h-45 bg-neutral-200 overflow-hidden shrink-0 border-b border-black/5">
+           {/* eslint-disable-next-line @next/next/no-img-element */}
+           <img src={heroImageUrl} alt="Hero" className="w-full h-full object-cover transition-opacity duration-500" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        </div>
+      )}
+
+      {renderRows()}
+
+      {/* Barcode Section */}
+      <div className="px-6 py-8 flex flex-col items-center justify-center bg-white transition-colors duration-500 mt-auto border-t border-black/5">
+         <div className="w-42.5 h-42.5 flex items-center justify-center mb-3">
+           <QRCodeSVG
+              value={displayBarcodeValue}
+              size={160}
+              level="M"
+              includeMargin={false}
+            />
+         </div>
+         <span className="text-zinc-600 font-mono text-[13px] tracking-widest mt-1">{shortPassId}</span>
       </div>
     </div>
   );

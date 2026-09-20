@@ -2,7 +2,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 export interface DataTableColumn<T> {
-  header: string
+  header: React.ReactNode
   align?: "left" | "right"
   className?: string
   render: (row: T) => React.ReactNode
@@ -36,9 +36,9 @@ export function DataTable<T>({
       <table className="w-full text-left text-sm border-collapse">
         <thead>
           <tr className="bg-canvas/50 text-[11px] font-bold uppercase tracking-wider text-ink-secondary border-b border-border-subtle">
-            {columns.map((col) => (
+            {columns.map((col, idx) => (
               <th
-                key={col.header}
+                key={idx}
                 className={cn("px-6 py-4", col.align === "right" && "text-right", col.className)}
               >
                 {col.header}
@@ -78,8 +78,8 @@ export function DataTable<T>({
                   onRowClick && "cursor-pointer hover:bg-surface-hover"
                 )}
               >
-                {columns.map((col) => (
-                  <td key={col.header} className={cn("px-6 py-4", col.align === "right" && "text-right", col.className)}>
+                {columns.map((col, colIdx) => (
+                  <td key={colIdx} className={cn("px-6 py-4", col.align === "right" && "text-right", col.className)}>
                     {col.render(row)}
                   </td>
                 ))}

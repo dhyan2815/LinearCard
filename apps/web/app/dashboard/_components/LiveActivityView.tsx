@@ -148,6 +148,7 @@ export function LiveActivityView({
                               </p>
                               <p className="text-xs text-ink-muted font-mono truncate mt-0.5">
                                 {item.tenantName}
+                                {item.passData?.createdAt && ` • ${formatTimeAgo(item.passData.createdAt)}`}
                               </p>
                             </div>
                           </div>
@@ -169,7 +170,7 @@ export function LiveActivityView({
               <Activity className="w-4 h-4 text-emerald-500" /> Push History
             </h2>
           </div>
-          <div className="p-5 flex-1 min-h-0 overflow-y-auto space-y-3">
+          <div className="p-6 flex-1 min-h-0 overflow-y-auto space-y-3">
             {logFetchError && <Alert variant="error">Error: {logFetchError}</Alert>}
             {logs.length === 0 && !logFetchError && <p className="text-sm text-ink-muted text-center py-8">No recent activity.</p>}
             {logs.map((log: any) => (

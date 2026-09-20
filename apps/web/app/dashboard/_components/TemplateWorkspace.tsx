@@ -4,28 +4,31 @@ import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Plus, X } from 'lucide-react';
+import { Badge } from '@/components/ui/Badge';
+import { Plus, X, ChevronDown, Gift, IdCard, ShieldCheck, Ticket, ImageOff } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { StoreLocationEntry } from './StoreLocationEntry';
 
 const COLOR_PALETTE = [
-  { name: 'Obsidian', hex: '#18181B' },
-  { name: 'Midnight', hex: '#0F172A' },
-  { name: 'Deep Navy', hex: '#1A365D' },
-  { name: 'Indigo Aura', hex: '#1E1B4B' },
-  { name: 'Dark Emerald', hex: '#064E3B' },
-  { name: 'Espresso', hex: '#38220F' },
-  { name: 'Crimson Velvet', hex: '#4C0519' },
-  { name: 'Royal Purple', hex: '#3B0764' }
+  { name: 'Midnight Black', hex: '#0F172A' },
+  { name: 'Ocean Blue', hex: '#0284C7' },
+  { name: 'Emerald Green', hex: '#059669' },
+  { name: 'Amethyst Purple', hex: '#7C3AED' },
+  { name: 'Ruby Red', hex: '#DC2626' },
+  { name: 'Sunset Orange', hex: '#EA580C' },
+  { name: 'Amber Gold', hex: '#D97706' },
+  { name: 'Rose Pink', hex: '#DB2777' },
+  { name: 'Teal Breeze', hex: '#0D9488' },
+  { name: 'Slate Gray', hex: '#475569' }
 ];
 
 const ARCHETYPES = [
-  { value: 'loyalty',      label: 'Loyalty Pass' },
-  { value: 'membership',   label: 'Membership Card' },
-  { value: 'id_card',      label: 'ID Card' },
-  { value: 'access_badge', label: 'Access Badge' },
+  { value: 'loyalty',      label: 'Loyalty', icon: Gift },
+  { value: 'membership',   label: 'Membership', icon: ShieldCheck },
+  { value: 'id_card',      label: 'ID Card', icon: IdCard },
+  { value: 'access_badge', label: 'Access Badge', icon: Ticket },
 ] as const;
 
 function generateFieldKey(): string {
@@ -62,6 +65,9 @@ export function TemplateWorkspace({
   selectedTenantId,
   passCount = 0
 }: any) {
+  const [fieldsExpanded, setFieldsExpanded] = React.useState(true);
+  const [tiersExpanded, setTiersExpanded] = React.useState(false);
+
   // Any design edit invalidates whatever is currently published (or makes an
   // unsaved template as-yet-unpublished), so every mutation routes through
   // here to re-enable the Publish button — previously only the archetype
@@ -290,18 +296,7 @@ export function TemplateWorkspace({
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-3xl">
-      <div className="border-b border-border-subtle pb-4 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-medium text-ink-dark tracking-tight">Template Designer</h2>
-          <p className="text-sm text-ink-secondary mt-1">Design the core structure of your Google Wallet!</p>
-        </div>
-        <div className="shrink-0 inline-flex items-center rounded-lg border border-border-subtle bg-surface-card p-1 text-xs font-medium">
-          <span className="px-3 py-1.5 rounded-md bg-brand-blue text-white">Google</span>
-          <span className="px-3 py-1.5 rounded-md text-ink-muted cursor-not-allowed" title="Coming soon">
-            Apple <span className="text-[10px]">(Coming soon)</span>
-          </span>
-        </div>
-      </div>
+
 
       {origin && (
         <div className="bg-surface-card border border-brand-blue/30 p-5 rounded-xl flex items-center justify-between gap-4 shadow-sm">
@@ -345,39 +340,61 @@ export function TemplateWorkspace({
 
         <div className="space-y-2">
           <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Pass Template Type</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {ARCHETYPES.map((arch) => (
-              <button key={arch.value} type="button"
-                onClick={() => {
-                  setDesignData((prev: any) => {
-                    if (prev.archetype === arch.value) return prev; // Do nothing if already active
-                    return {
-                      ...prev,
-                      archetype: arch.value,
-                      rows: ARCHETYPE_PRESETS[arch.value] || prev.rows
-                    };
-                  });
-                  setTemplateStatus('draft');
-                }}
-                className={`py-2.5 px-3 rounded-lg text-sm font-medium border transition-all ${
-                  designData.archetype === arch.value
-                    ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
-                    : 'bg-surface-card border-border-subtle text-ink-secondary hover:border-border-strong'
-                }`}>
-                {arch.label}
-              </button>
-            ))}
+          <div className="grid grid-cols-4 gap-2 mt-2">
+            {ARCHETYPES.map((arch) => {
+              const Icon = arch.icon;
+              return (
+                <button key={arch.value} type="button"
+                  onClick={() => {
+                    setDesignData((prev: any) => {
+                      if (prev.archetype === arch.value) return prev; // Do nothing if already active
+                      return {
+                        ...prev,
+                        archetype: arch.value,
+                        rows: ARCHETYPE_PRESETS[arch.value] || prev.rows
+                      };
+                    });
+                    setTemplateStatus('draft');
+                  }}
+                  className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-lg text-[11px] font-medium border transition-all ${
+                    designData.archetype === arch.value
+                      ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
+                      : 'bg-surface-card border-border-subtle text-ink-secondary hover:border-border-strong'
+                  }`}>
+                  <Icon className="w-4 h-4" strokeWidth={1.75} />
+                  {arch.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Logo Asset URL</Label>
-            <Input type="text" value={designData.logoUrl} onChange={(e) => updateDesignData({...designData, logoUrl: e.target.value})} placeholder="https://..." className="mt-1 font-mono text-sm"/>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-9 h-9 shrink-0 rounded-lg border border-border-subtle bg-canvas overflow-hidden flex items-center justify-center">
+                {designData.logoUrl ? (
+                  <img src={designData.logoUrl} alt="Logo preview" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+                ) : (
+                  <ImageOff className="w-4 h-4 text-ink-muted" strokeWidth={1.75} />
+                )}
+              </div>
+              <Input type="text" value={designData.logoUrl} onChange={(e) => updateDesignData({...designData, logoUrl: e.target.value})} placeholder="https://..." className="font-mono text-sm"/>
+            </div>
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Hero Cover URL</Label>
-            <Input type="text" value={designData.heroImageUrl} onChange={(e) => updateDesignData({...designData, heroImageUrl: e.target.value})} placeholder="https://..." className="mt-1 font-mono text-sm"/>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-9 h-9 shrink-0 rounded-lg border border-border-subtle bg-canvas overflow-hidden flex items-center justify-center">
+                {designData.heroImageUrl ? (
+                  <img src={designData.heroImageUrl} alt="Hero preview" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+                ) : (
+                  <ImageOff className="w-4 h-4 text-ink-muted" strokeWidth={1.75} />
+                )}
+              </div>
+              <Input type="text" value={designData.heroImageUrl} onChange={(e) => updateDesignData({...designData, heroImageUrl: e.target.value})} placeholder="https://..." className="font-mono text-sm"/>
+            </div>
           </div>
         </div>
 
@@ -385,26 +402,26 @@ export function TemplateWorkspace({
           <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Brand Palette</Label>
           <div className="flex flex-wrap items-center gap-4 mt-2">
             {COLOR_PALETTE.map((c) => (
-              <button 
-                key={c.hex} type="button" title={c.name}
+              <button
+                key={c.hex} type="button" title={`${c.name} — ${c.hex}`}
                 onClick={() => updateDesignData({...designData, hexBackgroundColor: c.hex})}
-                className={`w-8 h-8 rounded-full border-2 transition-all ${designData.hexBackgroundColor === c.hex ? 'border-white dark:border-zinc-300 scale-110 shadow-sm' : 'border-transparent opacity-60 hover:scale-105 hover:opacity-100'}`} 
+                className={`w-8 h-8 rounded-full border-2 transition-all ${designData.hexBackgroundColor === c.hex ? 'border-white dark:border-zinc-300 scale-110 shadow-sm' : 'border-transparent opacity-60 hover:scale-105 hover:opacity-100'}`}
                 style={{backgroundColor: c.hex}}
               />
             ))}
-            <div 
-              className={`relative w-8 h-8 rounded-full border-2 overflow-hidden transition-all flex items-center justify-center bg-canvas shadow-sm ${!COLOR_PALETTE.find(c => c.hex === designData.hexBackgroundColor) ? 'border-white dark:border-zinc-300 scale-110 shadow-sm' : 'border-border-subtle opacity-60 hover:opacity-100 hover:scale-105 hover:border-border-strong'}`}
-              title="Custom Color"
+            <div
+              className={`relative w-8 h-8 rounded-full border-2 border-dashed overflow-hidden transition-all flex items-center justify-center bg-canvas ${!COLOR_PALETTE.find(c => c.hex === designData.hexBackgroundColor) ? 'border-white dark:border-zinc-300 scale-110 shadow-sm' : 'border-border-strong opacity-70 hover:opacity-100 hover:scale-105 hover:border-brand-blue/50'}`}
+              title={`Custom Color — ${designData.hexBackgroundColor}`}
             >
-              <input 
-                type="color" 
+              <input
+                type="color"
                 value={designData.hexBackgroundColor}
                 onChange={(e) => updateDesignData({...designData, hexBackgroundColor: e.target.value})}
                 className="absolute -inset-2 w-12 h-12 cursor-pointer opacity-0 z-10"
               />
-              <div 
-                className="absolute inset-0 pointer-events-none" 
-                style={{ backgroundColor: !COLOR_PALETTE.find(c => c.hex === designData.hexBackgroundColor) ? designData.hexBackgroundColor : 'transparent' }} 
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ backgroundColor: !COLOR_PALETTE.find(c => c.hex === designData.hexBackgroundColor) ? designData.hexBackgroundColor : 'transparent' }}
               />
               {COLOR_PALETTE.find(c => c.hex === designData.hexBackgroundColor) && (
                 <Plus className="w-4 h-4 text-ink-muted pointer-events-none z-0" />
@@ -413,14 +430,26 @@ export function TemplateWorkspace({
           </div>
         </div>
 
-        <div className="bg-surface-card p-6 rounded-xl border border-border-subtle shadow-sm space-y-5">
-          <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Dynamic Fields Architecture</Label>
-              <button type="button" onClick={addRow} disabled={designData.rows.length >= 3} className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors flex items-center gap-1 disabled:opacity-50">
-                <Plus className="w-4 h-4" /> Add Row
-              </button>
-          </div>
-          
+        <div className="bg-surface-card rounded-xl border border-border-subtle shadow-sm">
+          <button type="button" onClick={() => setFieldsExpanded(!fieldsExpanded)} className="w-full flex items-center justify-between p-6 pb-5">
+              <span className="flex items-center gap-2 text-xs font-semibold text-ink-dark uppercase tracking-wide">
+                <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${fieldsExpanded ? 'rotate-180' : ''}`} strokeWidth={1.75} />
+                Dynamic Fields Architecture
+              </span>
+              {fieldsExpanded && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); addRow(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); addRow(); } }}
+                  className={`text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors flex items-center gap-1 ${designData.rows.length >= 3 ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                  <Plus className="w-4 h-4" /> Add Row
+                </span>
+              )}
+          </button>
+          {fieldsExpanded && (
+          <div className="px-6 pb-6 space-y-5">
           {designData.rows.map((row: any, rIdx: number) => (
             <div key={row.id} className="p-4 bg-canvas rounded-lg border border-border-subtle relative group">
               <div className="flex items-center justify-between mb-4">
@@ -447,6 +476,8 @@ export function TemplateWorkspace({
               </div>
             </div>
           ))}
+          </div>
+          )}
         </div>
 
         <div className="mt-6">
@@ -485,74 +516,82 @@ export function TemplateWorkspace({
           )}
         </div>
 
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-ink-dark">
-              Tier Thresholds
-            </h3>
-            <button
-              type="button"
-              onClick={addTier}
-              className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors"
-            >
-              + Add Tier
-            </button>
-          </div>
-          <p className="text-xs text-ink-muted mb-3">
-            Members are auto-promoted to a tier once their points balance
-            reaches its minimum, on every scan transaction.
-          </p>
-          {tierThresholds.map((tier, idx) => (
-            <div key={idx} className="flex items-center gap-2 mb-2">
-              <input
-                type="text"
-                value={tier.name}
-                onChange={(e) => updateTier(idx, 'name', e.target.value)}
-                placeholder="Tier name (e.g. Gold)"
-                className="text-sm flex-1 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
-              />
-              <input
-                type="number"
-                min={0}
-                value={tier.min}
-                onChange={(e) => updateTier(idx, 'min', e.target.value)}
-                placeholder="Min points"
-                className="text-sm w-32 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => removeTier(idx)}
-                className="text-ink-muted hover:text-red-500 transition-colors"
-                aria-label="Remove tier"
+        <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm">
+          <button type="button" onClick={() => setTiersExpanded(!tiersExpanded)} className="w-full flex items-center justify-between p-4">
+            <span className="flex items-center gap-2 text-xs font-semibold text-ink-dark">
+              <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${tiersExpanded ? 'rotate-180' : ''}`} strokeWidth={1.75} />
+              Tier Thresholds {tierThresholds.length > 0 ? `(${tierThresholds.length})` : ''}
+            </span>
+            {tiersExpanded && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); addTier(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); addTier(); } }}
+                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors"
               >
-                ✕
-              </button>
+                + Add Tier
+              </span>
+            )}
+          </button>
+          {tiersExpanded && (
+            <div className="px-4 pb-4">
+              <p className="text-xs text-ink-muted mb-3">
+                Members are auto-promoted to a tier once their points balance
+                reaches its minimum, on every scan transaction.
+              </p>
+              {tierThresholds.map((tier, idx) => (
+                <div key={idx} className="flex items-center gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={tier.name}
+                    onChange={(e) => updateTier(idx, 'name', e.target.value)}
+                    placeholder="Tier name (e.g. Gold)"
+                    className="text-sm flex-1 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    value={tier.min}
+                    onChange={(e) => updateTier(idx, 'min', e.target.value)}
+                    placeholder="Min points"
+                    className="text-sm w-32 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeTier(idx)}
+                    className="text-ink-muted hover:text-red-500 transition-colors"
+                    aria-label="Remove tier"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
+      </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-6 border-t border-border-subtle gap-4">
+      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-1 bg-linear-to-t from-canvas via-canvas/95 to-transparent">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle pt-4 gap-4">
           <div>
             {templateStatus !== 'unsaved' && (
-              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide uppercase border ${
-                templateStatus === 'published'
-                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-              }`}>
-                <span className={`w-2 h-2 rounded-full ${templateStatus === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              <Badge tone={templateStatus === 'published' ? 'success' : 'warning'}>
                 {templateStatus === 'published' ? 'Published Live' : 'Draft Saved'}
-              </div>
+              </Badge>
             )}
           </div>
-          <div className="flex gap-3 flex-wrap">
+          <div className="flex gap-3 flex-wrap justify-end">
             {templateStatus === 'published' && savedTemplateId && (
               <Button type="button" variant="secondary" onClick={handleResyncPasses} className="flex-1 sm:flex-none">
-                Push design to existing passes {passCount > 0 ? `(${passCount})` : ''}
+                Sync Existing Passes {passCount > 0 ? `(${passCount})` : ''}
               </Button>
             )}
-            <Button type="button" variant="secondary" onClick={handleSaveDraft} className="flex-1 sm:flex-none">
-              Save Draft
-            </Button>
+            {templateStatus !== 'published' && (
+              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="flex-1 sm:flex-none">
+                Save Draft
+              </Button>
+            )}
             <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="flex-1 sm:flex-none">
               Publish Template
             </Button>
