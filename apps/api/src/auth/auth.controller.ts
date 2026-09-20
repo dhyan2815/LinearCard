@@ -384,11 +384,14 @@ export class AuthController {
       );
 
       res.cookie('admin_session', token, {
-        httpOnly: false,
+        httpOnly: true, // Secure: JS cannot access, only sent automatically with credentials: 'include'
+        secure: process.env.NODE_ENV === 'production', // HTTPS only in production
         sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000,
         path: '/',
       });
+
+      console.log('[Auth] admin_session cookie set securely with httpOnly=true');
 
       return { success: true, token };
     } catch (error: any) {

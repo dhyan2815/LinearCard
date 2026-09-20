@@ -39,15 +39,6 @@ async function fetchWithRetry(url: string, options: RequestInit, attempt = 1): P
 
 export async function apiClient<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const cleanEndpoint = '/' + endpoint.replace(/^\/+/, '');
-
-  let authHeader: Record<string, string> = {};
-  if (typeof document !== 'undefined') {
-    const match = document.cookie.match(/(?:^|;\s*)admin_session=([^;]+)/);
-    if (match) {
-      authHeader['Authorization'] = `Bearer ${decodeURIComponent(match[1])}`;
-    }
-  }
-
   const isServer = typeof window === 'undefined';
 
   let fullUrl: string;
@@ -79,7 +70,6 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...authHeader,
       ...options.headers,
     },
   };
@@ -90,16 +80,23 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
 
   const response = await fetchWithRetry(fullUrl, fetchOptions);
 
+  console.debug(`[API] ${response.status > 399 ? 'ERROR' : 'OK'} ${cleanEndpoint} | Credentials: ${!isServer ? 'sent via httpOnly cookie' : 'N/A (server)'} | Status: ${response.status}`);
+
   if (!response.ok) {
     let errorMsg = response.statusText;
     try {
       const errorData = await response.json();
-      errorMsg = errorData?.error || errorData?.message || errorMsg;
+      errorMsg = errorData?.error || errorData?.message || errorData?.details || errorMsg;
     } catch (e) {}
 
     // Throw UnauthorizedError for 401 so callers can distinguish auth failures
     if (response.status === 401) {
+      console.warn(`[API] 401 Unauthorized for ${cleanEndpoint}. Token missing or invalid.`);
       throw new UnauthorizedError(`API Error (${response.status}): ${errorMsg}`);
+    }
+
+    if (response.status === 500) {
+      console.error(`[API] 500 Server Error for ${cleanEndpoint}. Details: ${errorMsg}`);
     }
 
     throw new Error(`API Error (${response.status}): ${errorMsg}`);
