@@ -383,10 +383,14 @@ export class AuthController {
         { expiresIn: '1d' },
       );
 
+      const isProd = process.env.NODE_ENV === 'production';
       res.cookie('admin_session', token, {
         httpOnly: true, // Secure: JS cannot access, only sent automatically with credentials: 'include'
-        secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-        sameSite: 'lax',
+        secure: isProd, // HTTPS only in production
+        // Prod serves web/api from separate Vercel domains (cross-site), which
+        // requires SameSite=None; dev is same-site (just different ports), so
+        // 'lax' works there and avoids needing HTTPS locally.
+        sameSite: isProd ? 'none' : 'lax',
         maxAge: 24 * 60 * 60 * 1000,
         path: '/',
       });

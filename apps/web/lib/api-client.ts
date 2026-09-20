@@ -53,7 +53,12 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
     }
     fullUrl = `${(baseApiUrl || 'http://localhost:3001').replace(/\/+$/, '')}${cleanEndpoint}`;
   } else {
-    const hostname = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
+    // Use the page's own hostname verbatim. Rewriting 'localhost' to
+    // '127.0.0.1' here (old IPv6 workaround) made the backend set the
+    // admin_session cookie on a different host than the page, so the
+    // Next.js middleware never saw it and redirected to /login in a loop.
+    // The backend now dual-stack-binds (see main.ts), so no rewrite is needed.
+    const hostname = window.location.hostname;
 
     if (hostname.includes('.vercel.app')) {
       const apiHostname = hostname.replace(/^linearcard(-git)?/, 'linearcard-api$1');

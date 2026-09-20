@@ -4,19 +4,19 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 active:scale-[0.98] cursor-pointer",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 active:scale-[0.98] cursor-pointer hover:-translate-y-0.5",
   {
     variants: {
       variant: {
         default:
-          "bg-brand-blue text-white border border-white/10 hover:bg-brand-blue-hover shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+          "bg-brand-blue text-white border border-white/10 hover:bg-brand-blue-hover shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:shadow-lg hover:shadow-brand-blue/20",
         destructive:
           "bg-destructive text-white shadow-xs hover:bg-destructive/90",
         outline:
-          "border border-border-subtle bg-surface-card text-ink-dark shadow-xs hover:bg-surface-bone",
+          "border border-border-subtle bg-surface-card text-ink-dark shadow-xs hover:bg-surface-bone hover:shadow-md",
         secondary:
-          "bg-surface-card text-ink-dark border border-border-subtle hover:bg-surface-bone shadow-xs",
-        ghost: "hover:bg-surface-bone hover:text-ink-dark text-ink-secondary",
+          "bg-surface-card text-ink-dark border border-border-subtle hover:bg-surface-bone shadow-xs hover:shadow-md",
+        ghost: "hover:bg-surface-bone hover:text-ink-dark text-ink-secondary hover:translate-y-0",
         link: "text-brand-blue underline-offset-4 hover:underline",
       },
       size: {

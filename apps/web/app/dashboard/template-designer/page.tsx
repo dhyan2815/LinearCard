@@ -40,7 +40,7 @@ export default function TemplateDesignerPage() {
                setTemplateStatus={setTemplateStatus}
                currentTenant={currentTenant}
                selectedTenantId={selectedTenantId}
-               passCount={stats.passCount}
+               passCount={stats?.passCount || 0}
            />
          </div>
          <div className="xl:col-span-5 flex justify-center xl:justify-start xl:pl-12 xl:sticky xl:top-0">

@@ -80,12 +80,15 @@ export function DashboardSidebar() {
              <Link
                 href={tab.path}
                 key={tab.id}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors overflow-hidden ${
+                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors overflow-hidden ${
                   isActive
-                    ? 'bg-brand-blue/10 text-brand-blue' 
-                    : 'text-ink-secondary hover:bg-canvas hover:text-ink-dark'
+                    ? 'bg-brand-blue/10 text-brand-blue font-medium'
+                    : 'text-ink-secondary hover:bg-surface-hover hover:text-ink-dark'
                 }`}
              >
+                {isActive && (
+                  <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-brand-blue" />
+                )}
                 <div className="shrink-0">{tab.icon}</div>
                 <motion.span 
                   animate={{ opacity: isSidebarOpen ? 1 : 0, width: isSidebarOpen ? 'auto' : 0 }} 

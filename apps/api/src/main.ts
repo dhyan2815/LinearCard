@@ -22,6 +22,10 @@ async function bootstrap() {
     },
     credentials: true,
   });
-  await app.listen(process.env.PORT || 3001, '0.0.0.0');
+  // No host arg: Node binds the IPv6 wildcard '::' dual-stack, so both
+  // 'localhost' (which Windows can resolve to ::1) and '127.0.0.1' connect.
+  // Binding '0.0.0.0' only accepted IPv4, forcing the frontend workaround
+  // that rewrote 'localhost' to '127.0.0.1' before every fetch call.
+  await app.listen(process.env.PORT || 3001);
 }
 bootstrap();
