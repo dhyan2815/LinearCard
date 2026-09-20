@@ -1,6 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, UnauthorizedError } from '@/lib/api-client';
+import { useRouter } from 'next/navigation';
 import { Tenant, DEFAULT_PASS_HEX } from '@linearcard/types';
 
 type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
@@ -63,6 +64,7 @@ interface DashboardContextType {
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [origin, setOrigin] = useState<string>('');
@@ -98,15 +100,38 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       setOrigin(window.location.origin);
     }
-    apiClient('/tenant/tenants')
-      .then(data => {
+
+    let retryCount = 0;
+    const maxRetries = 2;
+
+    const fetchTenants = async () => {
+      try {
+        const data = await apiClient('/tenant/tenants');
         if (data.success && data.tenants && data.tenants.length > 0) {
           setTenants(data.tenants);
           setSelectedTenantId(data.tenants[0].id);
         }
-      })
-      .catch(err => console.error('Failed to fetch tenants:', err));
-  }, []);
+      } catch (err) {
+        // If 401, redirect to login (user not authenticated)
+        if (err instanceof UnauthorizedError) {
+          console.warn('Not authenticated. Redirecting to login.');
+          router.push('/login');
+          return;
+        }
+
+        // For network errors, retry with exponential backoff
+        if (retryCount < maxRetries) {
+          retryCount++;
+          const delay = 1000 * Math.pow(2, retryCount - 1);
+          setTimeout(fetchTenants, delay);
+        } else {
+          console.error('Failed to fetch tenants after retries:', err);
+        }
+      }
+    };
+
+    fetchTenants();
+  }, [router]);
 
   const currentTenant = tenants.find(t => t.id === selectedTenantId);
 
@@ -118,8 +143,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
              setStats(data.stats);
            }
         })
-        .catch(err => console.error('Failed to fetch stats:', err));
-        
+        .catch(err => {
+          if (err instanceof UnauthorizedError) {
+            router.push('/login');
+            return;
+          }
+          console.error('Failed to fetch stats:', err);
+        });
+
       apiClient(`/members?tenantId=${selectedTenantId}`)
         .then(data => {
           if (data.success) {
@@ -133,9 +164,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
              setPassHistory(allPasses);
           }
         })
-        .catch(err => console.error('Failed to fetch members:', err));
+        .catch(err => {
+          if (err instanceof UnauthorizedError) {
+            router.push('/login');
+            return;
+          }
+          console.error('Failed to fetch members:', err);
+        });
     }
-  }, [selectedTenantId]);
+  }, [selectedTenantId, router]);
 
   const handleTenantChange = (newTenantId: string) => {
     setSelectedTenantId(newTenantId);
@@ -209,12 +246,16 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           }
         })
         .catch(err => {
+          if (err instanceof UnauthorizedError) {
+            router.push('/login');
+            return;
+          }
           console.error('Error fetching templates:', err);
           setSavedTemplateId(null);
           setTemplateStatus('unsaved');
         });
     }
-  }, [currentTenant]);
+  }, [currentTenant, router]);
 
   return (
     <DashboardContext.Provider value={{

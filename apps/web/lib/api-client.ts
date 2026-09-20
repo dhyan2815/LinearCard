@@ -2,6 +2,13 @@ const API_TIMEOUT = 15000; // 15s timeout (dev: backend may restart)
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000; // exponential: 1s, 2s, 4s
 
+export class UnauthorizedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnauthorizedError';
+  }
+}
+
 async function fetchWithRetry(url: string, options: RequestInit, attempt = 1): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
@@ -89,6 +96,12 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
       const errorData = await response.json();
       errorMsg = errorData?.error || errorData?.message || errorMsg;
     } catch (e) {}
+
+    // Throw UnauthorizedError for 401 so callers can distinguish auth failures
+    if (response.status === 401) {
+      throw new UnauthorizedError(`API Error (${response.status}): ${errorMsg}`);
+    }
+
     throw new Error(`API Error (${response.status}): ${errorMsg}`);
   }
 
