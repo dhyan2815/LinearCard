@@ -60,6 +60,32 @@ export class SettingsController {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     return { success: true };
   }
+
+  @Post('test-webhook')
+  async testWebhook(@Req() req: TenantRequest) {
+    const tenantId = req.tenantId;
+    const { data: tenant } = await this.supabaseService.client
+      .from('Tenant')
+      .select('webhookUrl')
+      .eq('id', tenantId)
+      .single();
+    if (!tenant?.webhookUrl) {
+      throw new HttpException('No webhook URL saved yet', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      const res = await fetch(tenant.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'test.ping', tenantId, sentAt: new Date().toISOString() }),
+      });
+      return { success: res.ok, status: res.status };
+    } catch (err: any) {
+      throw new HttpException(
+        `Could not reach webhook URL: ${err.message}`,
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
 }
 
 @Controller('admin')

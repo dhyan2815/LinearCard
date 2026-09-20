@@ -58,8 +58,15 @@ export class TenantGuard implements CanActivate {
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
       if (decoded?.tenantId) {
-        console.log('[TenantGuard] JWT verified successfully, tenantId:', decoded.tenantId);
-        return { tenantId: decoded.tenantId, role: decoded.role ?? null };
+        let finalTenantId = decoded.tenantId;
+        if (decoded.role === 'admin') {
+          const requestedTenant = req.query.tenantId || req.body.tenantId;
+          if (requestedTenant && typeof requestedTenant === 'string') {
+            finalTenantId = requestedTenant;
+          }
+        }
+        console.log('[TenantGuard] JWT verified successfully, tenantId:', finalTenantId);
+        return { tenantId: finalTenantId, role: decoded.role ?? null };
       }
     } catch (jwtErr) {
       console.log('[TenantGuard] JWT verification failed, falling back to API key lookup:', (jwtErr as Error).message);

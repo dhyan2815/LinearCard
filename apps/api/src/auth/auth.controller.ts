@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
   Req,
@@ -405,5 +406,39 @@ export class AuthController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  @Get('me')
+  async getMe(@Req() req: Request) {
+    const token =
+      req.cookies?.admin_session ||
+      (req.headers['authorization']?.startsWith('Bearer ')
+        ? req.headers['authorization'].substring(7)
+        : null);
+    if (!token) throw new HttpException('Not authenticated', HttpStatus.UNAUTHORIZED);
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      const { data: admin } = await this.supabaseService.client
+        .from('Admin')
+        .select('phone, role, tenantId')
+        .eq('id', decoded.adminId)
+        .single();
+      if (!admin) throw new HttpException('Admin not found', HttpStatus.UNAUTHORIZED);
+      return { success: true, admin };
+    } catch {
+      throw new HttpException('Invalid session', HttpStatus.UNAUTHORIZED);
+    }
+  }
+
+  @Post('admin/logout')
+  async adminLogout(@Res({ passthrough: true }) res: Response) {
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie('admin_session', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/',
+    });
+    return { success: true };
   }
 }

@@ -273,8 +273,16 @@ export class WalletService {
       hexBackgroundColor: templateData.hexBackgroundColor || DEFAULT_PASS_HEX,
     };
 
-    if (templateData.logoUrl) {
-      classPayload.logo = { sourceUri: { uri: templateData.logoUrl } };
+    // Google Wallet ignores hexBackgroundColor if no logo is provided.
+    // To match the frontend preview card's behavior, we generate a fallback initials logo.
+    let finalLogoUrl = templateData.logoUrl;
+    if (!finalLogoUrl) {
+      const initials = (templateData.cardTitle || 'LC').substring(0, 2).toUpperCase();
+      finalLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=f1f5f9&color=94a3b8&size=128&font-size=0.45`;
+    }
+
+    if (finalLogoUrl) {
+      classPayload.logo = { sourceUri: { uri: finalLogoUrl } };
     }
     if (templateData.heroImageUrl) {
       classPayload.heroImage = {
@@ -594,9 +602,22 @@ export class WalletService {
         alternateText: `${tier || 'Member'} • ${balance || '0 Pts'}`,
       },
       hexBackgroundColor: hexBackgroundColor || DEFAULT_PASS_HEX,
-      ...(logoUrl && { logo: { sourceUri: { uri: logoUrl } } }),
-      ...(heroImageUrl && { heroImage: { sourceUri: { uri: heroImageUrl } } }),
-    };
+    } as any;
+
+    // Google Wallet ignores hexBackgroundColor if no logo is provided.
+    // To match the frontend preview card's behavior, we generate a fallback initials logo.
+    let finalLogoUrl = logoUrl;
+    if (!finalLogoUrl) {
+      const initials = (cardTitle || 'LC').substring(0, 2).toUpperCase();
+      finalLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=f1f5f9&color=94a3b8&size=128&font-size=0.45`;
+    }
+
+    if (finalLogoUrl) {
+      genericObjectPayload.logo = { sourceUri: { uri: finalLogoUrl } };
+    }
+    if (heroImageUrl) {
+      genericObjectPayload.heroImage = { sourceUri: { uri: heroImageUrl } };
+    }
 
     const client = await this.getGoogleAuthClient();
     try {
