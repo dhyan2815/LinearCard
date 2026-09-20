@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { Label } from '@/components/ui/Label';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Alert } from '@/components/ui/Alert';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
+import { MessageCircle, Bell, Smartphone } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
 export function PushCampaignsView({ tenantId }: { tenantId: string }) {
@@ -12,16 +15,22 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
   const [result, setResult] = useState<{ sent: number; failed: number } | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!tenantId) return;
     apiClient(`/notifications/log?tenantId=${tenantId}&limit=20&_t=${Date.now()}`)
       .then(d => { if (d.success) setLogs(d.logs); })
       .catch(err => console.error('Error fetching logs:', err));
+    apiClient(`/dashboard/stats?tenantId=${tenantId}`)
+      .then(d => { if (d.success) setMemberCount(d.stats?.memberCount ?? null); })
+      .catch(() => {});
   }, [tenantId, result]);
 
   const handleSend = async () => {
     if (!tenantId || !message.trim()) return;
+    setConfirmOpen(false);
     setIsSending(true); setResult(null); setSendError(null);
     try {
       const data = await apiClient('/notifications/send', {
@@ -39,14 +48,8 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="border-b border-border-subtle pb-4 mb-4">
-        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Push Campaigns</h2>
-        <p className="text-sm text-ink-secondary mt-1">Broadcast marketing updates or pass notifications across WhatsApp and Wallet Push.</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card className="p-6 space-y-5 bg-surface-card border-border-subtle shadow-sm">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <Card className="p-6 space-y-5">
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold text-ink-dark uppercase tracking-wide">Delivery Channel</Label>
             <div className="flex gap-2 mt-2">
@@ -67,19 +70,44 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
               placeholder={channel === 'whatsapp' ? 'e.g. Earn double points this weekend!' : 'e.g. Your pass has been updated.'}
               rows={4} className="w-full rounded-xl border border-border-subtle bg-canvas text-ink-dark text-sm px-4 py-3 focus:outline-none focus:border-brand-blue resize-none placeholder:text-ink-muted mt-2" />
           </div>
-          {result && <p className="text-sm text-emerald-500 font-medium">✅ Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</p>}
-          {sendError && (
-            <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm flex items-center gap-2">
-              <span className="shrink-0">⚠</span> {sendError}
-            </div>
+          {result && (
+            <Alert variant="success">Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</Alert>
           )}
-          <Button onClick={handleSend} disabled={!message.trim() || isSending || !tenantId} className="w-full">
+          {sendError && <Alert variant="error">{sendError}</Alert>}
+          <Button onClick={() => setConfirmOpen(true)} disabled={!message.trim() || isSending || !tenantId} className="w-full">
             {isSending ? 'Sending Broadcast...' : 'Dispatch to All Members'}
           </Button>
         </Card>
 
-        {logs.length > 0 && (
-          <Card className="p-6 bg-surface-card border-border-subtle shadow-sm flex flex-col h-full max-h-125">
+        <div className="flex flex-col gap-8">
+          <Card className="p-6">
+            <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-4 flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-ink-muted" strokeWidth={1.75} /> Outgoing Preview
+            </h3>
+            {channel === 'whatsapp' ? (
+              <div className="rounded-2xl bg-[#0b141a] p-4">
+                <div className="max-w-[85%] ml-auto rounded-lg rounded-tr-none bg-[#005c4b] text-white text-sm px-3 py-2 shadow flex items-start gap-2">
+                  <MessageCircle className="w-4 h-4 shrink-0 mt-0.5 opacity-70" />
+                  <p className="whitespace-pre-wrap break-words">{message.trim() || 'Your message will appear here...'}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-canvas border border-border-subtle p-4 space-y-2">
+                <div className="flex items-center gap-2 rounded-xl border border-border-subtle bg-surface-card p-3 shadow-sm">
+                  <div className="w-8 h-8 rounded-lg bg-brand-blue/10 flex items-center justify-center shrink-0">
+                    <Bell className="w-4 h-4 text-brand-blue" strokeWidth={1.75} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-ink-dark">Wallet Update</p>
+                    <p className="text-xs text-ink-secondary truncate">{message.trim() || 'Your message will appear here...'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {logs.length > 0 && (
+          <Card className="p-6 flex flex-col h-full max-h-125">
             <h3 className="text-base font-semibold text-ink-dark mb-4">Recent Broadcasts</h3>
             <div className="space-y-3 overflow-y-auto pr-2 flex-1">
               {logs.map((log: any) => (
@@ -107,8 +135,27 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
               ))}
             </div>
           </Card>
-        )}
-      </div>
+          )}
+        </div>
+
+        <ConfirmationDialog
+          isOpen={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          onConfirm={handleSend}
+          title="Dispatch Broadcast"
+          confirmText={isSending ? 'Sending...' : 'Send Broadcast'}
+          variant="default"
+          isLoading={isSending}
+          description={
+            <span>
+              This will send to{' '}
+              <strong className="text-ink-dark font-semibold">
+                {memberCount !== null ? `${memberCount} member${memberCount === 1 ? '' : 's'}` : 'all members'}
+              </strong>{' '}
+              of this brand via {channel === 'whatsapp' ? 'WhatsApp' : 'Wallet Push'}. This cannot be undone.
+            </span>
+          }
+        />
     </div>
   );
 }

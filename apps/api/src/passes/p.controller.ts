@@ -9,6 +9,7 @@ import {
 import { Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
+import { resolveImageUrl } from './passes.controller';
 
 @Controller('p')
 export class PController {
@@ -41,22 +42,23 @@ export class PController {
         );
       }
 
-      const passResult = await this.walletService.createGoogleWalletPass({
+      const passDesign = await this.walletService.resolveTenantPassDesign(
+        pass.tenantId,
+      );
+
+      const tenantWallet = await this.walletService.forTenant(pass.tenantId);
+      const passResult = await tenantWallet.createGoogleWalletPass({
         memberName: pass.member.name || pass.member.phone,
-        cardTitle: pass.tenant.name,
+        cardTitle: passDesign.cardTitle || pass.tenant.name,
         balance: String(pass.balance),
         tier: pass.tier,
-        hexBackgroundColor: pass.tenant.brandHexColor,
+        hexBackgroundColor: passDesign.hexBackgroundColor,
         barcodeValue: `https://linearcard.vercel.app/m/${pass.member.phone.replace(/[^0-9]/g, '')}`,
         barcodeAltText:
           pass.barcodeAlt || pass.member.phone.replace(/[^0-9]/g, ''),
-        classSuffix: pass.tenant.classSuffix,
-        logoUrl: pass.tenant.logoUrl?.startsWith('/')
-          ? `http://localhost:3000${pass.tenant.logoUrl}`
-          : pass.tenant.logoUrl,
-        heroImageUrl: pass.tenant.heroUrl?.startsWith('/')
-          ? `http://localhost:3000${pass.tenant.heroUrl}`
-          : pass.tenant.heroUrl,
+        classSuffix: passDesign.classSuffix || pass.tenant.classSuffix,
+        logoUrl: resolveImageUrl(passDesign.logoUrl),
+        heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),
         passId: objectSuffixOverride,
       });
 

@@ -5,13 +5,17 @@ import {
   Patch,
   Delete,
   Param,
-  Query,
   Body,
+  Req,
+  UseGuards,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
+import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
+
+const RESYNC_BATCH_SIZE = 10;
 
 @Controller('templates')
 export class TemplatesController {
@@ -20,13 +24,16 @@ export class TemplatesController {
     private readonly walletService: WalletService,
   ) {}
 
+  // Tenant comes from the guard, never from `?tenantId=` — the query param
+  // is accepted (the dashboard still sends it) but ignored.
   @Get()
-  async getTemplates(@Query('tenantId') tenantId: string) {
+  @UseGuards(TenantGuard)
+  async getTemplates(@Req() req: TenantRequest) {
     try {
       const { data: templates, error } = await this.supabaseService.client
         .from('PassTemplate')
         .select('*')
-        .eq('tenantId', tenantId)
+        .eq('tenantId', req.tenantId)
         .order('createdAt', { ascending: false });
 
       if (error) throw error;
@@ -40,6 +47,25 @@ export class TemplatesController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /**
+   * Validates and normalises a hexBackgroundColor value, throwing an
+   * HttpException with the same shape/message used across the controller.
+   * Returns the uppercased hex string.
+   */
+  private validateHexColor(value: any): string {
+    if (typeof value !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(value)) {
+      throw new HttpException(
+        {
+          success: false,
+          error: 'hexBackgroundColor must be a 6-digit hex code, e.g. #1A365D',
+          message: 'hexBackgroundColor must be a 6-digit hex code, e.g. #1A365D',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return value.toUpperCase();
   }
 
   /**
@@ -93,15 +119,59 @@ export class TemplatesController {
     }
   }
 
-  @Post()
-  async createTemplate(@Body() body: any) {
-    try {
-      if (!body.tenantId) {
-        throw new HttpException('tenantId is required', HttpStatus.BAD_REQUEST);
+  /**
+   * Validates a storeLocations payload (max 10 pins, lat/lng in range),
+   * throwing an HttpException with the same shape/message used across
+   * createTemplate and updateTemplate.
+   */
+  private validateStoreLocations(value: any): void {
+    if (!Array.isArray(value)) {
+      throw new HttpException(
+        { success: false, error: 'storeLocations must be an array', message: 'storeLocations must be an array' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (value.length > 10) {
+      throw new HttpException(
+        {
+          success: false,
+          error: 'storeLocations must contain at most 10 entries',
+          message: 'storeLocations must contain at most 10 entries',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    for (const loc of value) {
+      if (!loc || typeof loc !== 'object') {
+        throw new HttpException(
+          { success: false, error: 'Each store location must be an object', message: 'Each store location must be an object' },
+          HttpStatus.BAD_REQUEST,
+        );
       }
+      const lat = Number(loc.latitude);
+      const lng = Number(loc.longitude);
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        throw new HttpException(
+          { success: false, error: `Invalid latitude: ${loc.latitude}`, message: `Invalid latitude: ${loc.latitude}` },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        throw new HttpException(
+          { success: false, error: `Invalid longitude: ${loc.longitude}`, message: `Invalid longitude: ${loc.longitude}` },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+  }
 
+  // Tenant comes from the guard, never from `body.tenantId`.
+  @Post()
+  @UseGuards(TenantGuard)
+  async createTemplate(@Body() body: any, @Req() req: TenantRequest) {
+    try {
       const insertPayload: Record<string, any> = {
-        tenantId: body.tenantId,
+        tenantId: req.tenantId,
         title: body.name || 'New Template',
         archetype: body.archetype || 'loyalty',
         subtitle: body.name || 'New Template',
@@ -112,7 +182,9 @@ export class TemplatesController {
       if (body.fieldRows !== undefined)
         insertPayload.fieldRows = body.fieldRows;
       if (body.hexBackgroundColor !== undefined)
-        insertPayload.hexBackgroundColor = body.hexBackgroundColor;
+        insertPayload.hexBackgroundColor = this.validateHexColor(
+          body.hexBackgroundColor,
+        );
       if (body.logoUrl !== undefined) insertPayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         insertPayload.heroImageUrl = body.heroImageUrl;
@@ -122,6 +194,11 @@ export class TemplatesController {
         insertPayload.tierThresholds = body.tierThresholds;
       } else {
         insertPayload.tierThresholds = [];
+      }
+
+      if (body.storeLocations !== undefined) {
+        this.validateStoreLocations(body.storeLocations);
+        insertPayload.storeLocations = body.storeLocations;
       }
 
       const { data: template, error } = await this.supabaseService.client
@@ -143,12 +220,14 @@ export class TemplatesController {
   }
 
   @Get(':id')
-  async getTemplateById(@Param('id') id: string) {
+  @UseGuards(TenantGuard)
+  async getTemplateById(@Param('id') id: string, @Req() req: TenantRequest) {
     try {
       const { data: template, error } = await this.supabaseService.client
         .from('PassTemplate')
         .select('*')
         .eq('id', id)
+        .eq('tenantId', req.tenantId)
         .single();
       if (error || !template)
         throw new HttpException(
@@ -166,15 +245,24 @@ export class TemplatesController {
   }
 
   @Delete(':id')
-  async deleteTemplate(@Param('id') id: string) {
+  @UseGuards(TenantGuard)
+  async deleteTemplate(@Param('id') id: string, @Req() req: TenantRequest) {
     try {
-      const { error } = await this.supabaseService.client
+      const { data, error } = await this.supabaseService.client
         .from('PassTemplate')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('tenantId', req.tenantId)
+        .select();
       if (error) throw error;
+      if (!data || !data.length)
+        throw new HttpException(
+          { success: false, error: 'Template not found' },
+          HttpStatus.NOT_FOUND,
+        );
       return { success: true };
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new HttpException(
         { success: false, error: error.message },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -183,13 +271,15 @@ export class TemplatesController {
   }
 
   @Post(':id/publish')
-  async publishTemplate(@Param('id') id: string) {
+  @UseGuards(TenantGuard)
+  async publishTemplate(@Param('id') id: string, @Req() req: TenantRequest) {
     try {
       const { data: template, error: fetchError } =
         await this.supabaseService.client
           .from('PassTemplate')
           .select('*, tenant:Tenant(*)')
           .eq('id', id)
+          .eq('tenantId', req.tenantId)
           .single();
       if (fetchError || !template)
         throw new HttpException(
@@ -226,7 +316,8 @@ export class TemplatesController {
         })),
       }));
 
-      const classData: any = await this.walletService.createGenericClass({
+      const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+      const classData: any = await tenantWallet.createGenericClass({
         classSuffix: template.classSuffix || template.tenant?.classSuffix,
         cardTitle: template.tenant?.name || template.title,
         hexBackgroundColor:
@@ -234,7 +325,23 @@ export class TemplatesController {
         rows: rowsWithKeys,
         logoUrl,
         heroImageUrl,
+        storeLocations: template.storeLocations ?? [],
+        isUpdate: !!template.googleClassId,
       });
+
+      // The 409 fallback returns {existing:true, updated:false} when its own
+      // PATCH attempt also failed — without this check that silent failure
+      // used to still flip status to 'published'.
+      if (classData?.updated === false) {
+        throw new HttpException(
+          {
+            success: false,
+            error:
+              'Failed to publish: Google Wallet class update was rejected. Template left as draft.',
+          },
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
 
       const { data: updated, error: updateError } =
         await this.supabaseService.client
@@ -245,6 +352,7 @@ export class TemplatesController {
             updatedAt: new Date().toISOString(),
           })
           .eq('id', id)
+          .eq('tenantId', req.tenantId)
           .select()
           .single();
       if (updateError) throw updateError;
@@ -263,8 +371,78 @@ export class TemplatesController {
     }
   }
 
+  /**
+   * Pushes the template's current design (currently: colour) onto every
+   * already-issued, non-deleted Pass of the calling tenant. A colour fix on
+   * the template only reaches passes issued *after* the fix unless this is
+   * run — this patches the ones issued before it.
+   */
+  @Post(':id/resync-passes')
+  @UseGuards(TenantGuard)
+  async resyncPasses(@Param('id') id: string, @Req() req: TenantRequest) {
+    try {
+      const { data: template, error: fetchError } =
+        await this.supabaseService.client
+          .from('PassTemplate')
+          .select('*')
+          .eq('id', id)
+          .eq('tenantId', req.tenantId)
+          .single();
+      if (fetchError || !template)
+        throw new HttpException(
+          { success: false, error: 'Template not found' },
+          HttpStatus.NOT_FOUND,
+        );
+
+      const { data: passes, error: passesError } = await this.supabaseService
+        .client.from('Pass')
+        .select('id, fullPassId')
+        .eq('tenantId', req.tenantId)
+        .is('deletedAt', null);
+      if (passesError) throw passesError;
+
+      const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+      // Batched, not an unbounded fan-out: a tenant with thousands of passes
+      // would otherwise open thousands of concurrent Google Wallet requests.
+      // ponytail: fixed chunk size, no queue — move to a job queue if resync
+      // ever needs to survive a process restart.
+      const all = passes || [];
+      let succeeded = 0;
+      let failed = 0;
+      for (let i = 0; i < all.length; i += RESYNC_BATCH_SIZE) {
+        const results = await Promise.allSettled(
+          all.slice(i, i + RESYNC_BATCH_SIZE).map((p: any) =>
+            tenantWallet.updateGenericObject(p.fullPassId, {
+              hexBackgroundColor: template.hexBackgroundColor,
+            }),
+          ),
+        );
+        succeeded += results.filter((r) => r.status === 'fulfilled').length;
+        failed += results.filter((r) => r.status === 'rejected').length;
+      }
+
+      return {
+        success: true,
+        total: all.length,
+        succeeded,
+        failed,
+      };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Patch(':id')
-  async updateTemplate(@Param('id') id: string, @Body() body: any) {
+  @UseGuards(TenantGuard)
+  async updateTemplate(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Req() req: TenantRequest,
+  ) {
     try {
       const updatePayload: Record<string, any> = {
         updatedAt: new Date().toISOString(),
@@ -277,7 +455,9 @@ export class TemplatesController {
       if (body.fieldRows !== undefined)
         updatePayload.fieldRows = body.fieldRows;
       if (body.hexBackgroundColor !== undefined)
-        updatePayload.hexBackgroundColor = body.hexBackgroundColor;
+        updatePayload.hexBackgroundColor = this.validateHexColor(
+          body.hexBackgroundColor,
+        );
       if (body.logoUrl !== undefined) updatePayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         updatePayload.heroImageUrl = body.heroImageUrl;
@@ -287,10 +467,16 @@ export class TemplatesController {
         updatePayload.tierThresholds = body.tierThresholds;
       }
 
+      if (body.storeLocations !== undefined) {
+        this.validateStoreLocations(body.storeLocations);
+        updatePayload.storeLocations = body.storeLocations;
+      }
+
       const { data: updated, error } = await this.supabaseService.client
         .from('PassTemplate')
         .update(updatePayload)
         .eq('id', id)
+        .eq('tenantId', req.tenantId)
         .select()
         .single();
 

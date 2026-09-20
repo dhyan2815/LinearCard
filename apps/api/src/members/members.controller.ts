@@ -5,12 +5,17 @@ import {
   Delete,
   Param,
   Body,
+  Query,
+  Req,
+  UseGuards,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { NotifyService } from '../notification/notify.service';
 import { WalletService } from '../wallet/wallet.service';
+import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
+import { AuditService } from '../audit/audit.service';
 
 @Controller('members')
 export class MembersController {
@@ -18,17 +23,35 @@ export class MembersController {
     private readonly supabaseService: SupabaseService,
     private readonly notifyService: NotifyService,
     private readonly walletService: WalletService,
+    private readonly auditService: AuditService,
   ) {}
 
   @Get()
-  async getMembers() {
+  @UseGuards(TenantGuard)
+  async getMembers(
+    @Req() req: TenantRequest,
+    @Query('limit') limitQuery?: string,
+    @Query('offset') offsetQuery?: string,
+    @Query('q') q?: string,
+  ) {
     try {
-      const { data: members, error } = await this.supabaseService.client
+      const limit = Number(limitQuery) > 0 ? Number(limitQuery) : 50;
+      const offset = Number(offsetQuery) >= 0 ? Number(offsetQuery) : 0;
+
+      let query = this.supabaseService.client
         .from('Member')
         .select(
           'id, name, phone, tenantId, createdAt, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
         )
-        .order('createdAt', { ascending: false });
+        .eq('tenantId', req.tenantId);
+
+      if (q) {
+        query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
+      }
+
+      const { data: members, error } = await query
+        .order('createdAt', { ascending: false })
+        .range(offset, offset + limit - 1);
 
       if (error) {
         throw error;
@@ -202,10 +225,13 @@ export class MembersController {
         .eq('id', passId);
       if (updateError) throw updateError;
 
-      await this.supabaseService.client.from('AuditLog').insert({
+      // Route is not tenant-guarded yet (pre-existing gap, out of scope here);
+      // use the fetched pass's tenantId rather than an unavailable req.tenantId.
+      await this.auditService.record({
+        tenantId: pass.tenantId,
         memberId,
         passId,
-        adminId: adminId || 'unknown-admin',
+        actor: adminId || 'unknown-admin',
         action: 'balance_adjusted',
         details: { amount, reason, previousBalance: pass.balance, newBalance },
       });

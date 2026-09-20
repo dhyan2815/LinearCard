@@ -1,11 +1,13 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ShieldCheck, History, Edit3, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
+import { Alert } from '@/components/ui/Alert';
+import { PageShell } from '@/components/ui/PageShell';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
@@ -13,6 +15,7 @@ import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 
 export default function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const [member, setMember] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,7 +26,7 @@ export default function MemberDetailPage() {
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [adjustMsg, setAdjustMsg] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(searchParams.get('revoke') === '1');
   const router = useRouter();
 
   const loadMember = async () => {
@@ -126,7 +129,7 @@ export default function MemberDetailPage() {
   if (error) {
     return (
       <div className="min-h-full pb-12 flex flex-col items-center justify-center py-20 space-y-4">
-        <p className="text-red-500 font-medium text-center max-w-md">{error}</p>
+        <Alert variant="error" className="max-w-md">{error}</Alert>
         <Link href="/dashboard/members">
           <Button variant="outline">Back to Members</Button>
         </Link>
@@ -135,12 +138,10 @@ export default function MemberDetailPage() {
   }
 
   return (
-    <div className="min-h-full pb-12">
-      <div className="max-w-[1600px] mx-auto space-y-6">
-        <div className="max-w-4xl space-y-6">
-        <Link href="/dashboard/members" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-ink-dark transition-colors font-medium">
-          <ArrowLeft className="w-4 h-4" /> Back to Members
-        </Link>
+    <PageShell>
+      <Link href="/dashboard/members" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-ink-dark transition-colors font-medium">
+        <ArrowLeft className="w-4 h-4" /> Back to Members
+      </Link>
 
       <Card className="p-6">
         <div className="flex items-start justify-between">
@@ -191,7 +192,7 @@ export default function MemberDetailPage() {
           </h2>
           <form onSubmit={handleAdjust} className="space-y-4">
             {member.passes.length > 1 && (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Label>Select Pass</Label>
                 <select
                   value={selectedPassId}
@@ -212,20 +213,20 @@ export default function MemberDetailPage() {
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Label>New Balance (pts)</Label>
                 <Input type="number" min="0" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} onWheel={(e) => e.currentTarget.blur()} required />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Label>New Tier</Label>
                 <Input type="text" value={newTier} onChange={(e) => setNewTier(e.target.value)} placeholder="e.g. Gold" />
               </div>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label>Admin Note (audit trail)</Label>
               <Input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Bonus for feedback survey" />
             </div>
-            {adjustMsg && <p className={`text-sm font-medium ${adjustMsg.startsWith('Error') ? 'text-red-500' : 'text-emerald-400'}`}>{adjustMsg}</p>}
+            {adjustMsg && <Alert variant={adjustMsg.startsWith('Error') ? 'error' : 'success'}>{adjustMsg}</Alert>}
             <Button type="submit" disabled={isAdjusting || !newBalance} className="w-full">
               {isAdjusting ? 'Applying...' : 'Apply Adjustment'}
             </Button>
@@ -323,8 +324,6 @@ export default function MemberDetailPage() {
           </p>
         </div>
       </ConfirmationDialog>
-        </div>
-      </div>
-    </div>
+    </PageShell>
   );
 }

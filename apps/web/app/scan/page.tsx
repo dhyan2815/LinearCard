@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   QrCode,
   Search,
@@ -18,13 +18,18 @@ import {
   UserCheck,
   CreditCard,
   Sparkles,
-  Smartphone
+  Smartphone,
+  ChevronDown,
+  User,
+  Keyboard
 } from 'lucide-react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/api-client';
 import { ScanHistoryTable } from '@/components/ScanHistoryTable';
+
+const SCANNER_TENANT_KEY = 'scanner_tenant_id';
 
 interface PassData {
   memberName: string;
@@ -71,8 +76,38 @@ export default function ScanPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [transactionResult, setTransactionResult] = useState<TransactionResult | null>(null);
 
-  const [showScanner, setShowScanner] = useState(false);
+  const [showScanner, setShowScanner] = useState(true);
+  const [showManualLookup, setShowManualLookup] = useState(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+
+  const [staff, setStaff] = useState<{ phone: string; role: string } | null>(null);
+  const [tenants, setTenants] = useState<Array<{ id: string; name: string }>>([]);
+  const [activeTenantId, setActiveTenantId] = useState<string>('');
+  const [showTenantMenu, setShowTenantMenu] = useState(false);
+
+  useEffect(() => {
+    apiClient('/auth/me').then((d) => {
+      if (d.success) setStaff(d.admin);
+    }).catch(() => {});
+
+    apiClient('/tenant/tenants').then((d) => {
+      if (d.success && d.tenants?.length) {
+        setTenants(d.tenants);
+        const saved = localStorage.getItem(SCANNER_TENANT_KEY);
+        const initial = d.tenants.find((t: any) => t.id === saved)?.id || d.tenants[0].id;
+        setActiveTenantId(initial);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const activeTenant = tenants.find((t) => t.id === activeTenantId);
+
+  const switchTenant = (id: string) => {
+    setActiveTenantId(id);
+    localStorage.setItem(SCANNER_TENANT_KEY, id);
+    setShowTenantMenu(false);
+    resetAll();
+  };
 
   const currentPoints = passData
     ? parseInt(passData.balance.replace(/[^0-9]/g, '')) || 0
@@ -100,7 +135,7 @@ export default function ScanPage() {
     try {
       const data = await apiClient('/passes/validate-pass', {
         method: 'POST',
-        body: JSON.stringify({ passId: finalId }),
+        body: JSON.stringify({ passId: finalId, tenantId: activeTenantId || undefined }),
       });
 
       if (!data.valid) throw new Error(data.error || 'Pass not found or invalid.');
@@ -146,6 +181,7 @@ export default function ScanPage() {
           amount: parsedAmount,
           action,
           orderId: orderId.trim() || undefined,
+          tenantId: activeTenantId || undefined,
         }),
       });
 
@@ -184,18 +220,52 @@ export default function ScanPage() {
   return (
     <div className="min-h-screen bg-canvas flex flex-col font-sans">
       {/* Top Header */}
-      <header className="border-b border-white/5 bg-canvas/80 backdrop-blur sticky top-0 z-10 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-sm">
+      <header className="border-b border-border-subtle bg-canvas/80 backdrop-blur sticky top-0 z-10 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-sm">
         <a
           href="/dashboard"
           className="flex items-center gap-2 text-ink-secondary hover:text-brand-blue transition-colors font-medium text-sm flex-1"
         >
           <ArrowLeft className="w-4 h-4" /> Dashboard
         </a>
-        <div className="flex items-center gap-2 font-bold text-ink-dark tracking-tight">
+        <div className="flex items-center gap-3 font-bold text-ink-dark tracking-tight">
           <QrCode className="w-5 h-5 text-brand-blue" />
           <span>Staff Checkout Scanner</span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowTenantMenu(!showTenantMenu)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-brand-blue/10 text-brand-blue border border-brand-blue/20 hover:bg-brand-blue/20 transition-colors"
+            >
+              <Store className="w-3.5 h-3.5" />
+              {activeTenant?.name || 'Select Brand'}
+              {tenants.length > 1 && <ChevronDown className={`w-3 h-3 transition-transform ${showTenantMenu ? 'rotate-180' : ''}`} />}
+            </button>
+            {showTenantMenu && tenants.length > 1 && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowTenantMenu(false)} />
+                <div className="absolute top-full left-0 mt-1 w-48 bg-surface-card border border-border-subtle rounded-lg shadow-lg z-50 overflow-hidden py-1">
+                  <span className="block text-[10px] uppercase font-semibold text-ink-muted px-3 py-1.5 tracking-wider">Switch Brand</span>
+                  {tenants.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => switchTenant(t.id)}
+                      className="w-full text-left px-3 py-2 text-xs text-ink-dark hover:bg-canvas/80 flex items-center justify-between"
+                    >
+                      {t.name}
+                      {activeTenantId === t.id && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex-1 text-right">
+        <div className="flex-1 flex items-center justify-end gap-3">
+          {staff && (
+            <span className="hidden sm:flex items-center gap-1.5 text-xs text-ink-secondary px-2.5 py-1 rounded-lg border border-border-subtle bg-surface-card">
+              <User className="w-3.5 h-3.5 text-ink-muted" /> {staff.phone}
+            </span>
+          )}
           {passData && (
             <button
               onClick={resetAll}
@@ -215,23 +285,23 @@ export default function ScanPage() {
             <div className="bg-surface-card border border-border-subtle p-5 sm:p-6 rounded-2xl shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-white/5 pb-3">
                 <h2 className="text-sm font-bold uppercase tracking-wider text-ink-secondary flex items-center gap-2">
-                  <Search className="w-4 h-4 text-brand-blue" /> Pass Lookup & Scanner
+                  <Camera className="w-4 h-4 text-brand-blue" /> Camera Scan
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setShowScanner(!showScanner)}
+                  onClick={() => setShowManualLookup(!showManualLookup)}
                   className={`text-xs px-2.5 py-1 rounded-lg font-medium flex items-center gap-1.5 transition-colors ${
-                    showScanner
+                    showManualLookup
                       ? 'bg-brand-blue text-white'
                       : 'bg-surface-bone text-ink-secondary hover:text-ink-dark'
                   }`}
                 >
-                  <Camera className="w-3.5 h-3.5" />
-                  {showScanner ? 'Close Camera' : 'Use Camera'}
+                  <Keyboard className="w-3.5 h-3.5" />
+                  {showManualLookup ? 'Hide Manual Lookup' : 'Manual Lookup'}
                 </button>
               </div>
 
-              {/* QR Camera Viewport */}
+              {/* QR Camera Viewport — primary flow */}
               {showScanner && (
                 <div className="rounded-xl overflow-hidden border border-border-subtle aspect-square relative bg-black animate-in fade-in">
                   <Scanner
@@ -252,38 +322,40 @@ export default function ScanPage() {
                 </div>
               )}
 
-              {/* Lookup Form */}
-              <form onSubmit={handleValidate} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-ink-secondary mb-1.5 uppercase tracking-widest">
-                    Customer Phone / Pass ID
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="text"
-                      value={passId}
-                      onChange={(e) => setPassId(e.target.value)}
-                      placeholder="e.g. 9876543210 or 882190"
-                      className="font-mono text-sm"
-                      disabled={isValidating}
-                    />
-                    <Button
-                      type="submit"
-                      disabled={isValidating || !passId.trim()}
-                      className="px-4 shrink-0"
-                    >
-                      {isValidating ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Search className="w-4 h-4" />
-                      )}
-                    </Button>
+              {/* Manual Lookup Form — secondary fallback */}
+              {showManualLookup && (
+                <form onSubmit={handleValidate} className="space-y-3 pt-1 border-t border-border-subtle animate-in fade-in">
+                  <div className="pt-3">
+                    <label className="block text-[11px] font-bold text-ink-secondary mb-1.5 uppercase tracking-widest">
+                      Customer Phone / Pass ID
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        value={passId}
+                        onChange={(e) => setPassId(e.target.value)}
+                        placeholder="e.g. 9876543210 or 882190"
+                        className="font-mono text-sm"
+                        disabled={isValidating}
+                      />
+                      <Button
+                        type="submit"
+                        disabled={isValidating || !passId.trim()}
+                        className="px-4 shrink-0"
+                      >
+                        {isValidating ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </form>
+                </form>
+              )}
 
               <p className="text-xs text-ink-secondary leading-relaxed pt-1">
-                Scan customer's Google Wallet pass QR code with the camera, or enter their registered phone number.
+                Point the camera at the customer's Google Wallet pass QR code, or use manual lookup by phone number.
               </p>
             </div>
 
@@ -313,15 +385,15 @@ export default function ScanPage() {
           <div className="lg:col-span-7 space-y-4">
             {/* Error Banner */}
             {error && (
-              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
+              <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
                 <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <h4 className="font-bold text-sm">Action Required</h4>
-                  <p className="font-medium text-rose-400 text-xs mt-0.5 leading-relaxed">{error}</p>
+                  <p className="font-medium text-destructive text-xs mt-0.5 leading-relaxed">{error}</p>
                 </div>
                 <button
                   onClick={() => setError('')}
-                  className="text-xs text-rose-400 hover:text-rose-200 font-bold ml-2"
+                  className="text-xs text-destructive hover:opacity-70 font-bold ml-2"
                 >
                   ✕
                 </button>
@@ -330,11 +402,11 @@ export default function ScanPage() {
 
             {/* Warning Banner */}
             {warning && (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
-                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-400" />
+              <div className="p-4 rounded-2xl bg-warning-surface border border-warning/30 text-warning flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-warning" />
                 <div className="flex-1">
                   <h4 className="font-bold text-sm">Notice</h4>
-                  <p className="font-medium text-amber-300 text-xs mt-0.5 leading-relaxed">
+                  <p className="font-medium text-warning text-xs mt-0.5 leading-relaxed">
                     {warning}. Balance is updated in the store system.
                   </p>
                 </div>
@@ -351,20 +423,11 @@ export default function ScanPage() {
                 <p className="text-xs text-ink-secondary max-w-md mx-auto leading-relaxed mb-6">
                   Scan a customer's pass or lookup their phone number on the left. The customer's loyalty balance and checkout options will appear here.
                 </p>
-                <div className="grid grid-cols-3 gap-3 w-full max-w-sm text-left">
-                  <div className="p-3 bg-canvas rounded-xl border border-border-subtle">
-                    <p className="text-[10px] font-bold text-brand-blue uppercase">1. Scan</p>
-                    <p className="text-xs text-ink-secondary mt-0.5">Lookup pass</p>
-                  </div>
-                  <div className="p-3 bg-canvas rounded-xl border border-border-subtle">
-                    <p className="text-[10px] font-bold text-emerald-400 uppercase">2. Enter Total</p>
-                    <p className="text-xs text-ink-secondary mt-0.5">Type bill amount</p>
-                  </div>
-                  <div className="p-3 bg-canvas rounded-xl border border-border-subtle">
-                    <p className="text-[10px] font-bold text-amber-400 uppercase">3. Settle</p>
-                    <p className="text-xs text-ink-secondary mt-0.5">Award or Redeem</p>
-                  </div>
-                </div>
+                <ol className="text-xs text-ink-secondary space-y-1.5 text-left max-w-xs mx-auto list-decimal list-inside">
+                  <li><span className="font-semibold text-ink-dark">Scan</span> — lookup the customer's pass</li>
+                  <li><span className="font-semibold text-ink-dark">Enter total</span> — type the bill amount</li>
+                  <li><span className="font-semibold text-ink-dark">Settle</span> — award or redeem points</li>
+                </ol>
               </div>
             ) : (
               /* Verified Customer Profile & Order Actions */

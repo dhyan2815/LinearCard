@@ -1,3 +1,5 @@
+export const DEFAULT_PASS_HEX = '#1A365D';
+
 export interface User {
   id: string;
   email: string;
@@ -53,9 +55,31 @@ export interface Member {
   passes?: Pass[];
 }
 
+// Legacy JSONB shape stored on PassTemplate.tierThresholds. Kept as a
+// distinct DTO (not replaced by `Tier`) because it describes a threshold
+// with no DB row identity — no id/programId/templateId/sortOrder — used
+// only for the template-designer's tier editor payload. `Tier` below is
+// the real DB row shape `computeTier` operates on post Phase-3.
 export interface TierThreshold {
   name: string;
   min: number;
+}
+
+export interface Program {
+  id: string;
+  tenantId: string;
+  name: string;
+  createdAt?: string;
+}
+
+export interface Tier {
+  id: string;
+  programId: string;
+  name: string;
+  minPoints: number;
+  templateId: string;
+  sortOrder: number;
+  createdAt?: string;
 }
 
 export interface PassTemplate {

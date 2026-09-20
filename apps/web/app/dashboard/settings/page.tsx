@@ -1,13 +1,17 @@
 'use client';
 import React from 'react';
 import { SettingsView } from '../_components/SettingsView';
+import { PageShell } from '@/components/ui/PageShell';
+import { PageHeader } from '@/components/ui/PageHeader';
 
 export default function SettingsPage() {
   return (
-    <div className="min-h-full pb-12">
-      <div className="max-w-[1600px] mx-auto">
-        <SettingsView />
-      </div>
-    </div>
+    <PageShell>
+      <PageHeader
+        title="Tenant Settings"
+        description="Configure your API credentials and webhook integration endpoints."
+      />
+      <SettingsView />
+    </PageShell>
   );
 }

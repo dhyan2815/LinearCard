@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Activity, ArrowRight, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { apiClient } from '@/lib/api-client';
+import { Alert } from '@/components/ui/Alert';
 
 function formatTimeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -50,17 +51,11 @@ export function LiveActivityView({
   }, [tenantId, successMsg]);
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <div className="border-b border-border-subtle pb-4 mb-4">
-        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Live Updates</h2>
-        <p className="text-sm text-ink-secondary mt-1">Select a pass from the current session to push instant patch updates over-the-air.</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Live Update (Manage) */}
-        <Card className="flex flex-col border-border-subtle shadow-sm bg-surface-card overflow-hidden h-full max-h-125">
+        <Card className="flex flex-col overflow-hidden h-full max-h-125">
           <div className="p-4 border-b border-border-subtle bg-canvas/50 flex justify-between items-center">
-            <h2 className="text-[14px] font-semibold text-ink-dark flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-ink-dark flex items-center gap-2">
               <Zap className="w-4 h-4 text-emerald-500" /> Push Update Console
             </h2>
             {manageData.passId && (
@@ -97,8 +92,8 @@ export function LiveActivityView({
                   <Button type="submit" disabled={loading} className="w-full h-10 mt-4">
                     {loading ? 'Processing...' : 'Push Live Update'}
                   </Button>
-                  {error && <p className="text-red-500 text-xs">{error}</p>}
-                  {successMsg && <p className="text-emerald-500 text-xs">{successMsg}</p>}
+                  {error && <Alert variant="error" className="text-xs">{error}</Alert>}
+                  {successMsg && <Alert variant="success" className="text-xs">{successMsg}</Alert>}
                 </motion.form>
               ) : (
                 <motion.div 
@@ -143,7 +138,7 @@ export function LiveActivityView({
                         <div
                           key={idx}
                           onClick={() => selectPassForManage(item)}
-                          className="p-3 rounded-lg border flex items-center justify-between cursor-pointer transition-colors group bg-canvas border-border-subtle hover:border-border-strong"
+                          className="p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-colors group bg-canvas border-border-subtle hover:border-border-strong"
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: item.passData?.hexBackgroundColor || '#1A365D'}}/>
@@ -153,6 +148,7 @@ export function LiveActivityView({
                               </p>
                               <p className="text-xs text-ink-muted font-mono truncate mt-0.5">
                                 {item.tenantName}
+                                {item.passData?.createdAt && ` • ${formatTimeAgo(item.passData.createdAt)}`}
                               </p>
                             </div>
                           </div>
@@ -168,18 +164,14 @@ export function LiveActivityView({
         </Card>
 
         {/* Activity Ledger */}
-        <Card className="flex flex-col border-border-subtle shadow-sm bg-surface-card overflow-hidden h-full max-h-125">
+        <Card className="flex flex-col overflow-hidden h-full max-h-125">
           <div className="p-4 border-b border-border-subtle bg-canvas/50">
-            <h2 className="text-[14px] font-semibold text-ink-dark flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-ink-dark flex items-center gap-2">
               <Activity className="w-4 h-4 text-emerald-500" /> Push History
             </h2>
           </div>
-          <div className="p-5 flex-1 min-h-0 overflow-y-auto space-y-3">
-            {logFetchError && (
-              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm">
-                Error: {logFetchError}
-              </div>
-            )}
+          <div className="p-6 flex-1 min-h-0 overflow-y-auto space-y-3">
+            {logFetchError && <Alert variant="error">Error: {logFetchError}</Alert>}
             {logs.length === 0 && !logFetchError && <p className="text-sm text-ink-muted text-center py-8">No recent activity.</p>}
             {logs.map((log: any) => (
               <div key={log.id} className="p-3 rounded-xl border border-border-subtle/50 bg-canvas transition-colors flex gap-3 items-start">
@@ -206,7 +198,6 @@ export function LiveActivityView({
             ))}
           </div>
         </Card>
-      </div>
     </div>
   );
 }

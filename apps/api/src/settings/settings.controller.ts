@@ -5,50 +5,21 @@ import {
   Post,
   Body,
   Req,
+  UseGuards,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { Request } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
-import * as jwt from 'jsonwebtoken';
-import * as crypto from 'crypto';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
-
-function getTenantId(req: Request): string | null {
-  const authHeader = req.headers['authorization'];
-  let token: string | null = null;
-
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else if (req.cookies?.admin_session) {
-    const c = req.cookies.admin_session;
-    token = typeof c === 'object' && c?.value ? c.value : c;
-  } else if (req.headers['cookie']) {
-    const match = req.headers['cookie'].match(
-      /(?:^|;\s*)admin_session=([^;]+)/,
-    );
-    if (match) token = decodeURIComponent(match[1]);
-  }
-
-  if (!token) return null;
-  try {
-    const p: any = jwt.verify(token, JWT_SECRET);
-    return p.tenantId || null;
-  } catch {
-    return null;
-  }
-}
+import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 
 @Controller('settings')
+@UseGuards(TenantGuard)
 export class SettingsController {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   @Get()
-  async getSettings(@Req() req: Request) {
-    const tenantId = getTenantId(req);
-    if (!tenantId)
-      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+  async getSettings(@Req() req: TenantRequest) {
+    const tenantId = req.tenantId;
 
     const { data: tenant, error } = await this.supabaseService.client
       .from('Tenant')
@@ -61,10 +32,8 @@ export class SettingsController {
   }
 
   @Patch()
-  async updateSettings(@Req() req: Request, @Body() body: any) {
-    const tenantId = getTenantId(req);
-    if (!tenantId)
-      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+  async updateSettings(@Req() req: TenantRequest, @Body() body: any) {
+    const tenantId = req.tenantId;
 
     const { webhookUrl } = body || {};
     const patch: Record<string, any> = {};
@@ -91,17 +60,42 @@ export class SettingsController {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     return { success: true };
   }
+
+  @Post('test-webhook')
+  async testWebhook(@Req() req: TenantRequest) {
+    const tenantId = req.tenantId;
+    const { data: tenant } = await this.supabaseService.client
+      .from('Tenant')
+      .select('webhookUrl')
+      .eq('id', tenantId)
+      .single();
+    if (!tenant?.webhookUrl) {
+      throw new HttpException('No webhook URL saved yet', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      const res = await fetch(tenant.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'test.ping', tenantId, sentAt: new Date().toISOString() }),
+      });
+      return { success: res.ok, status: res.status };
+    } catch (err: any) {
+      throw new HttpException(
+        `Could not reach webhook URL: ${err.message}`,
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
 }
 
 @Controller('admin')
+@UseGuards(TenantGuard)
 export class DeveloperSettingsController {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   @Get('developer-settings')
-  async getDevSettings(@Req() req: Request) {
-    const tenantId = getTenantId(req);
-    if (!tenantId)
-      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+  async getDevSettings(@Req() req: TenantRequest) {
+    const tenantId = req.tenantId;
 
     const { data: tenant } = await this.supabaseService.client
       .from('Tenant')
@@ -115,29 +109,13 @@ export class DeveloperSettingsController {
     return { success: true, apiKey: tenant.apiKey };
   }
 
+  // ponytail: legacy plaintext-minting path retired in favor of hashed keys.
+  // Retained as a 410 so old clients get a clear signal instead of a 404.
   @Post('developer-settings')
-  async generateApiKey(@Req() req: Request) {
-    const tenantId = getTenantId(req);
-    if (!tenantId)
-      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
-
-    const { data: tenant } = await this.supabaseService.client
-      .from('Tenant')
-      .select('id')
-      .eq('id', tenantId)
-      .limit(1)
-      .single();
-    if (!tenant)
-      throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
-
-    const newApiKey = crypto.randomUUID().replace(/-/g, '');
-    const { error } = await this.supabaseService.client
-      .from('Tenant')
-      .update({ apiKey: newApiKey })
-      .eq('id', tenant.id);
-    if (error)
-      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
-
-    return { success: true, apiKey: newApiKey };
+  generateApiKey() {
+    throw new HttpException(
+      'This endpoint no longer issues API keys. Use POST /developers/api-keys instead.',
+      HttpStatus.GONE,
+    );
   }
 }

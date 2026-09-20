@@ -1,10 +1,12 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
+import { Alert } from '@/components/ui/Alert';
 import { apiClient } from '@/lib/api-client';
 
 export function SettingsView() {
@@ -12,9 +14,10 @@ export function SettingsView() {
   const [tenant, setTenant] = useState<any>(null);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [isRotating, setIsRotating] = useState(false);
   const [msg, setMsg] = useState('');
   const [authError, setAuthError] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState('');
 
   useEffect(() => {
     apiClient('/settings').then(d => {
@@ -45,53 +48,61 @@ export function SettingsView() {
     finally { setIsSaving(false); }
   };
 
-  const handleRotateKey = async () => {
-    if (!confirm('Rotate API key? The old key stops working immediately.')) return;
-    setIsRotating(true);
+  const handleTestWebhook = async () => {
+    setIsTesting(true); setTestMsg('');
     try {
-      const data = await apiClient('/admin/developer-settings', { method: 'POST' });
-      if (!data.success) throw new Error(data.error || 'Failed to rotate key');
-      setTenant((prev: any) => ({ ...prev, apiKey: data.apiKey }));
-      setMsg('API key rotated.');
-    } catch (err: any) { 
-      if (err.message.includes('Unauthorized')) { setAuthError(true); router.push('/login'); }
-      else { setMsg(`Error: ${err.message}`); }
+      const data = await apiClient('/settings/test-webhook', { method: 'POST' });
+      setTestMsg(data.success ? `Test event sent (HTTP ${data.status}).` : `Endpoint responded with HTTP ${data.status}.`);
+    } catch (err: any) {
+      setTestMsg(`Error: ${err.message}`);
+    } finally {
+      setIsTesting(false);
     }
-    finally { setIsRotating(false); }
   };
 
-  if (authError) return <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">Session expired. Redirecting to login…</div>;
+  if (authError) return <Alert variant="warning">Session expired. Redirecting to login…</Alert>;
   if (!tenant) return <p className="text-ink-muted text-sm">Loading settings...</p>;
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div className="border-b border-border-subtle pb-4">
-        <h2 className="text-xl font-medium text-ink-dark tracking-tight">Tenant Settings</h2>
-        <p className="text-sm text-ink-secondary mt-1">Configure your API credentials and webhook integration endpoints.</p>
-      </div>
-
-      <Card className="p-6 space-y-4 bg-surface-card border-border-subtle shadow-sm">
-        <h3 className="text-base font-semibold text-ink-dark">API Key</h3>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 bg-surface-bone border border-border-subtle rounded-lg px-3 py-2 text-xs font-mono text-ink-secondary truncate">
-            {tenant.apiKey || 'No key generated'}
-          </code>
-          <Button onClick={handleRotateKey} disabled={isRotating} variant="secondary" className="shrink-0">
-            {isRotating ? 'Rotating...' : 'Rotate'}
-          </Button>
-        </div>
-        <p className="text-xs text-ink-muted">Pass as <code>Authorization: Bearer &lt;key&gt;</code> for API calls.</p>
+    <div className="space-y-6">
+      <Card className="p-6 space-y-2">
+        <h3 className="text-base font-semibold text-ink-dark">API Keys &amp; Webhooks</h3>
+        <p className="text-sm text-ink-secondary">
+          API key and webhook endpoint management has moved to the{' '}
+          <Link href="/dashboard/developers" className="text-brand-blue font-medium hover:underline">
+            Developers
+          </Link>{' '}
+          tab.
+        </p>
       </Card>
 
-      <Card className="p-6 space-y-4 bg-surface-card border-border-subtle shadow-sm">
+      <Card className="p-6 space-y-2 opacity-60 pointer-events-none select-none">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-ink-dark">Apple Wallet</h3>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted bg-surface-bone px-2 py-1 rounded-md">
+            Coming soon
+          </span>
+        </div>
+        <p className="text-sm text-ink-secondary">
+          Issue passes to Apple Wallet alongside Google Wallet. Not yet available.
+        </p>
+      </Card>
+
+      <Card className="p-6 space-y-4">
         <h3 className="text-base font-semibold text-ink-dark">Webhook URL</h3>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <Label>Endpoint URL</Label>
-          <Input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
-            placeholder="http://127.0.0.1:3001/passes/webhooks/external-order" />
+          <div className="flex gap-2">
+            <Input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
+              placeholder="http://127.0.0.1:3001/passes/webhooks/external-order" className="flex-1" />
+            <Button type="button" variant="secondary" disabled={isTesting || !webhookUrl} onClick={handleTestWebhook}>
+              {isTesting ? 'Sending…' : 'Test'}
+            </Button>
+          </div>
         </div>
         <p className="text-xs text-ink-muted">LinearCard will POST signed events here.</p>
-        {msg && <p className={`text-sm font-medium ${msg.startsWith('Error') ? 'text-red-500' : 'text-emerald-400'}`}>{msg}</p>}
+        {testMsg && <Alert variant={testMsg.startsWith('Error') ? 'error' : 'info'}>{testMsg}</Alert>}
+        {msg && <Alert variant={msg.startsWith('Error') ? 'error' : 'success'}>{msg}</Alert>}
         <Button onClick={handleSaveWebhook} disabled={isSaving} className="w-full">
           {isSaving ? 'Saving...' : 'Save Webhook URL'}
         </Button>

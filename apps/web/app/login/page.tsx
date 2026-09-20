@@ -86,7 +86,7 @@ export default function LoginPage() {
                );
              }} className="space-y-6">
                <div className="flex flex-col sm:flex-row gap-3 relative">
-                 <div className="w-full sm:w-1/3">
+                 <div className="w-full sm:w-1/3 space-y-1.5">
                    <Label>Country Code</Label>
                    <Input 
                      type="text" 
@@ -134,7 +134,7 @@ export default function LoginPage() {
                      </div>
                    )}
                  </div>
-                 <div className="w-full sm:w-2/3">
+                 <div className="w-full sm:w-2/3 space-y-1.5">
                    <Label>Admin Phone Number</Label>
                    <Input type="tel" inputMode="numeric" pattern="[0-9]*" value={onboardingPhone} onChange={(e) => setOnboardingPhone(e.target.value)} placeholder="9876543210" autoFocus required />
                  </div>
@@ -166,10 +166,10 @@ export default function LoginPage() {
                    body: JSON.stringify({ phone: `${countryCode}${onboardingPhone}`, otp: onboardingOtp })
                  });
                  if (!data.success) throw new Error(data.error);
-                 
-                 if (data.token) {
-                   document.cookie = `admin_session=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-                 }
+
+                 // Backend auto-sets httpOnly cookie. Wait a tick for cookie to be available.
+                 // DO NOT manually set cookie - backend handles it securely.
+                 await new Promise(resolve => setTimeout(resolve, 100));
 
                  router.push('/dashboard');
                } catch (err: any) {

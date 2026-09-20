@@ -1,7 +1,8 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiClient } from '@/lib/api-client';
-import { Tenant } from '@linearcard/types';
+import { apiClient, UnauthorizedError } from '@/lib/api-client';
+import { useRouter } from 'next/navigation';
+import { Tenant, DEFAULT_PASS_HEX } from '@linearcard/types';
 
 type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
 
@@ -14,6 +15,7 @@ export interface DesignData {
   heroImageUrl: string;
   rows: Array<{ id: string; columns: Array<{ key: string; header: string; body: string }> }>;
   tierThresholds: Array<{ name: string; min: number }>;
+  storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }>;
 }
 
 export interface StatsData {
@@ -62,6 +64,7 @@ interface DashboardContextType {
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [origin, setOrigin] = useState<string>('');
@@ -76,13 +79,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     classSuffix: '',
     archetype: 'loyalty',
     cardTitle: '',
-    hexBackgroundColor: '#1A365D',
+    hexBackgroundColor: DEFAULT_PASS_HEX,
     logoUrl: '',
     heroImageUrl: '',
     rows: [
       { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
     ],
-    tierThresholds: []
+    tierThresholds: [],
+    storeLocations: []
   });
 
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
@@ -96,15 +100,38 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       setOrigin(window.location.origin);
     }
-    apiClient('/tenant/tenants')
-      .then(data => {
+
+    let retryCount = 0;
+    const maxRetries = 2;
+
+    const fetchTenants = async () => {
+      try {
+        const data = await apiClient('/tenant/tenants');
         if (data.success && data.tenants && data.tenants.length > 0) {
           setTenants(data.tenants);
           setSelectedTenantId(data.tenants[0].id);
         }
-      })
-      .catch(err => console.error('Failed to fetch tenants:', err));
-  }, []);
+      } catch (err) {
+        // If 401, redirect to login (user not authenticated)
+        if (err instanceof UnauthorizedError) {
+          console.warn('Not authenticated. Redirecting to login.');
+          router.push('/login');
+          return;
+        }
+
+        // For network errors, retry with exponential backoff
+        if (retryCount < maxRetries) {
+          retryCount++;
+          const delay = 1000 * Math.pow(2, retryCount - 1);
+          setTimeout(fetchTenants, delay);
+        } else {
+          console.error('Failed to fetch tenants after retries:', err);
+        }
+      }
+    };
+
+    fetchTenants();
+  }, [router]);
 
   const currentTenant = tenants.find(t => t.id === selectedTenantId);
 
@@ -116,8 +143,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
              setStats(data.stats);
            }
         })
-        .catch(err => console.error('Failed to fetch stats:', err));
-        
+        .catch(err => {
+          if (err instanceof UnauthorizedError) {
+            router.push('/login');
+            return;
+          }
+          console.error('Failed to fetch stats:', err);
+        });
+
       apiClient(`/members?tenantId=${selectedTenantId}`)
         .then(data => {
           if (data.success) {
@@ -131,9 +164,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
              setPassHistory(allPasses);
           }
         })
-        .catch(err => console.error('Failed to fetch members:', err));
+        .catch(err => {
+          if (err instanceof UnauthorizedError) {
+            router.push('/login');
+            return;
+          }
+          console.error('Failed to fetch members:', err);
+        });
     }
-  }, [selectedTenantId]);
+  }, [selectedTenantId, router]);
 
   const handleTenantChange = (newTenantId: string) => {
     setSelectedTenantId(newTenantId);
@@ -143,13 +182,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       classSuffix: t?.classSuffix || '',
       archetype: 'loyalty',
       cardTitle: t?.name || '',
-      hexBackgroundColor: t?.brandHexColor || '#1A365D',
+      hexBackgroundColor: t?.brandHexColor || DEFAULT_PASS_HEX,
       logoUrl: t?.logoUrl || '',
       heroImageUrl: t?.heroUrl || '',
       rows: [
         { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
       ],
-      tierThresholds: []
+      tierThresholds: [],
+      storeLocations: []
     });
     setSavedTemplateId(null);
     setTemplateStatus('unsaved');
@@ -174,7 +214,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               classSuffix: t.classSuffix,
               archetype: t.archetype,
               cardTitle: t.title || t.name,
-              hexBackgroundColor: t.hexBackgroundColor,
+              hexBackgroundColor: t.hexBackgroundColor || DEFAULT_PASS_HEX,
               logoUrl: t.logoUrl || '',
               heroImageUrl: t.heroImageUrl || '',
               rows: (t.fieldRows || [{ id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }]).map((row: any) => ({
@@ -184,7 +224,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                   key: col.key || `${row.id}_${idx}`,
                 })),
               })),
-              tierThresholds: t.tierThresholds || []
+              tierThresholds: t.tierThresholds || [],
+              storeLocations: t.storeLocations || []
             });
           } else {
             setSavedTemplateId(null);
@@ -193,23 +234,28 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               classSuffix: currentTenant.classSuffix || '',
               archetype: 'loyalty',
               cardTitle: currentTenant.name || '',
-              hexBackgroundColor: currentTenant.brandHexColor || '#1A365D',
+              hexBackgroundColor: currentTenant.brandHexColor || DEFAULT_PASS_HEX,
               logoUrl: currentTenant.logoUrl || '',
               heroImageUrl: currentTenant.heroUrl || '',
               rows: [
                 { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
               ],
-              tierThresholds: []
+              tierThresholds: [],
+              storeLocations: []
             });
           }
         })
         .catch(err => {
+          if (err instanceof UnauthorizedError) {
+            router.push('/login');
+            return;
+          }
           console.error('Error fetching templates:', err);
           setSavedTemplateId(null);
           setTemplateStatus('unsaved');
         });
     }
-  }, [currentTenant]);
+  }, [currentTenant, router]);
 
   return (
     <DashboardContext.Provider value={{

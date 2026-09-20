@@ -16,4 +16,5 @@ plans/
 .claude/
 next-env.d.ts
 CLAUDE.md
-.claude/
+.claude/.worktrees/
+.worktrees/

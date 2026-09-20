@@ -89,7 +89,7 @@ LinearCard enables brands to issue, manage, and dynamically update digital passe
      NEXT_PUBLIC_API_URL=http://localhost:3001
      ```
    - **Backend (`apps/api/.env`):**
-     Ensure Google Cloud credentials (`GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_ISSUER_ID`), Supabase keys (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`), and `JWT_SECRET` are configured.
+     Ensure Google Cloud credentials (`GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_ISSUER_ID`), Supabase keys (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`), `JWT_SECRET`, and `WALLET_CREDENTIALS_KEY` (encrypts per-tenant Google Wallet private keys at rest — generate with `openssl rand -hex 32`) are configured. Both `JWT_SECRET` and `WALLET_CREDENTIALS_KEY` are validated at boot and the API refuses to start without them.
 
 4. **Run the development servers:**
    Launch both Next.js frontend and NestJS backend concurrently via Turborepo:
