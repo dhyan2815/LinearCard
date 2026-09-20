@@ -1,14 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Sun, Moon } from 'lucide-react';
 
 export function ThemeToggle() {
-  // The blocking script in layout.tsx already set the html class before paint;
-  // just mirror it into state so this component's icon matches.
-  const [theme, setTheme] = React.useState(() =>
-    typeof document !== 'undefined' && document.documentElement.classList.contains('light') ? 'light' : 'dark'
-  );
+  // Default to dark to avoid hydration mismatch; useEffect syncs with actual DOM
+  const [theme, setTheme] = React.useState('dark');
+
+  useEffect(() => {
+    const isDarkMode = !document.documentElement.classList.contains('light');
+    setTheme(isDarkMode ? 'dark' : 'light');
+  }, []);
 
   const toggleTheme = () => {
     // If the current theme is dark, switch to light mode and save preference

@@ -54,7 +54,6 @@ export default function PassPreviewCard({
   const containerBg = isDarkMode ? '#1e1e1e' : '#ffffff';
   const textColor = isDarkMode ? '#ffffff' : '#1e1e1e';
   const secondaryTextColor = isDarkMode ? '#a0a0a0' : '#5f6368';
-<<<<<<< HEAD
   const headerBg = hexBackgroundColor || DEFAULT_PASS_HEX;
   const cardBorder = isDarkMode ? 'border-neutral-800' : 'border-neutral-200';
 
