@@ -72,6 +72,9 @@ export function TemplateWorkspace({
   const [tiersExpanded, setTiersExpanded] = React.useState(false);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
+  // Phase 4.1 — the live class as Google actually holds it, not as we assume.
+  const [liveClass, setLiveClass] = React.useState<any>(null);
+  const [liveClassLoading, setLiveClassLoading] = React.useState(false);
 
   // Any design edit invalidates whatever is currently published (or makes an
   // unsaved template as-yet-unpublished), so every mutation routes through
@@ -277,6 +280,9 @@ export function TemplateWorkspace({
       const publishData = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
       if (!publishData.success) throw new Error(publishData.error || 'Failed to publish');
       setTemplateStatus('published');
+      // Phase 4.1 — Google can accept the publish and still drop the
+      // geofences; that must not look like a clean success.
+      if (publishData.warning) toast.warning(publishData.warning);
     };
 
     toast.promise(publishPromise(), {
@@ -304,6 +310,23 @@ export function TemplateWorkspace({
       success: 'Scan the QR to add it to your Wallet.',
       error: (err: any) => err.message || 'Preview failed',
     });
+  };
+
+  // Phase 4.1 — verification harness. Asks Google what the class really
+  // contains, so "the geofences didn't publish" and "Google didn't fire" stop
+  // being the same symptom.
+  const handleInspectClass = async () => {
+    if (!savedTemplateId) return;
+    setLiveClassLoading(true);
+    try {
+      const data = await apiClient(`/templates/${savedTemplateId}/wallet-class`);
+      if (!data.success) throw new Error(data.error || 'Failed to read class');
+      setLiveClass(data);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to read class from Google');
+    } finally {
+      setLiveClassLoading(false);
+    }
   };
 
   const handleResyncPasses = async () => {
@@ -582,6 +605,59 @@ export function TemplateWorkspace({
               ))}
             </div>
           )}
+
+          {/* Phase 4.1 — verify against Google rather than against hope. */}
+          <div className="mt-3 pt-3 border-t border-border-subtle">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-ink-muted">
+                Check what Google actually holds for this class.
+              </span>
+              <button
+                type="button"
+                onClick={handleInspectClass}
+                disabled={!savedTemplateId || liveClassLoading}
+                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors disabled:opacity-50 shrink-0"
+              >
+                {liveClassLoading ? 'Checking…' : 'Verify on Google'}
+              </button>
+            </div>
+
+            {liveClass && (
+              <div className="mt-2 space-y-1 text-xs font-mono">
+                {!liveClass.exists ? (
+                  <p className="text-amber-600 dark:text-amber-400">
+                    No class on Google yet — publish this template first.
+                  </p>
+                ) : (
+                  <>
+                    <p
+                      className={
+                        liveClass.geofenceCount === liveClass.expectedGeofenceCount
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }
+                    >
+                      Geofences live on Google: {liveClass.geofenceCount}
+                      {liveClass.geofenceCount === liveClass.expectedGeofenceCount
+                        ? ' ✓'
+                        : ` ✗ (${liveClass.expectedGeofenceCount} saved here)`}
+                    </p>
+                    <p
+                      className={
+                        liveClass.callbackIsLocalhost
+                          ? 'text-red-600 dark:text-red-400 break-all'
+                          : 'text-ink-muted break-all'
+                      }
+                    >
+                      Callback: {liveClass.callbackUrl || 'none'}
+                      {liveClass.callbackIsLocalhost &&
+                        ' — points at a localhost machine, so live callbacks go nowhere. Republish from a public environment.'}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {!isTicketProgram && (

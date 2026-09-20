@@ -176,6 +176,88 @@ describe('TemplatesController.updateTemplate', () => {
   });
 });
 
+// Phase 4.1 — the class-inspection endpoint exists to answer one question
+// ("did the geofences and the callback actually land on Google?"), so the
+// check is that it reports a mismatch rather than a cheerful success.
+describe('TemplatesController.getWalletClass', () => {
+  const build = async (template: any, walletClass: any) => {
+    const supabaseServiceMock = {
+      client: {
+        from: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest
+                  .fn()
+                  .mockResolvedValue({ data: template, error: null }),
+              }),
+            }),
+          }),
+        }),
+      },
+    };
+    const walletServiceMock = {
+      forTenant: jest.fn().mockResolvedValue({
+        getGenericClass: jest.fn().mockResolvedValue(walletClass),
+      }),
+    };
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [TemplatesController],
+      providers: [
+        { provide: SupabaseService, useValue: supabaseServiceMock },
+        { provide: WalletService, useValue: walletServiceMock },
+        { provide: TemplatesService, useValue: {} },
+      ],
+    }).compile();
+    return module.get<TemplatesController>(TemplatesController);
+  };
+
+  it('flags a geofence mismatch and a localhost callback', async () => {
+    const controller = await build(
+      { id: 't1', classSuffix: 'acme', storeLocations: [{}, {}] },
+      {
+        id: 'iss.dev_acme',
+        merchantLocations: [],
+        callbackOptions: { url: 'http://localhost:3001/passes/webhooks' },
+      },
+    );
+    const res: any = await controller.getWalletClass('t1', {
+      tenantId: 'tenant-1',
+    } as any);
+    expect(res.geofenceCount).toBe(0);
+    expect(res.expectedGeofenceCount).toBe(2);
+    expect(res.callbackIsLocalhost).toBe(true);
+  });
+
+  it('reports a healthy class', async () => {
+    const controller = await build(
+      { id: 't1', classSuffix: 'acme', storeLocations: [{}] },
+      {
+        id: 'iss.acme',
+        merchantLocations: [{ latitude: 1, longitude: 2 }],
+        callbackOptions: { url: 'https://api.example.com/passes/webhooks' },
+      },
+    );
+    const res: any = await controller.getWalletClass('t1', {
+      tenantId: 'tenant-1',
+    } as any);
+    expect(res.geofenceCount).toBe(1);
+    expect(res.callbackIsLocalhost).toBe(false);
+  });
+
+  it('returns exists:false when the class is not on Google yet', async () => {
+    const controller = await build(
+      { id: 't1', classSuffix: 'acme', storeLocations: [{}] },
+      null,
+    );
+    const res: any = await controller.getWalletClass('t1', {
+      tenantId: 'tenant-1',
+    } as any);
+    expect(res.exists).toBe(false);
+    expect(res.expectedGeofenceCount).toBe(1);
+  });
+});
+
 describe('TemplatesController — tenant scoping on :id routes', () => {
   let controller: TemplatesController;
   let eqSpy: jest.Mock;

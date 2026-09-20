@@ -430,6 +430,29 @@ export class WalletService {
     return `${base}/passes/webhooks/google-wallet${secret ? `/${secret}` : ''}`;
   }
 
+  /**
+   * Geofences of the template owning `classSuffix` (WAL-9).
+   *
+   * Used by the auto-create-class fallback, which has only a suffix in hand.
+   * Never throws: a missing template must not turn a pass creation retry
+   * into a hard failure — it just means no geofences.
+   */
+  private async storeLocationsForSuffix(classSuffix?: string): Promise<any[]> {
+    if (!classSuffix) return [];
+    try {
+      const { data } = await this.supabaseService.client
+        .from('PassTemplate')
+        .select('storeLocations')
+        .eq('classSuffix', classSuffix.replace(/_preview$/, ''))
+        .order('updatedAt', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data?.storeLocations ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   public async createGenericClass(templateData: any) {
     const client = await this.getGoogleAuthClient();
     const { issuerId } = this.getCredentialsOrThrow();
@@ -562,6 +585,34 @@ export class WalletService {
           return { id: classId, existing: true, updated: false };
         }
       }
+      throw error;
+    }
+  }
+
+  /**
+   * Phase 4.1 — reads a class back from Google as it actually exists there.
+   *
+   * The designer guesses at what it published; this is the only way to see
+   * the live `merchantLocations` (geofences) and `callbackOptions.url`, which
+   * is how ENV-4 (a localhost callback baked into a production class by a
+   * local publish) is confirmed or ruled out. Returns null on 404.
+   */
+  public async getGenericClass(classSuffix?: string) {
+    const client = await this.getGoogleAuthClient();
+    const { issuerId } = this.getCredentialsOrThrow();
+    const classId = this.resolveClassId(issuerId, classSuffix);
+    try {
+      const res = await client.request({
+        url: `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${classId}`,
+        method: 'GET',
+      });
+      return res.data as any;
+    } catch (error: any) {
+      if (error.response?.status === 404) return null;
+      this.logger.error(
+        `Error fetching genericClass ${classId}:`,
+        error.message,
+      );
       throw error;
     }
   }
@@ -833,6 +884,10 @@ export class WalletService {
         this.logger.log(
           `Attempting to auto-create missing class ${classId}...`,
         );
+        // WAL-9: a class born on this fallback path used to carry no
+        // geofences at all, because no caller passes storeLocations. Look
+        // them up from the template that owns this suffix instead of
+        // pushing the burden onto all four call sites.
         await this.createGenericClass({
           classSuffix,
           cardTitle,
@@ -840,6 +895,7 @@ export class WalletService {
           logoUrl,
           heroImageUrl,
           rows,
+          storeLocations: await this.storeLocationsForSuffix(classSuffix),
         });
         await client.request({
           url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject',

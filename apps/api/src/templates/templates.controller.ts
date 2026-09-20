@@ -284,13 +284,12 @@ export class TemplatesController {
   @UseGuards(TenantGuard)
   async publishTemplate(@Param('id') id: string, @Req() req: TenantRequest) {
     try {
-      const { classData, template } = await this.templatesService.publish(
-        id,
-        req.tenantId!,
-      );
+      const { classData, template, warning } =
+        await this.templatesService.publish(id, req.tenantId!);
       return {
         success: true,
         classData,
+        warning,
         template: { ...template, name: template.title },
       };
     } catch (error: any) {
@@ -298,6 +297,68 @@ export class TemplatesController {
       throw new HttpException(
         { success: false, error: error.message },
         HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Phase 4.1 — read the live Google Wallet class back, raw.
+   *
+   * The designer can then state what is actually on Google ("Geofences live
+   * on Google: 10") instead of assuming the last publish worked. Also
+   * surfaces `callbackOptions.url`, which is how ENV-4 (a production class
+   * left pointing at someone's localhost) is confirmed or ruled out.
+   */
+  @Get(':id/wallet-class')
+  @UseGuards(TenantGuard)
+  async getWalletClass(@Param('id') id: string, @Req() req: TenantRequest) {
+    try {
+      const { data: template, error } = await this.supabaseService.client
+        .from('PassTemplate')
+        .select('*, tenant:Tenant(classSuffix)')
+        .eq('id', id)
+        .eq('tenantId', req.tenantId)
+        .single();
+      if (error || !template)
+        throw new HttpException(
+          { success: false, error: 'Template not found' },
+          HttpStatus.NOT_FOUND,
+        );
+
+      const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+      const walletClass = await tenantWallet.getGenericClass(
+        template.classSuffix || template.tenant?.classSuffix,
+      );
+
+      if (!walletClass) {
+        return {
+          success: true,
+          exists: false,
+          geofenceCount: 0,
+          expectedGeofenceCount: (template.storeLocations ?? []).length,
+          callbackUrl: null,
+          class: null,
+        };
+      }
+
+      const callbackUrl = walletClass.callbackOptions?.url ?? null;
+      return {
+        success: true,
+        exists: true,
+        classId: walletClass.id,
+        geofenceCount: (walletClass.merchantLocations ?? []).length,
+        expectedGeofenceCount: (template.storeLocations ?? []).length,
+        callbackUrl,
+        callbackIsLocalhost: !!(
+          callbackUrl && /localhost|127\.0\.0\.1/.test(callbackUrl)
+        ),
+        class: walletClass,
+      };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.BAD_GATEWAY,
       );
     }
   }

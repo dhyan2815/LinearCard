@@ -28,6 +28,7 @@ export default function EnrollFlow() {
   const [tenantError, setTenantError] = useState<string | null>(null);
 
   const [currentScreen, setCurrentScreen] = useState<'loading' | 'error' | 'consumer_phone' | 'consumer_otp' | 'consumer_success'>('loading');
+  const [proximityTipDismissed, setProximityTipDismissed] = useState(false);
   const [countryCode, setCountryCode] = useState('+91');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [onboardingName, setOnboardingName] = useState('');
@@ -371,6 +372,35 @@ export default function EnrollFlow() {
                 </svg>
                 Copy Link Manually
               </button>
+
+              {/* Phase 4.2 — Google's proximity notifications only fire if the
+                  member turns them on inside the Wallet app. Nothing else in
+                  the product tells them, so this one line is the highest-yield
+                  thing available on the Google side. */}
+              {!proximityTipDismissed && (
+                <div className="flex items-start gap-2 text-left text-xs text-ink-secondary bg-surface-bone rounded-xl p-3">
+                  <span className="flex-1">
+                    Want a nudge when you&apos;re near us? In Google Wallet, open
+                    Settings and turn on notifications for nearby passes.{' '}
+                    <a
+                      href="https://support.google.com/wallet/answer/12059409"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-medium"
+                    >
+                      How to enable
+                    </a>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setProximityTipDismissed(true)}
+                    className="text-ink-muted hover:text-ink-dark shrink-0"
+                    aria-label="Dismiss"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
             </div>
           </Card>
         </motion.main>

@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
 
@@ -11,6 +11,8 @@ import { WalletService } from '../wallet/wallet.service';
  */
 @Injectable()
 export class TemplatesService {
+  private readonly logger = new Logger(TemplatesService.name);
+
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly walletService: WalletService,
@@ -95,6 +97,20 @@ export class TemplatesService {
       );
     }
 
+    // Phase 4.1 — Google silently accepts a PATCH and still returns a class
+    // with no `merchantLocations`. Publishing then "succeeds" with zero live
+    // geofences, which is exactly the failure Part 3 chased for weeks. Surface
+    // it instead of leaving the admin to guess.
+    const sentLocations = (template.storeLocations ?? []).length;
+    const liveLocations = (classData?.merchantLocations ?? []).length;
+    let warning: string | undefined;
+    if (sentLocations > 0 && liveLocations === 0) {
+      warning =
+        `Published, but Google returned no merchantLocations for ${sentLocations} store location(s). ` +
+        'Proximity notifications will not fire. Check the live class via GET /templates/:id/wallet-class.';
+      this.logger.warn(`${warning} (template ${id})`);
+    }
+
     const { data: updated, error: updateError } =
       await this.supabaseService.client
         .from('PassTemplate')
@@ -113,6 +129,6 @@ export class TemplatesService {
         .single();
     if (updateError) throw updateError;
 
-    return { classData, template: updated };
+    return { classData, template: updated, warning };
   }
 }
