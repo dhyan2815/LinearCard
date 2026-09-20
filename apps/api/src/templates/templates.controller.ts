@@ -317,6 +317,7 @@ export class TemplatesController {
       }));
 
       const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+      const envKey = tenantWallet.getWalletEnvPrefix() || 'prod';
       const classData: any = await tenantWallet.createGenericClass({
         classSuffix: template.classSuffix || template.tenant?.classSuffix,
         cardTitle: template.tenant?.name || template.title,
@@ -326,7 +327,9 @@ export class TemplatesController {
         logoUrl,
         heroImageUrl,
         storeLocations: template.storeLocations ?? [],
-        isUpdate: !!template.googleClassId,
+        // Each environment tracks whether *its own* class exists (ENV-1):
+        // `googleClassId` alone held whichever environment published last.
+        isUpdate: !!(template.googleClassIds || {})[envKey],
       });
 
       // The 409 fallback returns {existing:true, updated:false} when its own
@@ -349,6 +352,10 @@ export class TemplatesController {
           .update({
             status: 'published',
             googleClassId: classData.id,
+            googleClassIds: {
+              ...(template.googleClassIds || {}),
+              [envKey]: classData.id,
+            },
             updatedAt: new Date().toISOString(),
           })
           .eq('id', id)

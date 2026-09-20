@@ -92,6 +92,8 @@ export interface PassTemplate {
   status: 'draft' | 'published' | 'unsaved';
   classSuffix: string;
   googleClassId?: string;
+  /** Live Google Wallet class id per environment prefix, e.g. { prod, preview, dev }. */
+  googleClassIds?: Record<string, string>;
   fieldRows?: Array<{ id: string; columns: Array<{ key: string; header: string; body: string }> }>;
   tierThresholds?: TierThreshold[];
   hexBackgroundColor?: string;

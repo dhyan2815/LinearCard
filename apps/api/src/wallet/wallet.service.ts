@@ -227,10 +227,75 @@ export class WalletService {
     };
   }
 
+  /**
+   * Environment prefix for Google Wallet class ids (Phase 0.2).
+   *
+   * Local, preview and production share one issuer (D15) and one database
+   * (D13), so without this every environment resolves to the *same* live
+   * class. The prefix is computed at call time and is never persisted onto
+   * `PassTemplate.classSuffix` — that row is shared by all three
+   * environments, so a stored prefix would be wrong for two of them.
+   *
+   * Production deliberately resolves to an *empty* prefix so existing live
+   * classes (created before this change) keep their ids and already-issued
+   * passes keep working.
+   */
+  public getWalletEnvPrefix(): string {
+    const explicit = process.env.WALLET_ENV_PREFIX?.trim();
+    if (explicit) return explicit === 'none' ? '' : explicit;
+
+    const vercelEnv = process.env.VERCEL_ENV || process.env.NEXT_PUBLIC_VERCEL_ENV;
+    if (vercelEnv === 'production') return '';
+    if (vercelEnv === 'preview') return 'preview';
+    return 'dev';
+  }
+
+  /** `${issuerId}.${envPrefix}_${classSuffix}` — the only place class ids are built. */
+  public resolveClassId(issuerId: string, classSuffix?: string): string {
+    const prefix = this.getWalletEnvPrefix();
+    const suffix = classSuffix || 'linearcard_sandbox_class';
+    return `${issuerId}.${prefix ? `${prefix}_` : ''}${suffix}`;
+  }
+
+  /**
+   * Callback URL written into the class (ENV-2, ENV-4).
+   *
+   * Throws rather than PATCHing when the resolved URL is localhost: a local
+   * publish would otherwise repoint *production's* callbacks at a machine
+   * that isn't on the internet. Publishing locally requires an explicit
+   * public tunnel URL in `PUBLIC_CALLBACK_URL`.
+   */
+  public resolveCallbackUrl(): string {
+    const base = (
+      process.env.PUBLIC_CALLBACK_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      (process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL
+        ? `https://${process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL}`
+        : '') ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+    ).replace(/\/$/, '');
+
+    if (!base) {
+      throw new Error(
+        'Cannot resolve a Google Wallet callback URL. Set PUBLIC_CALLBACK_URL (a public https URL, e.g. an ngrok tunnel) before publishing.',
+      );
+    }
+    if (/localhost|127\.0\.0\.1/.test(base)) {
+      throw new Error(
+        `Refusing to publish a Google Wallet class with a localhost callback URL (${base}). ` +
+          'This would repoint live pass holders at a machine that is not on the internet. ' +
+          'Set PUBLIC_CALLBACK_URL to a public tunnel URL to publish from a local machine.',
+      );
+    }
+
+    const secret = process.env.WALLET_WEBHOOK_SECRET;
+    return `${base}/passes/webhooks/google-wallet${secret ? `/${secret}` : ''}`;
+  }
+
   public async createGenericClass(templateData: any) {
     const client = await this.getGoogleAuthClient();
     const { issuerId } = this.getCredentialsOrThrow();
-    const classId = `${issuerId}.${templateData.classSuffix || 'linearcard_sandbox_class'}`;
+    const classId = this.resolveClassId(issuerId, templateData.classSuffix);
 
     const cardRowTemplateInfos: any[] = [];
     if (templateData.rows && templateData.rows.length > 0) {
@@ -315,17 +380,8 @@ export class WalletService {
         }));
     }
 
-    // Fallback order:
-    // 1. Explicit NEXT_PUBLIC_API_URL (set statically for production)
-    // 2. VERCEL_URL (injected automatically in preview serverless environments)
-    // 3. Localhost (development)
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 
-      (process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL}` : 
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3001'));
-
-    classPayload.callbackOptions = {
-      url: `${apiUrl}/passes/webhooks/google-wallet`
-    };
+    // Throws on a localhost URL rather than poisoning a live class (ENV-4).
+    classPayload.callbackOptions = { url: this.resolveCallbackUrl() };
 
     const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass`;
 
@@ -533,7 +589,7 @@ export class WalletService {
 
     const objectSuffix = passId;
     const fullPassId = `${issuerId}.${objectSuffix}`;
-    const classId = `${issuerId}.${classSuffix}`;
+    const classId = this.resolveClassId(issuerId, classSuffix);
 
     const passData = {
       memberName,
@@ -691,6 +747,32 @@ export class WalletService {
       token,
       passData,
     };
+  }
+
+  /**
+   * Re-mints the `savetowallet` link for a pass that already exists in Google
+   * Wallet. Used when a returning member re-enrolls (AUTH-1): they get their
+   * existing pass back, not a new one with a reset balance.
+   */
+  public buildSaveLink(fullPassId: string, classSuffix?: string) {
+    const { issuerId, clientEmail, privateKey } = this.getCredentialsOrThrow();
+    const claims = {
+      iss: clientEmail,
+      aud: 'google',
+      typ: 'savetowallet',
+      iat: Math.floor(Date.now() / 1000),
+      origins: [],
+      payload: {
+        genericObjects: [
+          {
+            id: fullPassId.includes('.') ? fullPassId : `${issuerId}.${fullPassId}`,
+            classId: this.resolveClassId(issuerId, classSuffix),
+          },
+        ],
+      },
+    };
+    const token = jwt.sign(claims, privateKey, { algorithm: 'RS256' });
+    return { token, googleWalletUrl: `https://pay.google.com/gp/v/save/${token}` };
   }
 
   public async verifyMarketingConsent(memberId: string): Promise<void> {

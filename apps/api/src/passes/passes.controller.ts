@@ -187,8 +187,12 @@ export class PassesController {
     }
   }
 
+  // SEC-1: authenticated and tenant-scoped. This endpoint returns member
+  // name, phone, balance and tier — unauthenticated it was a cross-brand
+  // member enumeration API. Every lookup below is pinned to req.tenantId.
   @Post('validate-pass')
-  async postvalidatepass(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async postvalidatepass(@Req() req: TenantRequest, @Res() res: Response) {
     try {
       const { passId } = req.body;
       if (!passId) {
@@ -197,29 +201,25 @@ export class PassesController {
           .json({ success: false, error: 'passId is required' });
       }
 
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        return res
+          .status(403)
+          .json({ valid: false, error: 'No tenant context on this session' });
+      }
+
       let pass: any = null;
 
-      // 1. Phone number check (if passId is likely a phone number)
+      // 1. Phone number lookup — exact phone, this tenant only.
       if (/^\d{8,}$/.test(passId) || /^\+\d+$/.test(passId)) {
         const { data: phonePasses } = await this.supabaseService.client
           .from('Pass')
           .select('*, Member!inner(*), Tenant(name)')
-          .ilike('Member.phone', `%${passId}%`)
+          .eq('tenantId', tenantId)
+          .eq('Member.phone', passId)
           .order('createdAt', { ascending: false });
 
-        if (phonePasses && phonePasses.length > 0) {
-          const resolved = await this.tenantGuard.resolveTenant(req);
-          const staffTenantId = resolved?.tenantId || null;
-
-          // If a staff member is logged in, prioritize returning the pass for their tenant
-          if (staffTenantId) {
-            pass =
-              phonePasses.find((p: any) => p.tenantId === staffTenantId) ||
-              phonePasses[0];
-          } else {
-            pass = phonePasses[0];
-          }
-        }
+        pass = phonePasses?.[0] || null;
       }
 
       // 2. Exact match check using fullPassId
@@ -230,21 +230,23 @@ export class PassesController {
         const { data: exactPass } = await this.supabaseService.client
           .from('Pass')
           .select('*, Member!inner(*), Tenant(name)')
+          .eq('tenantId', tenantId)
           .eq('fullPassId', fullPassId)
-          .single();
+          .maybeSingle();
 
         pass = exactPass;
       }
 
-      // 3. Fallback suffix/partial match
+      // 3. Suffix match on the object id — still tenant-scoped.
       if (!pass) {
         const { data: fallbackPass } = await this.supabaseService.client
           .from('Pass')
           .select('*, Member!inner(*), Tenant(name)')
-          .ilike('fullPassId', `%${passId}%`)
+          .eq('tenantId', tenantId)
+          .ilike('fullPassId', `%.${passId}`)
           .order('createdAt', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
         pass = fallbackPass;
       }
 
@@ -421,18 +423,38 @@ export class PassesController {
     }
   }
 
+  // SEC-3: authenticated, and the class suffix comes from a template the
+  // caller's tenant owns — never from the request body, which let any caller
+  // overwrite any tenant's live class design.
   @Post('create-class')
-  async postcreateclass(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async postcreateclass(@Req() req: TenantRequest, @Res() res: Response) {
     try {
       const body = req.body;
+
+      const { data: template } = await this.supabaseService.client
+        .from('PassTemplate')
+        .select('*, tenant:Tenant(*)')
+        .eq('id', body.templateId)
+        .eq('tenantId', req.tenantId)
+        .maybeSingle();
+
+      if (!template) {
+        return res.status(404).json({
+          success: false,
+          error: 'templateId is required and must reference a template this tenant owns.',
+        });
+      }
 
       // Google Wallet strictly requires absolute URLs for images; convert relative paths
       body.logoUrl = resolveImageUrl(body.logoUrl);
       body.heroImageUrl = resolveImageUrl(body.heroImageUrl);
 
-      // In a real scenario, you'd parse `body` for background color, logo URL, etc.
-      // For now we just pass it to createGenericClass
-      const result = await this.walletService.createGenericClass(body);
+      const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+      const result = await tenantWallet.createGenericClass({
+        ...body,
+        classSuffix: template.classSuffix || template.tenant?.classSuffix,
+      });
 
       return res.status(200).json({ success: true, classData: result });
     } catch (error: any) {
@@ -822,11 +844,16 @@ export class PassesController {
     }
   }
 
-  // TODO: ECv2SigningOnly verification — signature verification against Google's public keys is
-  // deliberately deferred (user-approved). Do not implement here without re-confirming scope.
-  @Post('webhooks/google-wallet')
+  // TODO: ECv2SigningOnly verification — full JWS signature verification against Google's
+  // public keys lands in Phase 7.2. Until then the destructive `del` branch is gated behind
+  // the shared-secret path segment below (SEC-2): a forged `del` on the unsecreted route is
+  // ignored, so it can no longer soft-delete arbitrary passes.
+  @Post('webhooks/google-wallet/:secret?')
   async postGoogleWalletWebhook(@Req() req: Request, @Res() res: Response) {
     try {
+      const expectedSecret = process.env.WALLET_WEBHOOK_SECRET;
+      const secretOk =
+        !!expectedSecret && req.params?.['secret'] === expectedSecret;
       const raw = typeof req.body === 'string' ? req.body : req.body?.signedMessage;
       if (!raw) {
         return res.status(400).send('Missing signedMessage');
@@ -866,6 +893,12 @@ export class PassesController {
       }
 
       if (typeStr === 'del') {
+        if (!secretOk) {
+          console.warn(
+            `Ignoring unauthenticated 'del' callback for ${objectId}: missing/incorrect webhook secret.`,
+          );
+          return res.status(200).send('Ignored unauthenticated del');
+        }
         await this.supabaseService.client
           .from('Pass')
           .update({ deletedAt: new Date().toISOString() })

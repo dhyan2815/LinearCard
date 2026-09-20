@@ -119,10 +119,13 @@ export class AuthController {
           HttpStatus.UNAUTHORIZED,
         );
       }
-      if (!this.otpService.verifyOtp(otp, otpSession.otpHash)) {
+      const attempt = await this.otpService.verifyOtpAttempt(otp, otpSession);
+      if (!attempt.ok) {
         throw new HttpException(
-          'Incorrect code. Please try again.',
-          HttpStatus.UNAUTHORIZED,
+          attempt.locked
+            ? 'Too many incorrect attempts. Please request a new code.'
+            : 'Incorrect code. Please try again.',
+          attempt.locked ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED,
         );
       }
 
@@ -152,15 +155,21 @@ export class AuthController {
       if (tenantError || !tenant)
         throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
 
+      // AUTH-1/DB-3: upsert on (tenantId, phone). Inserting unconditionally
+      // gave a returning customer a duplicate member, a duplicate pass and a
+      // fresh 0 balance, orphaning their real one.
       const { data: member, error: memberError } =
         await this.supabaseService.client
           .from('Member')
-          .insert({
-            phone,
-            name: passData.memberName || phone,
-            tenantId: targetTenantId,
-            consentedAt: new Date().toISOString(),
-          })
+          .upsert(
+            {
+              phone,
+              name: passData.memberName || phone,
+              tenantId: targetTenantId,
+              consentedAt: new Date().toISOString(),
+            },
+            { onConflict: 'tenantId,phone' },
+          )
           .select()
           .single();
       if (memberError || !member)
@@ -183,6 +192,34 @@ export class AuthController {
       );
 
       const tenantWallet = await this.walletService.forTenant(targetTenantId);
+
+      // Already holds a live pass → hand back the same pass (and the same
+      // balance) instead of minting a second one.
+      const { data: existingPass } = await this.supabaseService.client
+        .from('Pass')
+        .select('*')
+        .eq('memberId', member.id)
+        .eq('tenantId', targetTenantId)
+        .is('deletedAt', null)
+        .order('createdAt', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingPass?.fullPassId) {
+        const { token, googleWalletUrl } = tenantWallet.buildSaveLink(
+          existingPass.fullPassId,
+          passDesign.classSuffix || tenant.classSuffix,
+        );
+        return {
+          success: true,
+          existing: true,
+          googleWalletUrl,
+          token,
+          passId: existingPass.id,
+          fullPassId: existingPass.fullPassId,
+        };
+      }
+
       const passResult = await tenantWallet.createGoogleWalletPass({
         ...passData,
         passId: explicitPassId,
@@ -332,10 +369,13 @@ export class AuthController {
         );
       }
 
-      if (!this.otpService.verifyOtp(otp, otpSession.otpHash)) {
+      const attempt = await this.otpService.verifyOtpAttempt(otp, otpSession);
+      if (!attempt.ok) {
         throw new HttpException(
-          'Invalid code. Please try again.',
-          HttpStatus.UNAUTHORIZED,
+          attempt.locked
+            ? 'Too many incorrect attempts. Please request a new code.'
+            : 'Invalid code. Please try again.',
+          attempt.locked ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED,
         );
       }
 

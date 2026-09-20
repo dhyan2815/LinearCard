@@ -20,6 +20,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "@ngrok/ngrok": "^1.7.0",
     "googleapis": "^180.0.0"
   }
 }

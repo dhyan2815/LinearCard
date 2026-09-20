@@ -94,8 +94,12 @@ describe('PassesController.postGoogleWalletWebhook', () => {
   });
 
   it('sets deletedAt and writes AuditLog on a del event, no WhatsApp', async () => {
+    process.env.WALLET_WEBHOOK_SECRET = 'sekret';
     await setup({ id: 'p1', tenantId: 't1', memberId: 'm1', fullPassId: 'obj1', Member: { phone: '+91' }, Tenant: {} });
-    const req: any = { body: { signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'del' }) } };
+    const req: any = {
+      params: { secret: 'sekret' },
+      body: { signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'del' }) },
+    };
     const res = mockRes();
 
     await controller.postGoogleWalletWebhook(req, res);
@@ -106,6 +110,22 @@ describe('PassesController.postGoogleWalletWebhook', () => {
     );
     expect(sendWalletSaveConfirmationMock).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
+    delete process.env.WALLET_WEBHOOK_SECRET;
+  });
+
+  // SEC-2 stopgap: an unsigned forged `del` must not soft-delete a pass.
+  it('ignores a del event without the shared-secret path segment', async () => {
+    process.env.WALLET_WEBHOOK_SECRET = 'sekret';
+    await setup({ id: 'p1', tenantId: 't1', memberId: 'm1', fullPassId: 'obj1', Member: { phone: '+91' }, Tenant: {} });
+    const req: any = { body: { signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'del' }) } };
+    const res = mockRes();
+
+    await controller.postGoogleWalletWebhook(req, res);
+
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(auditRecordMock).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    delete process.env.WALLET_WEBHOOK_SECRET;
   });
 
   it('clears deletedAt when a previously-removed pass is saved again', async () => {

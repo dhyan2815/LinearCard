@@ -1,4 +1,8 @@
 import { WalletService } from './wallet.service';
+
+// Phase 0.2: publishing a class refuses a localhost callback URL, and the
+// repo .env points at localhost. Give these tests a public one.
+process.env.PUBLIC_CALLBACK_URL = 'https://api.test.linearcard.example';
 import { encryptSecret, decryptSecret } from '../env';
 import * as crypto from 'crypto';
 import * as fs from 'fs';

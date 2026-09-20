@@ -23,9 +23,14 @@ async function fetchWithRetry(url: string, options: RequestInit, attempt = 1): P
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // Retry on timeout or network errors; don't retry on 4xx (client errors)
+    // Retry on timeout or network errors; don't retry on 4xx (client errors).
+    // FE-1: only for safe methods. A timed-out POST may well have been
+    // processed server-side, so retrying it could award points 3x. Real
+    // idempotency keys land in Phase 7.1.
+    const method = (options.method || 'GET').toUpperCase();
+    const isSafeMethod = method === 'GET' || method === 'HEAD';
     const isNetworkError = error instanceof TypeError || error?.name === 'AbortError';
-    if (isNetworkError && attempt < MAX_RETRIES) {
+    if (isSafeMethod && isNetworkError && attempt < MAX_RETRIES) {
       const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetry(url, options, attempt + 1);

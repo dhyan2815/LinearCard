@@ -17,6 +17,43 @@ export class OtpService {
     return timingSafeEqual(plainHash, stored);
   }
 
+  /** Wrong guesses allowed before an OTP session is burned (SEC-4). */
+  static readonly MAX_VERIFY_ATTEMPTS = 5;
+
+  /**
+   * Verifies an OTP against a session row and counts failures. Sending was
+   * rate-limited but verifying was not — 4 digits with unlimited guesses is
+   * brute-forceable in seconds. On the 5th wrong guess the session is
+   * consumed, so the caller must request a fresh code.
+   */
+  async verifyOtpAttempt(
+    plainOtp: string,
+    session: { id: string; otpHash: string; attempts?: number | null },
+  ): Promise<{ ok: boolean; locked: boolean }> {
+    const attempts = session.attempts ?? 0;
+    if (attempts >= OtpService.MAX_VERIFY_ATTEMPTS) {
+      return { ok: false, locked: true };
+    }
+
+    if (this.verifyOtp(plainOtp, session.otpHash)) {
+      return { ok: true, locked: false };
+    }
+
+    const next = attempts + 1;
+    const locked = next >= OtpService.MAX_VERIFY_ATTEMPTS;
+    await this.supabaseService.client
+      .from('OtpSession')
+      .update({
+        attempts: next,
+        // Burning the session is what actually stops the brute force; the
+        // counter alone would reset on the next lookup.
+        ...(locked ? { consumedAt: new Date().toISOString() } : {}),
+      })
+      .eq('id', session.id);
+
+    return { ok: false, locked };
+  }
+
   async isOtpRateLimited(phone: string, purpose: string): Promise<boolean> {
     const { data } = await this.supabaseService.client
       .from('OtpSession')
