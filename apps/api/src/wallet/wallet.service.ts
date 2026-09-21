@@ -535,14 +535,18 @@ export class WalletService {
       Array.isArray(templateData.storeLocations) &&
       templateData.storeLocations.length > 0
     ) {
-      classPayload.merchantLocations = templateData.storeLocations
+      const locations = templateData.storeLocations
         .slice(0, 10)
         .map(
           (l: { latitude: number | string; longitude: number | string }) => ({
+            kind: 'walletobjects#latLongPoint',
             latitude: Number(l.latitude),
             longitude: Number(l.longitude),
           }),
         );
+
+      classPayload.merchantLocations = locations;
+      classPayload.locations = locations; // Fallback for backwards compatibility if Google drops merchantLocations
     }
 
     // Throws on a localhost URL rather than poisoning a live class (ENV-4).
@@ -1158,6 +1162,7 @@ export class WalletService {
       orderId?: string;
       orderAmount: number;
     },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     tenantName: string = 'LinearCard',
     tier?: string,
     design?: {
@@ -1274,6 +1279,7 @@ export class WalletService {
     // injected singleton resolves the tenant's credentials here, which falls
     // back to env when the tenant has none configured — so behaviour is
     // unchanged for env-backed tenants.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let scoped: WalletService = this;
     if (!this.credentials) {
       try {

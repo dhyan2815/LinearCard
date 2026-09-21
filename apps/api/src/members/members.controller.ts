@@ -80,7 +80,7 @@ export class MembersController {
           HttpStatus.NOT_FOUND,
         );
 
-      let [{ data: passes }, { data: auditLog }, { data: consentLog }] =
+      const [passesResult, auditLogResult, consentLogResult] =
         await Promise.all([
           this.supabaseService.client
             .from('Pass')
@@ -99,6 +99,9 @@ export class MembersController {
             .eq('memberId', id)
             .order('consentedAt', { ascending: false }),
         ]);
+      let passes = passesResult.data;
+      const auditLog = auditLogResult.data;
+      const consentLog = consentLogResult.data;
 
       // Check Google Wallet synchronization
       if (passes && passes.length > 0) {
@@ -120,7 +123,7 @@ export class MembersController {
                 deletedPassesCount++;
                 continue;
               }
-            } catch (err) {
+            } catch {
               // Ignore errors and assume pass is active if wallet API fails
             }
           }

@@ -194,3 +194,34 @@ export interface PassTemplate {
   updatedAt?: string;
 }
 
+
+/**
+ * Phase 5.1 — a payment event after PSP-specific shape is normalized away.
+ * Deliberately narrow: no PAN, no VPA, no card token ever enters LinearCard.
+ */
+export interface NormalizedPayment {
+  /** E.164-ish: digits with an optional leading '+'. */
+  phone: string;
+  /** Minor unit (paise), so money never rides on a float. */
+  amountMinor: number;
+  currency: string;
+  merchantRef: string | null;
+  occurredAt: string;
+  /** Replay protection — unique per tenant. */
+  nonce: string;
+  /** Epoch ms; must be within the signing tolerance. */
+  timestamp: number;
+}
+
+export interface PaymentWebhookResult {
+  success: boolean;
+  /** True when this payment created the member's pass. */
+  enrolled: boolean;
+  memberId: string;
+  passId: string;
+  programId: string | null;
+  pointsAwarded: number;
+  newBalance: number;
+  tier: string;
+  tierChanged: boolean;
+}

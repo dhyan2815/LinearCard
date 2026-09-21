@@ -517,10 +517,29 @@ describe('createGenericClass — merchantLocations (geofencing)', () => {
 
     const payload = mockGoogleAuthClient.request.mock.calls[0][0].data;
     expect(payload.merchantLocations).toEqual([
-      { latitude: 19.076, longitude: 72.877 },
-      { latitude: 28.6139, longitude: 77.209 },
+      {
+        kind: 'walletobjects#latLongPoint',
+        latitude: 19.076,
+        longitude: 72.877,
+      },
+      {
+        kind: 'walletobjects#latLongPoint',
+        latitude: 28.6139,
+        longitude: 77.209,
+      },
     ]);
-    expect(payload.locations).toBeUndefined();
+    expect(payload.locations).toEqual([
+      {
+        kind: 'walletobjects#latLongPoint',
+        latitude: 19.076,
+        longitude: 72.877,
+      },
+      {
+        kind: 'walletobjects#latLongPoint',
+        latitude: 28.6139,
+        longitude: 77.209,
+      },
+    ]);
   });
 
   it('truncates to a max of 10 locations', async () => {

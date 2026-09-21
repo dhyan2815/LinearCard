@@ -12,14 +12,11 @@ import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
-import { WalletService } from '../wallet/wallet.service';
 import { NotifyService } from '../notification/notify.service';
-import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import { SendOtpRequest, VerifyOtpRequest } from '@linearcard/types';
 import { JWT_SECRET } from '../env';
-import { resolveImageUrl } from '../passes/passes.controller';
-import { WebhookService } from '../developers/webhook.service';
+import { PassIssuanceService } from '../passes/pass-issuance.service';
 
 @Controller('auth')
 export class AuthController {
@@ -27,9 +24,8 @@ export class AuthController {
     private readonly supabaseService: SupabaseService,
     private readonly otpService: OtpService,
     private readonly whatsappService: WhatsappService,
-    private readonly walletService: WalletService,
     private readonly notifyService: NotifyService,
-    private readonly webhookService: WebhookService,
+    private readonly passIssuanceService: PassIssuanceService,
   ) {}
 
   @Post('send-otp')
@@ -230,127 +226,20 @@ export class AuthController {
         programId,
       );
 
-      // The entry tier is the program's lowest configured tier, not a
-      // hardcoded 'Bronze' that may not exist in this program at all.
-      let entryTier: any = null;
-      if (targetProgram?.id) {
-        const { data } = await this.supabaseService.client
-          .from('Tier')
-          .select('*')
-          .eq('programId', targetProgram.id)
-          .order('minPoints', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        entryTier = data;
-      }
-
-      const startingTier = passData.tier || entryTier?.name || 'Bronze';
-      const startingBalance = passData.balance || '0 Pts';
-      const explicitPassId = crypto.randomUUID();
-
-      const passDesign = await this.walletService.resolveTenantPassDesign(
-        targetTenantId,
-        entryTier?.templateId,
-        targetProgram?.id,
-      );
-
-      const tenantWallet = await this.walletService.forTenant(targetTenantId);
-
-      // Already holds a live pass → hand back the same pass (and the same
-      // balance) instead of minting a second one.
-      // Scoped to the program (D8): holding a coffee pass must not block
-      // enrolling in the same tenant's gym program.
-      let existingQuery = this.supabaseService.client
-        .from('Pass')
-        .select('*')
-        .eq('memberId', member.id)
-        .eq('tenantId', targetTenantId)
-        .is('deletedAt', null);
-      if (targetProgram?.id)
-        existingQuery = existingQuery.eq('programId', targetProgram.id);
-      const { data: existingPass } = await existingQuery
-        .order('createdAt', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingPass?.fullPassId) {
-        const { token, googleWalletUrl } = tenantWallet.buildSaveLink(
-          existingPass.fullPassId,
-          passDesign.classSuffix || tenant.classSuffix,
-        );
-        return {
-          success: true,
-          existing: true,
-          googleWalletUrl,
-          token,
-          passId: existingPass.id,
-          fullPassId: existingPass.fullPassId,
-        };
-      }
-
-      const passResult = await tenantWallet.createGoogleWalletPass({
-        ...passData,
-        passId: explicitPassId,
-        tier: startingTier,
-        balance: startingBalance,
-        barcodeAltText: `${startingTier} Tier • ${startingBalance}`,
-        cardTitle: passDesign.cardTitle || tenant.name,
-        classSuffix: passDesign.classSuffix || tenant.classSuffix,
-        hexBackgroundColor: passDesign.hexBackgroundColor,
-        logoUrl: resolveImageUrl(passDesign.logoUrl),
-        heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),
+      // Phase 5 — issuance itself lives in PassIssuanceService, shared with
+      // payment-triggered enrollment (5.2).
+      const issued = await this.passIssuanceService.issueForMember({
+        tenantId: targetTenantId,
+        member,
+        program: targetProgram,
+        tenant,
+        passData,
       });
 
-      let passRecordId = null;
-      if (passResult.success && passResult.fullPassId) {
-        const { data: insertedPass, error: passError } =
-          await this.supabaseService.client
-            .from('Pass')
-            .insert({
-              id: explicitPassId,
-              memberId: member.id,
-              tenantId: targetTenantId,
-              programId: targetProgram?.id ?? null,
-              tierId: entryTier?.id ?? null,
-              fullPassId: passResult.fullPassId,
-              balance: 0,
-              tier: startingTier,
-            })
-            .select()
-            .single();
-        if (!passError && insertedPass) {
-          passRecordId = insertedPass.id;
-          this.webhookService
-            .dispatch(targetTenantId, 'member.enrolled', {
-              passId: passRecordId,
-              memberId: member.id,
-              phone,
-            })
-            .catch(() => {});
-        }
-      }
-
-      if (passResult.googleWalletUrl && passRecordId) {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ||
-          (process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
-            : 'http://localhost:3000');
-        const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
-        this.whatsappService
-          .sendPassLinkWithLog(
-            phone,
-            shortUrl,
-            passData.memberName || phone,
-            tenant.name,
-            { tenantId: targetTenantId, memberId: member.id },
-          )
-          .catch((err) =>
-            console.error('WhatsApp pass link failed (non-fatal):', err),
-          );
-      }
-
-      return { success: true, ...passResult };
+      const { existing, success, ...rest } = issued;
+      return existing
+        ? { success, existing: true, ...rest }
+        : { success, ...rest };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(

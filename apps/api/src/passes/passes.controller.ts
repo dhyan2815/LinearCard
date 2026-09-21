@@ -905,8 +905,7 @@ export class PassesController {
         return res.status(400).send('Invalid signedMessage JSON');
       }
 
-      const { classId, objectId, eventType, expTimeMillis, nonce } =
-        decoded || {};
+      const { classId, objectId, eventType, nonce } = decoded || {};
       const typeStr = (eventType || '').toLowerCase();
 
       if (!objectId) {

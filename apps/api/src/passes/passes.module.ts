@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PassesController } from './passes.controller';
+import { PassIssuanceService } from './pass-issuance.service';
 import { PController } from './p.controller';
 import { SupabaseModule } from '../supabase/supabase.module';
 import { NotificationModule } from '../notification/notification.module';
@@ -17,6 +18,7 @@ import { DevelopersModule } from '../developers/developers.module';
     DevelopersModule,
   ],
   controllers: [PassesController, PController],
-  providers: [TenantGuard],
+  providers: [TenantGuard, PassIssuanceService],
+  exports: [PassIssuanceService],
 })
 export class PassesModule {}

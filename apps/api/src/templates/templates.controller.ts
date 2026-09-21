@@ -182,40 +182,74 @@ export class TemplatesController {
   @UseGuards(TenantGuard)
   async createTemplate(@Body() body: any, @Req() req: TenantRequest) {
     try {
-      const insertPayload: Record<string, any> = {
+      let existingId = null;
+      const classSuffix = body.classSuffix;
+      if (classSuffix) {
+        // Find existing template by classSuffix to support upsert behavior
+        // if the UI accidentally lost its savedTemplateId state but meant to update.
+        const { data: existing } = await this.supabaseService.client
+          .from('PassTemplate')
+          .select('id')
+          .eq('classSuffix', classSuffix)
+          .eq('tenantId', req.tenantId)
+          .maybeSingle();
+        if (existing) {
+          existingId = existing.id;
+        }
+      }
+
+      const upsertPayload: Record<string, any> = {
         tenantId: req.tenantId,
         title: body.name || 'New Template',
         archetype: body.archetype || 'loyalty',
         subtitle: body.name || 'New Template',
         status: 'draft',
-        classSuffix: body.classSuffix,
+        classSuffix,
         // DB-5: a template belongs to a program. Nullable for templates
         // created by callers that predate Phase 3.
         programId: body.programId ?? null,
       };
 
       if (body.fieldRows !== undefined)
-        insertPayload.fieldRows = body.fieldRows;
+        upsertPayload.fieldRows = body.fieldRows;
       if (body.hexBackgroundColor !== undefined)
-        insertPayload.hexBackgroundColor = this.validateHexColor(
+        upsertPayload.hexBackgroundColor = this.validateHexColor(
           body.hexBackgroundColor,
         );
-      if (body.logoUrl !== undefined) insertPayload.logoUrl = body.logoUrl;
+      if (body.logoUrl !== undefined) upsertPayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
-        insertPayload.heroImageUrl = body.heroImageUrl;
+        upsertPayload.heroImageUrl = body.heroImageUrl;
 
       if (body.storeLocations !== undefined) {
         this.validateStoreLocations(body.storeLocations);
-        insertPayload.storeLocations = body.storeLocations;
+        upsertPayload.storeLocations = body.storeLocations;
       }
 
-      this.applyLoyaltyRules(body, insertPayload);
+      this.applyLoyaltyRules(body, upsertPayload);
 
-      const { data: template, error } = await this.supabaseService.client
-        .from('PassTemplate')
-        .insert(insertPayload)
-        .select()
-        .single();
+      let template;
+      let error;
+
+      if (existingId) {
+        // The user explicitly requested updating an existing template without sending the ID.
+        // Update the template rather than throwing a duplicate key constraint violation.
+        const { data, error: updateError } = await this.supabaseService.client
+          .from('PassTemplate')
+          .update(upsertPayload)
+          .eq('id', existingId)
+          .select()
+          .single();
+        template = data;
+        error = updateError;
+      } else {
+        const { data, error: insertError } = await this.supabaseService.client
+          .from('PassTemplate')
+          .insert(upsertPayload)
+          .select()
+          .single();
+        template = data;
+        error = insertError;
+      }
 
       if (error) throw error;
 

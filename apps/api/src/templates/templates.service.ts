@@ -102,7 +102,11 @@ export class TemplatesService {
     // geofences, which is exactly the failure Part 3 chased for weeks. Surface
     // it instead of leaving the admin to guess.
     const sentLocations = (template.storeLocations ?? []).length;
-    const liveLocations = (classData?.merchantLocations ?? []).length;
+    const liveLocations = (
+      classData?.merchantLocations ??
+      classData?.locations ??
+      []
+    ).length;
     let warning: string | undefined;
     if (sentLocations > 0 && liveLocations === 0) {
       warning =

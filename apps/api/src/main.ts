@@ -4,7 +4,9 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: the payment webhook (Phase 5.1) verifies an HMAC over the
+  // exact bytes received — a re-serialized JSON body would not match.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.use(cookieParser());
   app.enableCors({
     origin: (origin, callback) => {

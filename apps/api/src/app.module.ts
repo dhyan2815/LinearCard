@@ -3,6 +3,7 @@ import { CampaignsModule } from './campaigns/campaigns.module';
 import { SettingsModule } from './settings/settings.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PassesModule } from './passes/passes.module';
+import { PaymentsModule } from './payments/payments.module';
 import { MembersModule } from './members/members.module';
 import { TemplatesModule } from './templates/templates.module';
 import { ProgramsModule } from './programs/programs.module';
@@ -32,6 +33,7 @@ import { NotificationModule } from './notification/notification.module';
     NotificationsModule,
     CampaignsModule,
     DevelopersModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

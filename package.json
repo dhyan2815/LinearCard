@@ -15,6 +15,7 @@
     "lint": "turbo run lint"
   },
   "devDependencies": {
+    "@googleapis/walletobjects": "^18.0.0",
     "supabase": "^2.117.0",
     "turbo": "latest",
     "typescript": "^5.7.2"
