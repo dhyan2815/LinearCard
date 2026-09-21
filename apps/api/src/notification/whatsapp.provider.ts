@@ -44,31 +44,43 @@ export class WahaProvider implements WhatsappProvider {
     if (apiKey) headers['X-Api-Key'] = apiKey;
 
     const url = `${baseUrl.replace(/\/$/, '')}${endpoint}`;
+    const maxRetries = 2;
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ session, ...body }),
-      });
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ session, ...body }),
+        });
 
-      if (!res.ok) {
-        const detail = await res.text();
+        if (!res.ok) {
+          const detail = await res.text();
+          throw new ServiceError(
+            'WHATSAPP_SEND_FAILED',
+            `WhatsApp provider rejected the send (HTTP ${res.status}): ${detail.slice(0, 300)}`,
+          );
+        }
+
+        return await res.json();
+      } catch (error) {
+        if (error instanceof ServiceError) throw error;
+        // No HTTP status at all — the WAHA host is down, or (observed in prod) a
+        // Cloudflare edge IP for the WAHA hostname is unreachable from this network.
+        // A retry re-resolves DNS and usually lands on a working edge IP.
+        if (attempt < maxRetries) {
+          this.logger.warn(
+            `WAHA unreachable (attempt ${attempt + 1}/${maxRetries + 1}), retrying: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
         throw new ServiceError(
           'WHATSAPP_SEND_FAILED',
-          `WhatsApp provider rejected the send (HTTP ${res.status}): ${detail.slice(0, 300)}`,
+          `Could not reach the WhatsApp provider at ${baseUrl}: ${error instanceof Error ? error.message : String(error)}`,
+          error,
         );
       }
-
-      return await res.json();
-    } catch (error) {
-      if (error instanceof ServiceError) throw error;
-      // No HTTP status at all — the WAHA host is down or unreachable.
-      throw new ServiceError(
-        'WHATSAPP_SEND_FAILED',
-        `Could not reach the WhatsApp provider at ${baseUrl}: ${error instanceof Error ? error.message : String(error)}`,
-        error,
-      );
     }
   }
 }

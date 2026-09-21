@@ -2,6 +2,12 @@ const API_TIMEOUT = 15000; // 15s timeout (dev: backend may restart)
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000; // exponential: 1s, 2s, 4s
 
+/** crypto.randomUUID is unavailable on http:// origins in some browsers. */
+function newIdempotencyKey(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return uuid || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export class UnauthorizedError extends Error {
   constructor(message: string) {
     super(message);
@@ -25,10 +31,17 @@ async function fetchWithRetry(url: string, options: RequestInit, attempt = 1): P
 
     // Retry on timeout or network errors; don't retry on 4xx (client errors).
     // FE-1: only for safe methods. A timed-out POST may well have been
-    // processed server-side, so retrying it could award points 3x. Real
-    // idempotency keys land in Phase 7.1.
+    // processed server-side, so retrying it could award points 3x.
+    //
+    // Phase 7.1: a mutating request that carries an Idempotency-Key is safe
+    // to retry — the backend interceptor guarantees it executes at most
+    // once, and a replay returns the first response rather than repeating
+    // the work. That is what makes a timed-out `process-order` recoverable
+    // instead of simply lost.
     const method = (options.method || 'GET').toUpperCase();
-    const isSafeMethod = method === 'GET' || method === 'HEAD';
+    const headers = (options.headers || {}) as Record<string, string>;
+    const isSafeMethod =
+      method === 'GET' || method === 'HEAD' || !!headers['Idempotency-Key'];
     const isNetworkError = error instanceof TypeError || error?.name === 'AbortError';
     if (isSafeMethod && isNetworkError && attempt < MAX_RETRIES) {
       const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
@@ -75,11 +88,21 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
     }
   }
 
+  // Phase 7.1 — every mutating request gets an idempotency key unless the
+  // caller supplied its own. Generated per call rather than per retry: the
+  // whole point is that the retries of one logical request share a key.
+  const method = (options.method || 'GET').toUpperCase();
+  const needsKey = method !== 'GET' && method !== 'HEAD';
+  const suppliedHeaders = (options.headers || {}) as Record<string, string>;
+
   const fetchOptions: RequestInit = {
     cache: 'no-store',
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(needsKey && !suppliedHeaders['Idempotency-Key']
+        ? { 'Idempotency-Key': newIdempotencyKey() }
+        : {}),
       ...options.headers,
     },
   };

@@ -9,6 +9,22 @@ import { TenantGuard } from '../auth/tenant.guard';
 import { AuditService } from '../audit/audit.service';
 import { WebhookService } from '../developers/webhook.service';
 
+/**
+ * Phase 7.2 — the controller now verifies every callback against Google's
+ * root signing keys. The signature scheme itself is exercised against real
+ * generated EC keys in phase7.spec.ts; here it is stubbed so these tests
+ * stay about the controller's routing and side effects.
+ */
+jest.mock('../wallet/google-jws', () => ({
+  SignatureError: class SignatureError extends Error {},
+  verifyWalletCallback: jest.fn(async (envelope: any) => {
+    if (verificationFails) throw new Error('forged');
+    return JSON.parse(envelope.signedMessage);
+  }),
+}));
+
+let verificationFails = false;
+
 describe('PassesController.postGoogleWalletWebhook', () => {
   let controller: PassesController;
   let logNotificationMock: jest.Mock;
@@ -110,7 +126,6 @@ describe('PassesController.postGoogleWalletWebhook', () => {
   });
 
   it('sets deletedAt and writes AuditLog on a del event, no WhatsApp', async () => {
-    process.env.WALLET_WEBHOOK_SECRET = 'sekret';
     await setup({
       id: 'p1',
       tenantId: 't1',
@@ -120,7 +135,6 @@ describe('PassesController.postGoogleWalletWebhook', () => {
       Tenant: {},
     });
     const req: any = {
-      params: { secret: 'sekret' },
       body: {
         signedMessage: JSON.stringify({ objectId: 'obj1', eventType: 'del' }),
       },
@@ -141,12 +155,14 @@ describe('PassesController.postGoogleWalletWebhook', () => {
     );
     expect(sendWalletSaveConfirmationMock).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
-    delete process.env.WALLET_WEBHOOK_SECRET;
   });
 
-  // SEC-2 stopgap: an unsigned forged `del` must not soft-delete a pass.
-  it('ignores a del event without the shared-secret path segment', async () => {
-    process.env.WALLET_WEBHOOK_SECRET = 'sekret';
+  // SEC-2: a forged `del` must not soft-delete a pass. Phase 7.2 replaced
+  // the shared-secret gate with real signature verification, so an
+  // unverifiable callback is rejected before any branch runs.
+  it('rejects an unverified del event with 401 and touches nothing', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    verificationFails = true;
     await setup({
       id: 'p1',
       tenantId: 't1',
@@ -166,8 +182,9 @@ describe('PassesController.postGoogleWalletWebhook', () => {
 
     expect(updateMock).not.toHaveBeenCalled();
     expect(auditRecordMock).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(200);
-    delete process.env.WALLET_WEBHOOK_SECRET;
+    expect(res.status).toHaveBeenCalledWith(401);
+    verificationFails = false;
+    warnSpy.mockRestore();
   });
 
   it('clears deletedAt when a previously-removed pass is saved again', async () => {
@@ -217,9 +234,9 @@ describe('PassesController.postGoogleWalletWebhook', () => {
     warnSpy.mockRestore();
   });
 
-  it('returns non-200 for malformed JSON body', async () => {
+  it('returns 400 when the envelope carries no signedMessage at all', async () => {
     await setup({ id: 'p1' });
-    const req: any = { body: { signedMessage: 'not-json{' } };
+    const req: any = { body: {} };
     const res = mockRes();
 
     await controller.postGoogleWalletWebhook(req, res);

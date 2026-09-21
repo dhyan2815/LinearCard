@@ -40,7 +40,8 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ sent: number; failed: number } | null>(null);
+  // 7.4: a send is queued, not completed, by the time this request returns.
+  const [result, setResult] = useState<{ queued: number } | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -94,8 +95,11 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
         body: JSON.stringify({ tenantId, name, channel, header, body: message, audienceFilter }),
       });
       if (!data.success) throw new Error(data.error || 'Failed to send');
-      setResult({ sent: data.sent, failed: data.failed });
+      setResult({ queued: data.recipientCount ?? 0 });
       setMessage(''); setHeader(''); setName('');
+      // Delivery counts land on the campaign row as the worker gets through
+      // the audience, so the history below is what reports the outcome.
+      [2000, 6000, 15000].forEach(ms => setTimeout(loadCampaigns, ms));
     } catch (err: any) {
       setSendError(err.message);
     } finally {
@@ -175,7 +179,7 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
 
       <div className="flex flex-col gap-8">
         {/* 2.5 — dry run */}
-        <Card className="p-6">
+        <Card className="p-6 h-fit shrink-0">
           <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-4 flex items-center gap-2">
             <Smartphone className="w-4 h-4 text-ink-muted" strokeWidth={1.75} /> Preview Send
           </h3>
@@ -184,7 +188,7 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
             <div className="rounded-2xl bg-[#0b141a] p-4">
               <div className="max-w-[85%] ml-auto rounded-lg rounded-tr-none bg-[#005c4b] text-white text-sm px-3 py-2 shadow flex items-start gap-2">
                 <MessageCircle className="w-4 h-4 shrink-0 mt-0.5 opacity-70" />
-                <p className="whitespace-pre-wrap break-words">{message.trim() || 'Your message will appear here...'}</p>
+                <p className="whitespace-pre-wrap wrap-break-word">{message.trim() || 'Your message will appear here...'}</p>
               </div>
             </div>
           ) : (
@@ -212,7 +216,7 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
                   )}
                 </p>
                 {preview.sample.length > 0 && (
-                  <div className="rounded-xl border border-border-subtle bg-canvas divide-y divide-border-subtle/60">
+                  <div className="rounded-xl border border-border-subtle bg-canvas divide-y divide-border-subtle/60 max-h-64 overflow-y-auto">
                     {preview.sample.map(r => (
                       <div key={r.id} className="flex items-center justify-between px-3 py-2 text-xs">
                         <span className="text-ink-dark truncate">{r.name || r.phone}</span>
@@ -229,7 +233,7 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
               </>
             )}
             {result && (
-              <Alert variant="success">Sent to {result.sent} members.{result.failed > 0 ? ` ${result.failed} failed.` : ''}</Alert>
+              <Alert variant="success">Queued for {result.queued} members. Delivery progress appears in the history below.</Alert>
             )}
             {sendError && <Alert variant="error">{sendError}</Alert>}
             <Button

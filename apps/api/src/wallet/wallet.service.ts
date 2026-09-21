@@ -688,7 +688,46 @@ export class WalletService {
             : `${updateData.balance} Pts`
           : undefined;
 
-      if (genericObject.textModulesData) {
+      // WAL-6 / Phase 7.5: a resync used to push hexBackgroundColor and
+      // nothing else, so a renamed field row, a new logo or a new hero image
+      // never reached a pass that was already issued. `rows` rebuilds the
+      // field list from the template while preserving the *live* values —
+      // a design change must not reset anyone's balance or tier.
+      const liveValueFor = (fieldId: string): string | undefined => {
+        const existing = (genericObject.textModulesData || []).find(
+          (m: any) => m.id === fieldId,
+        );
+        return existing?.body;
+      };
+
+      if (Array.isArray(updateData.rows) && updateData.rows.length > 0) {
+        patchPayload.textModulesData = [];
+        updateData.rows.forEach((row: any) => {
+          (row.columns || []).forEach((col: any, idx: number) => {
+            const fieldId = col.key || `${row.id}_${idx}`;
+            const isLiveField =
+              TIER_FIELD_KEYS.includes(fieldId) ||
+              POINTS_FIELD_KEYS.includes(fieldId) ||
+              fieldId === MEMBER_NAME_FIELD_KEY ||
+              fieldId === MEMBER_ID_FIELD_KEY;
+
+            let body = isLiveField ? liveValueFor(fieldId) : col.body;
+            if (TIER_FIELD_KEYS.includes(fieldId) && updateData.tier)
+              body = updateData.tier;
+            if (
+              POINTS_FIELD_KEYS.includes(fieldId) &&
+              formattedBalance !== undefined
+            )
+              body = formattedBalance;
+
+            patchPayload.textModulesData.push({
+              id: fieldId,
+              header: col.header,
+              body: body ?? col.body ?? '',
+            });
+          });
+        });
+      } else if (genericObject.textModulesData) {
         patchPayload.textModulesData = [];
         genericObject.textModulesData.forEach((mod: any) => {
           let newBody = mod.body;
@@ -761,6 +800,18 @@ export class WalletService {
         patchPayload.hexBackgroundColor = updateData.hexBackgroundColor;
       }
 
+      // WAL-6 continued: logo and hero were already being *passed* by
+      // syncPassAfterTransaction's tier-design swap and by the resync route —
+      // they were silently dropped here. Both callers are fixed by honouring
+      // them once, rather than by touching each call site.
+      if (updateData.logoUrl) {
+        patchPayload.logo = { sourceUri: { uri: updateData.logoUrl } };
+      }
+      if (updateData.heroImageUrl) {
+        patchPayload.heroImage = {
+          sourceUri: { uri: updateData.heroImageUrl },
+        };
+      }
       if (updateData.pushNotification) {
         patchPayload.messages = [
           {
@@ -782,19 +833,74 @@ export class WalletService {
     }
   }
 
+  /**
+   * WAL-8 / Phase 7.7 — the `savetowallet` JWT used to be signed with
+   * `origins: []`, which tells Google "any page may present this link".
+   * Declaring the real origins is what lets Google reject a link lifted off
+   * one of our pages and replayed from somewhere else.
+   *
+   * Empty stays the fallback rather than a hard failure: an unconfigured
+   * deployment should still issue passes, and `origins: []` is exactly the
+   * behaviour it had before.
+   */
+  private saveLinkOrigins(): string[] {
+    const configured = process.env.WALLET_SAVE_ORIGINS;
+    const candidates = configured
+      ? configured.split(',')
+      : [
+          process.env.FRONTEND_URL,
+          process.env.NEXT_PUBLIC_BASE_URL,
+          process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
+        ];
+
+    const origins = new Set<string>();
+    for (const raw of candidates) {
+      const value = raw?.trim();
+      if (!value) continue;
+      try {
+        // Google wants a bare origin (scheme + host), not a full URL.
+        origins.add(new URL(value).origin);
+      } catch {
+        // Not parseable as a URL — skip rather than signing a claim that
+        // would make every save link fail validation.
+      }
+    }
+    return [...origins];
+  }
+
   public async createGoogleWalletPass(options: GoogleWalletPassOptions) {
     const {
       passId,
-      memberName = 'Dhyan Patel',
-      cardTitle = 'LinearCard Platinum',
-      balance = '1250 Pts',
-      tier = 'Platinum',
+      memberName,
+      cardTitle,
+      balance,
+      tier = 'Member',
       hexBackgroundColor = DEFAULT_PASS_HEX,
-      classSuffix = 'linearcard_sandbox_class',
+      classSuffix,
       logoUrl = '',
       heroImageUrl = '',
       rows = [],
     } = options;
+
+    // WAL-7 / Phase 7.7: these used to default to demo values — a caller
+    // that forgot `memberName` issued a real pass reading "Dhyan Patel",
+    // "LinearCard Platinum", "1250 Pts", and a caller that forgot
+    // `classSuffix` attached it to a shared sandbox class. A missing
+    // required value is a bug in the caller, and must surface as one.
+    const missing = [
+      !memberName && 'memberName',
+      !cardTitle && 'cardTitle',
+      balance === undefined || balance === null || balance === ''
+        ? 'balance'
+        : null,
+      !classSuffix && 'classSuffix',
+    ].filter(Boolean);
+    if (missing.length) {
+      throw new ServiceError(
+        'TEMPLATE_INVALID',
+        `Cannot issue a pass without ${missing.join(', ')}.`,
+      );
+    }
 
     const barcodeValue =
       options.barcodeValue || `https://linearcard.vercel.app/m/${passId}`;
@@ -948,7 +1054,7 @@ export class WalletService {
       aud: 'google',
       typ: 'savetowallet',
       iat: Math.floor(Date.now() / 1000),
-      origins: [],
+      origins: this.saveLinkOrigins(),
       payload: {
         genericObjects: [
           {
@@ -984,7 +1090,7 @@ export class WalletService {
       aud: 'google',
       typ: 'savetowallet',
       iat: Math.floor(Date.now() / 1000),
-      origins: [],
+      origins: this.saveLinkOrigins(),
       payload: {
         genericObjects: [
           {

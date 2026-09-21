@@ -3,6 +3,7 @@ import { TemplatesController } from './templates.controller';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
 import { TemplatesService } from './templates.service';
+
 import { TenantGuard } from '../auth/tenant.guard';
 
 describe('TemplatesController.updateTemplate', () => {

@@ -40,6 +40,91 @@ export class CampaignsService {
   ) {}
 
   /**
+   * Phase 7.4 — the body of a send, run by the worker rather than inside the
+   * HTTP request that created the campaign.
+   *
+   * The audience is resolved *here*, not at enqueue time: a send that is
+   * retried after a crash should go to the audience as it stands when it
+   * actually sends, and re-resolving is cheaper than storing a recipient
+   * list on the job.
+   */
+  async runCampaign(tenantId: string, campaignId: string) {
+    if (!campaignId) throw new Error('campaignId missing from job payload');
+
+    const { data: campaign } = await this.supabaseService.client
+      .from('Campaign')
+      .select('*')
+      .eq('id', campaignId)
+      .eq('tenantId', tenantId)
+      .maybeSingle();
+
+    if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
+    // A retry of a send that already finished must not send it again.
+    if (campaign.status === 'sent' || campaign.status === 'failed') {
+      return { skipped: true, status: campaign.status };
+    }
+
+    const audience = await this.resolveAudience(
+      tenantId,
+      campaign.audienceFilter || {},
+    );
+
+    const record = {
+      id: campaign.id,
+      tenantId,
+      channel: campaign.channel,
+      header: campaign.header,
+      body: campaign.body,
+    };
+
+    let sent = 0;
+    let failed = 0;
+    let status: 'sent' | 'failed' = 'sent';
+
+    try {
+      const broadcast =
+        campaign.channel === 'wallet_push' &&
+        (await this.tryClassBroadcast(
+          record,
+          audience,
+          campaign.audienceFilter || {},
+        ));
+
+      if (broadcast) {
+        sent = audience.members.length;
+      } else {
+        ({ sent, failed } = await this.dispatch(record, audience.members));
+      }
+      if (failed > 0 && sent === 0) status = 'failed';
+    } catch (err: any) {
+      // A whole-send collapse. Recorded on the campaign and rethrown so the
+      // job itself is marked failed and retried.
+      await this.supabaseService.client
+        .from('Campaign')
+        .update({
+          status: 'failed',
+          sentCount: sent,
+          failedCount: audience.members.length - sent,
+          sentAt: new Date().toISOString(),
+        })
+        .eq('id', campaign.id);
+      throw err;
+    }
+
+    await this.supabaseService.client
+      .from('Campaign')
+      .update({
+        status,
+        sentAt: new Date().toISOString(),
+        sentCount: sent,
+        failedCount: failed,
+      })
+      .eq('id', campaign.id);
+
+    return { sent, failed, status };
+  }
+
+  /**
    * Phase 2.2 — turns an AudienceFilter into the actual member list.
    *
    * Opt-out (2.4) is applied unconditionally and is not part of the filter:

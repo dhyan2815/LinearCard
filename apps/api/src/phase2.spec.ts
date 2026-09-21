@@ -74,6 +74,7 @@ const makeService = (tables: Record<string, any>, deps: any = {}) => {
       sendOfferMessage: jest.fn().mockResolvedValue(undefined),
       sendClassMessage: jest.fn().mockResolvedValue(undefined),
     },
+    deps.jobs || { register: jest.fn(), enqueue: jest.fn() },
   );
   return { service, supabase };
 };

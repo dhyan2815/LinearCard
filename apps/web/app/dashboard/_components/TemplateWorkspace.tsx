@@ -336,12 +336,14 @@ export function TemplateWorkspace({
         method: 'POST',
       });
       if (!data.success) throw new Error(data.error || 'Failed to resync passes');
+
+      // 7.4: the resync ran on the job queue previously, but is now synchronous
       return data;
     };
 
     toast.promise(resyncPromise(), {
       loading: 'Pushing design to existing passes...',
-      success: (data: any) => `Updated ${data.succeeded}/${data.total} existing passes.`,
+      success: (r: any) => `Updated ${r.succeeded}/${r.total} existing passes.`,
       error: (err: any) => err.message || 'Resync failed'
     });
   };

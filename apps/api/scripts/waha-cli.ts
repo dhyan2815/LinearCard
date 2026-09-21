@@ -38,7 +38,7 @@ const log = (msg: string) => console.log(`\n\x1b[36m[INFO]\x1b[0m ${msg}`);
 const err = (msg: string) => console.log(`\n\x1b[31m[ERROR]\x1b[0m ${msg}`);
 const success = (msg: string) => console.log(`\n\x1b[32m[SUCCESS]\x1b[0m ${msg}`);
 
-async function wahaRequest(method: string, endpoint: string, body?: any) {
+async function wahaRequest(method: string, endpoint: string, body?: any, retries = 2) {
   const headers: Record<string, string> = {
     'Accept': 'application/json',
     'Content-Type': 'application/json'
@@ -46,22 +46,32 @@ async function wahaRequest(method: string, endpoint: string, body?: any) {
   if (WAHA_API_KEY) headers['X-Api-Key'] = WAHA_API_KEY;
 
   const url = `${WAHA_BASE_URL.replace(/\/$/, '')}${endpoint}`;
-  try {
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`HTTP ${res.status}: ${text}`);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      return res.json();
+    } catch (error: any) {
+      // Cloudflare occasionally returns an edge IP that's unreachable from this network;
+      // a retry re-resolves DNS and usually lands on a working IP.
+      const isNetworkError = !!error.cause;
+      if (isNetworkError && attempt < retries) {
+        log(`Network error, retrying (${attempt + 1}/${retries})...`);
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      if (isNetworkError) {
+        throw new Error(`Network Error: ${error.cause.message || error.cause}`);
+      }
+      throw error;
     }
-    return res.json();
-  } catch (error: any) {
-    if (error.cause) {
-      throw new Error(`Network Error: ${error.cause.message || error.cause}`);
-    }
-    throw error;
   }
 }
 

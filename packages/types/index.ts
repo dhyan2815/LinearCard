@@ -61,6 +61,8 @@ export interface Member {
   isTestAccount?: boolean;
   /** Set when the member replies STOP. Every campaign send filters on it. */
   marketingOptOutAt?: string | null;
+  /** DPDP erasure tombstone (7.6). Set when the member's data was anonymised. */
+  erasedAt?: string | null;
 }
 
 /**

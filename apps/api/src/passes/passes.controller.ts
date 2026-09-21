@@ -16,6 +16,16 @@ import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { AuditService } from '../audit/audit.service';
 import { WebhookService } from '../developers/webhook.service';
 import { describeError } from '../errors';
+import { verifyWalletCallback } from '../wallet/google-jws';
+
+/** Parses a raw body string, returning undefined rather than throwing. */
+function safeJson(raw: string): any {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
 
 export function resolveImageUrl(url?: string): string | undefined {
   if (!url) return undefined;
@@ -905,29 +915,41 @@ export class PassesController {
     }
   }
 
-  // TODO: ECv2SigningOnly verification — full JWS signature verification against Google's
-  // public keys lands in Phase 7.2. Until then the destructive `del` branch is gated behind
-  // the shared-secret path segment below (SEC-2): a forged `del` on the unsecreted route is
-  // ignored, so it can no longer soft-delete arbitrary passes.
+  /**
+   * Phase 7.2 — the callback is now verified end to end against Google's
+   * published root signing keys (ECv2SigningOnly), replacing the Phase 0.3
+   * shared-secret stopgap. An unverifiable callback is rejected outright,
+   * so a forged `del` can no longer soft-delete a pass and a forged `save`
+   * can no longer fire WhatsApp at a real member (SEC-2).
+   *
+   * The `:secret?` segment is kept only so the URLs already published into
+   * live Google Wallet classes keep resolving; it no longer authorises
+   * anything.
+   */
   @Post('webhooks/google-wallet/:secret?')
   async postGoogleWalletWebhook(@Req() req: Request, @Res() res: Response) {
     try {
-      const expectedSecret = process.env.WALLET_WEBHOOK_SECRET;
-      const secretOk =
-        !!expectedSecret && req.params?.['secret'] === expectedSecret;
-      const raw =
-        typeof req.body === 'string' ? req.body : req.body?.signedMessage;
+      const envelope =
+        typeof req.body === 'string' ? safeJson(req.body) : req.body;
+      const raw = envelope?.signedMessage;
       if (!raw) {
         return res.status(400).send('Missing signedMessage');
       }
 
-      // Google sends `signedMessage` as a JSON string (not a JWT). Malformed JSON is the only
-      // case that should return non-200 — everything else must 200 so Google stops retrying.
       let decoded: any;
       try {
-        decoded = JSON.parse(raw);
-      } catch {
-        return res.status(400).send('Invalid signedMessage JSON');
+        decoded = await verifyWalletCallback(
+          envelope,
+          process.env.ISSUER_ID || process.env.GOOGLE_ISSUER_ID || '',
+        );
+      } catch (sigErr: any) {
+        // 401, deliberately — a rejected callback is not something Google
+        // should retry, and a 200 here would hide a forgery attempt behind
+        // a success in the logs.
+        console.warn(
+          `Rejected unverified Google Wallet callback: ${sigErr.message}`,
+        );
+        return res.status(401).send('Signature verification failed');
       }
 
       const { classId, objectId, eventType, nonce } = decoded || {};
@@ -955,12 +977,7 @@ export class PassesController {
       }
 
       if (typeStr === 'del') {
-        if (!secretOk) {
-          console.warn(
-            `Ignoring unauthenticated 'del' callback for ${objectId}: missing/incorrect webhook secret.`,
-          );
-          return res.status(200).send('Ignored unauthenticated del');
-        }
+        // No secret gate any more: the signature above is the authorisation.
         await this.supabaseService.client
           .from('Pass')
           .update({ deletedAt: new Date().toISOString() })

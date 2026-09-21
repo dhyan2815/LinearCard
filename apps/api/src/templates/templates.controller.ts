@@ -16,8 +16,6 @@ import { WalletService } from '../wallet/wallet.service';
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { TemplatesService } from './templates.service';
 
-const RESYNC_BATCH_SIZE = 10;
-
 @Controller('templates')
 export class TemplatesController {
   constructor(
@@ -523,62 +521,34 @@ export class TemplatesController {
   }
 
   /**
-   * Pushes the template's current design (currently: colour) onto every
-   * already-issued, non-deleted Pass of the calling tenant. A colour fix on
-   * the template only reaches passes issued *after* the fix unless this is
-   * run — this patches the ones issued before it.
+   * Pushes the template's current design — colour, logo, hero image and
+   * field rows — onto every already-issued, non-deleted Pass of the calling
+   * tenant. A design fix on the template only reaches passes issued *after*
+   * the fix unless this is run; this patches the ones issued before it.
+   *
+   * Phase 7.4: queued rather than run inline. A tenant with thousands of
+   * passes is minutes of Google Wallet calls, and a browser that gave up
+   * waiting used to leave the resync half-applied with nobody tracking it.
+   * Poll `GET /campaigns/jobs/:jobId`-style progress via the returned job.
    */
   @Post(':id/resync-passes')
   @UseGuards(TenantGuard)
   async resyncPasses(@Param('id') id: string, @Req() req: TenantRequest) {
     try {
-      const { data: template, error: fetchError } =
-        await this.supabaseService.client
-          .from('PassTemplate')
-          .select('*')
-          .eq('id', id)
-          .eq('tenantId', req.tenantId)
-          .single();
-      if (fetchError || !template)
+      const { data: template } = await this.supabaseService.client
+        .from('PassTemplate')
+        .select('id')
+        .eq('id', id)
+        .eq('tenantId', req.tenantId)
+        .maybeSingle();
+      if (!template)
         throw new HttpException(
           { success: false, error: 'Template not found' },
           HttpStatus.NOT_FOUND,
         );
 
-      const { data: passes, error: passesError } =
-        await this.supabaseService.client
-          .from('Pass')
-          .select('id, fullPassId')
-          .eq('tenantId', req.tenantId)
-          .is('deletedAt', null);
-      if (passesError) throw passesError;
-
-      const tenantWallet = await this.walletService.forTenant(req.tenantId!);
-      // Batched, not an unbounded fan-out: a tenant with thousands of passes
-      // would otherwise open thousands of concurrent Google Wallet requests.
-      // ponytail: fixed chunk size, no queue — move to a job queue if resync
-      // ever needs to survive a process restart.
-      const all = passes || [];
-      let succeeded = 0;
-      let failed = 0;
-      for (let i = 0; i < all.length; i += RESYNC_BATCH_SIZE) {
-        const results = await Promise.allSettled(
-          all.slice(i, i + RESYNC_BATCH_SIZE).map((p: any) =>
-            tenantWallet.updateGenericObject(p.fullPassId, {
-              hexBackgroundColor: template.hexBackgroundColor,
-            }),
-          ),
-        );
-        succeeded += results.filter((r) => r.status === 'fulfilled').length;
-        failed += results.filter((r) => r.status === 'rejected').length;
-      }
-
-      return {
-        success: true,
-        total: all.length,
-        succeeded,
-        failed,
-      };
+      const result = await this.templatesService.resyncPasses(req.tenantId!, id);
+      return { success: true, queued: false, ...result };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(

@@ -472,7 +472,15 @@ describe('createGenericClass — stable field keys', () => {
     process.env.GOOGLE_CLIENT_EMAIL = 'test@example.com';
     process.env.GOOGLE_PRIVATE_KEY = privateKey.replace(/\n/g, '\\n');
 
-    await service.createGoogleWalletPass({ passId: 'pass1', rows });
+    // Phase 7.7 — identity fields are required now; no demo defaults.
+    await service.createGoogleWalletPass({
+      passId: 'pass1',
+      rows,
+      memberName: 'Asha',
+      cardTitle: 'Bean House',
+      balance: '0 Pts',
+      classSuffix: 'beanhouse_coffee_standard',
+    });
 
     const objectIds =
       objectClient.request.mock.calls[0][0].data.textModulesData.map(

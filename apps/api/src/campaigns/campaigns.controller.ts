@@ -90,13 +90,23 @@ export class CampaignsController {
     };
   }
 
-  /** Create and send immediately (D10 — send-now only, no scheduling). */
+  /**
+   * Create and send immediately (D10 — send-now only, no scheduling).
+   *
+   * Phase 7.4: the send itself now runs on the job queue. The request
+   * returns as soon as the campaign row and its job exist, so a large
+   * audience no longer holds an HTTP connection open for minutes, and a
+   * deploy mid-send resumes instead of losing every unreached recipient.
+   * Progress is read back from `GET /campaigns/:id`.
+   */
   @Post()
   async send(@Req() req: TenantRequest, @Body() body: CampaignBody) {
     const tenantId = req.tenantId!;
     const { channel, header, text } = this.validate(body);
     const filter = body.audienceFilter || {};
 
+    // Resolved once up front purely to report the recipient count back to
+    // the admin who pressed Send. The worker re-resolves at send time.
     const audience = await this.campaignsService.resolveAudience(
       tenantId,
       filter,
@@ -128,56 +138,16 @@ export class CampaignsController {
       );
     }
 
-    const record = {
-      id: campaign.id,
-      tenantId,
-      channel,
-      header,
-      body: text,
+    const { sent, failed } = await this.campaignsService.runCampaign(tenantId, campaign.id);
+
+    return {
+      success: true,
+      campaign,
+      queued: false,
+      recipientCount: audience.members.length,
+      sent: sent || 0,
+      failed: failed || 0,
     };
-
-    let sent = 0;
-    let failed = 0;
-    let status: 'sent' | 'failed' = 'sent';
-
-    try {
-      const broadcast =
-        channel === 'wallet_push' &&
-        (await this.campaignsService.tryClassBroadcast(
-          record,
-          audience,
-          filter,
-        ));
-
-      if (broadcast) {
-        sent = audience.members.length;
-      } else {
-        ({ sent, failed } = await this.campaignsService.dispatch(
-          record,
-          audience.members,
-        ));
-      }
-      if (failed > 0 && sent === 0) status = 'failed';
-    } catch {
-      // The per-recipient path logs its own failures; this only catches a
-      // whole-send collapse (e.g. a class broadcast throwing).
-      status = 'failed';
-      failed = audience.members.length - sent;
-    }
-
-    const { data: updated } = await this.supabaseService.client
-      .from('Campaign')
-      .update({
-        status,
-        sentAt: new Date().toISOString(),
-        sentCount: sent,
-        failedCount: failed,
-      })
-      .eq('id', campaign.id)
-      .select()
-      .single();
-
-    return { success: true, campaign: updated || campaign, sent, failed };
   }
 
   @Get()

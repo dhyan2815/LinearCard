@@ -11,8 +11,10 @@ import { TenantModule } from './tenant/tenant.module';
 import { AuthModule } from './auth/auth.module';
 import { DevelopersModule } from './developers/developers.module';
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { IdempotencyInterceptor } from './idempotency.interceptor';
 import { SupabaseModule } from './supabase/supabase.module';
 import { WalletModule } from './wallet/wallet.module';
 import { NotificationModule } from './notification/notification.module';
@@ -36,6 +38,12 @@ import { NotificationModule } from './notification/notification.module';
     PaymentsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Phase 7.1 — global rather than per-route: "all mutating endpoints" is
+    // the requirement, and an allowlist is a list someone forgets to add the
+    // next endpoint to. Requests without an Idempotency-Key are untouched.
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+  ],
 })
 export class AppModule {}

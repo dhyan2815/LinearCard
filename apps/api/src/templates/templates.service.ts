@@ -1,6 +1,14 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
+
+/** How many passes are pushed to Google Wallet concurrently. */
+const RESYNC_BATCH_SIZE = 10;
 
 /**
  * Publishing a template is the one piece of template logic with a second
@@ -17,6 +25,75 @@ export class TemplatesService {
     private readonly supabaseService: SupabaseService,
     private readonly walletService: WalletService,
   ) {}
+
+  /**
+   * Phase 7.5 — pushes a template's full current design onto every
+   * already-issued, non-deleted pass of the tenant: colour, logo, hero image
+   * and field rows. Before this only `hexBackgroundColor` was pushed
+   * (WAL-6), so a renamed field or a new logo never reached an issued pass.
+   *
+   * Phase 7.4 — run from the job queue: a tenant with thousands of passes
+   * takes minutes of Google Wallet calls, which is not an HTTP request.
+   */
+  async resyncPasses(tenantId: string, templateId: string) {
+    if (!templateId) throw new Error('templateId missing from job payload');
+
+    const { data: template, error } = await this.supabaseService.client
+      .from('PassTemplate')
+      .select('*')
+      .eq('id', templateId)
+      .eq('tenantId', tenantId)
+      .single();
+    if (error || !template) {
+      throw new HttpException(
+        { success: false, error: 'Template not found' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const { data: passes, error: passesError } =
+      await this.supabaseService.client
+        .from('Pass')
+        .select('id, fullPassId')
+        .eq('tenantId', tenantId)
+        .is('deletedAt', null);
+    if (passesError) throw passesError;
+
+    const tenantWallet = await this.walletService.forTenant(tenantId);
+    const all = passes || [];
+    let succeeded = 0;
+    let failed = 0;
+
+    const t = Date.now();
+    const bust = (url?: string) => {
+      const r = TemplatesService.resolveImageUrl(url);
+      if (!r) return undefined;
+      return r.includes('?') ? `${r}&t=${t}` : `${r}?t=${t}`;
+    };
+
+    // Batched, not an unbounded fan-out: a tenant with thousands of passes
+    // would otherwise open thousands of concurrent Google Wallet requests.
+    for (let i = 0; i < all.length; i += RESYNC_BATCH_SIZE) {
+      const results = await Promise.allSettled(
+        all.slice(i, i + RESYNC_BATCH_SIZE).map((p: any) =>
+          // Live values (balance, tier, member name) are preserved inside
+          // updateGenericObject; only presentation is overwritten.
+          tenantWallet.updateGenericObject(p.fullPassId, {
+            hexBackgroundColor: template.hexBackgroundColor,
+            logoUrl: bust(template.logoUrl),
+            heroImageUrl: bust(template.heroImageUrl),
+            rows: template.fieldRows,
+            // Force a silent push notification so the phone wakes up and syncs immediately
+            pushNotification: 'Pass design updated',
+          }),
+        ),
+      );
+      succeeded += results.filter((r) => r.status === 'fulfilled').length;
+      failed += results.filter((r) => r.status === 'rejected').length;
+    }
+
+    return { total: all.length, succeeded, failed };
+  }
 
   /** Localhost/relative image URLs are unusable by Google Wallet. */
   static resolveImageUrl(url?: string): string | undefined {
