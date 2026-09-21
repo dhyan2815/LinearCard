@@ -21,7 +21,8 @@ describe('MembersController.getMembers', () => {
     capturedEqArgs = [];
     capturedOrArgs = [];
     rangeMock = jest.fn().mockResolvedValue(result);
-    orderMock = jest.fn().mockReturnValue({ range: rangeMock });
+    // Two .order() calls now (name, then createdAt) before .range().
+    orderMock = jest.fn(() => ({ order: orderMock, range: rangeMock }));
     orMock = jest.fn().mockImplementation((arg: any) => {
       capturedOrArgs.push(arg);
       return { order: orderMock };
@@ -66,6 +67,9 @@ describe('MembersController.getMembers', () => {
     expect(res).toEqual({
       success: true,
       members: [{ id: 'm1', tenantId: 'tenant-A' }],
+      total: 0,
+      limit: 50,
+      offset: 0,
     });
   });
 

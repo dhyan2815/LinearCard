@@ -134,7 +134,8 @@ describe('WalletService.sendPromoMessageWithAudit', () => {
     expect(mockNotifyService.logNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'failed',
-        errorReason: 'Google Wallet addMessage failed',
+        // Phase 6.2: a stable code plus a cause, not a bare HTTP message.
+        errorReason: expect.stringContaining('WALLET_UNAVAILABLE:'),
       }),
     );
   });

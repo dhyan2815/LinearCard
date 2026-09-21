@@ -116,6 +116,46 @@ export class TemplatesController {
   }
 
   /**
+   * Phase 6.2 — fail fast on a field layout Google cannot render (the
+   * Passmint field-count pattern, Part 4).
+   *
+   * `createGenericClass` builds `cardRowTemplateInfos` with a oneItem /
+   * twoItems / threeItems branch and no `else`: a row with four columns
+   * matched nothing and vanished from the published class without a word,
+   * and Google caps the card at three rows. A 400 here is the difference
+   * between "that field is invalid" and "my field silently disappeared".
+   */
+  private validateFieldRows(value: any): void {
+    const bad = (message: string): never => {
+      throw new HttpException(
+        { success: false, error: message, message },
+        HttpStatus.BAD_REQUEST,
+      );
+    };
+
+    if (!Array.isArray(value)) bad('fieldRows must be an array');
+    if (value.length > 3) bad('fieldRows must contain at most 3 rows');
+
+    const seenKeys = new Set<string>();
+    for (const row of value) {
+      const columns = row?.columns;
+      if (!Array.isArray(columns))
+        bad('each field row must have a columns array');
+      if (columns.length < 1 || columns.length > 3)
+        bad('each field row must have between 1 and 3 columns');
+      for (const col of columns) {
+        const key = col?.key;
+        if (key === undefined || key === null || key === '') continue;
+        if (typeof key !== 'string') bad('a field key must be a string');
+        // The key is the stable binding to the live pass (WAL-1). Two
+        // columns sharing one key means one of them never updates.
+        if (seenKeys.has(key)) bad(`duplicate field key '${key}'`);
+        seenKeys.add(key);
+      }
+    }
+  }
+
+  /**
    * Validates a storeLocations payload (max 10 pins, lat/lng in range),
    * throwing an HttpException with the same shape/message used across
    * createTemplate and updateTemplate.
@@ -210,8 +250,10 @@ export class TemplatesController {
         programId: body.programId ?? null,
       };
 
-      if (body.fieldRows !== undefined)
+      if (body.fieldRows !== undefined) {
+        this.validateFieldRows(body.fieldRows);
         upsertPayload.fieldRows = body.fieldRows;
+      }
       if (body.hexBackgroundColor !== undefined)
         upsertPayload.hexBackgroundColor = this.validateHexColor(
           body.hexBackgroundColor,
@@ -564,8 +606,10 @@ export class TemplatesController {
         updatePayload.programId = body.programId;
       if (body.archetype !== undefined)
         updatePayload.archetype = body.archetype;
-      if (body.fieldRows !== undefined)
+      if (body.fieldRows !== undefined) {
+        this.validateFieldRows(body.fieldRows);
         updatePayload.fieldRows = body.fieldRows;
+      }
       if (body.hexBackgroundColor !== undefined)
         updatePayload.hexBackgroundColor = this.validateHexColor(
           body.hexBackgroundColor,

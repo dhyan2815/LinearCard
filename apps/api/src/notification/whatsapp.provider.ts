@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { ServiceError } from '../errors';
 
 /**
  * The one seam every WhatsApp call goes through (D6 — the provider is fluid:
@@ -53,17 +54,21 @@ export class WahaProvider implements WhatsappProvider {
 
       if (!res.ok) {
         const detail = await res.text();
-        this.logger.error(`Waha error ${res.status}: ${detail}`);
-        throw new Error(`Waha error ${res.status}: ${detail}`);
+        throw new ServiceError(
+          'WHATSAPP_SEND_FAILED',
+          `WhatsApp provider rejected the send (HTTP ${res.status}): ${detail.slice(0, 300)}`,
+        );
       }
 
       return await res.json();
     } catch (error) {
-      this.logger.error(
-        `Failed to send WhatsApp message to ${endpoint}:`,
+      if (error instanceof ServiceError) throw error;
+      // No HTTP status at all — the WAHA host is down or unreachable.
+      throw new ServiceError(
+        'WHATSAPP_SEND_FAILED',
+        `Could not reach the WhatsApp provider at ${baseUrl}: ${error instanceof Error ? error.message : String(error)}`,
         error,
       );
-      throw error;
     }
   }
 }

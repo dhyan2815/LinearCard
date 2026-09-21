@@ -99,7 +99,6 @@ export class TenantController {
   @UseGuards(TenantGuard)
   async getTenants() {
     try {
-      console.log('[TenantController] getTenants() called');
       const { data: tenants, error } = await this.supabaseService.client
         .from('Tenant')
         .select(
@@ -108,17 +107,11 @@ export class TenantController {
         .order('name', { ascending: true });
 
       if (error) {
-        console.log('[TenantController] Supabase query error:', error.message);
         throw new Error(`DB Error: ${error.message}`);
       }
-      console.log(
-        '[TenantController] Tenants fetched successfully, count:',
-        tenants?.length || 0,
-      );
       return { success: true, tenants };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.log('[TenantController] Exception in getTenants:', errMsg);
       throw new HttpException(
         { success: false, error: 'Failed to fetch tenants', details: errMsg },
         HttpStatus.INTERNAL_SERVER_ERROR,

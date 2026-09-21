@@ -9,6 +9,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { apiClient } from '@/lib/api-client';
 import { Alert } from '@/components/ui/Alert';
 
+const LOG_PAGE_SIZE = 20;
+
 function formatTimeAgo(dateString: string) {
   const date = new Date(dateString);
   const now = new Date();
@@ -34,21 +36,29 @@ export function LiveActivityView({
   selectPassForManage
 }: any) {
   const [logs, setLogs] = useState<any[]>([]);
+  const [logTotal, setLogTotal] = useState(0);
   const [logFetchError, setLogFetchError] = useState<string | null>(null);
-  
-  useEffect(() => {
+
+  // Phase 6.1 (FE-3) - the ledger loads a page at a time and says how many
+  // more there are, instead of one fixed slab with no way past it.
+  const loadLogs = React.useCallback((offset: number) => {
     if (!tenantId) return;
     setLogFetchError(null);
-    apiClient(`/notifications/log?tenantId=${tenantId}&limit=20&_t=${Date.now()}`)
-      .then(d => { 
-        if (d.success) setLogs(d.logs); 
-        else setLogFetchError(d.error || 'Unknown API error');
+    apiClient(`/notifications/log?tenantId=${tenantId}&limit=${LOG_PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`)
+      .then(d => {
+        if (!d.success) {
+          setLogFetchError(d.error || 'Unknown API error');
+          return;
+        }
+        setLogs(prev => (offset === 0 ? d.logs : [...prev, ...d.logs]));
+        setLogTotal(d.total ?? d.logs.length);
       })
       .catch(err => {
-        console.error('Error fetching logs:', err);
         setLogFetchError(err.message || String(err));
       });
-  }, [tenantId, successMsg]);
+  }, [tenantId]);
+
+  useEffect(() => { loadLogs(0); }, [loadLogs, successMsg]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -196,6 +206,16 @@ export function LiveActivityView({
                 </div>
               </div>
             ))}
+            {logs.length < logTotal && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full text-xs"
+                onClick={() => loadLogs(logs.length)}
+              >
+                Load more ({logTotal - logs.length} older)
+              </Button>
+            )}
           </div>
         </Card>
     </div>

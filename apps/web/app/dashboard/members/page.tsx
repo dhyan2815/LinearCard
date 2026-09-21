@@ -16,17 +16,15 @@ import { toast } from 'sonner';
 
 const PAGE_SIZE = 20;
 
-type SortKey = 'name' | 'balance';
-
 export default function MembersPage() {
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
+  const [total, setTotal] = useState(0);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -56,79 +54,80 @@ export default function MembersPage() {
     }
   };
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortKey(key);
-      setSortDir('asc');
-    }
-    setPage(1);
-  };
+  // Phase 6.1 (FE-3) - the server pages, searches and sorts. This page used
+  // to fetch one slab (the API's default 50) and slice it locally, so a
+  // tenant with 51 members had a member the dashboard could never show.
+  useEffect(() => {
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      offset: String((page - 1) * PAGE_SIZE),
+      dir: sortDir,
+    });
+    if (search.trim()) params.set('q', search.trim());
+    if (selectedTenantId !== 'all') params.set('tenantId', selectedTenantId);
+
+    setLoading(true);
+    let cancelled = false;
+    // Debounced, so typing in the search box is one request and not one per key.
+    const timer = setTimeout(() => {
+      apiClient(`/members?${params}`)
+        .then(data => {
+          if (cancelled) return;
+          if (data.success) {
+            setMembers(data.members || []);
+            setTotal(data.total ?? (data.members || []).length);
+            setError(null);
+          } else {
+            setError(data.error || 'Failed to load members');
+          }
+          setLoading(false);
+        })
+        .catch((err: any) => {
+          if (cancelled) return;
+          setError(err.message || 'Failed to load members');
+          setLoading(false);
+        });
+    }, 250);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [page, sortDir, search, selectedTenantId]);
 
   useEffect(() => {
-    // Fetch members
-    apiClient('/members')
-      .then(data => {
-        if (data.success) {
-          setMembers(data.members || []);
-        } else {
-          setError(data.error || 'Failed to load members');
-        }
-        setLoading(false);
-      })
-      .catch((err: any) => {
-        setError(err.message || 'Failed to load members');
-        setLoading(false);
-      });
-
-    // Fetch tenants
     apiClient('/tenant/tenants')
       .then(data => {
         if (data.success && data.tenants) {
           setTenants(data.tenants);
         }
-      });
+      })
+      .catch(() => {});
   }, []);
 
-  const filteredMembers = members.filter(m => {
-    const matchesSearch = m.phone?.includes(search) || (m.name && m.name.toLowerCase().includes(search.toLowerCase()));
-    const matchesTenant = selectedTenantId === 'all' || m.tenantId === selectedTenantId;
-    return matchesSearch && matchesTenant;
-  });
-
-  const flatMembers = filteredMembers.flatMap(member => {
+  // One row per pass, so a member holding two passes shows both. The
+  // expansion happens after paging, so a page can render slightly more rows
+  // than PAGE_SIZE - the count below reports members, which is what pages.
+  const pagedMembers = members.flatMap(member => {
     if (!member.passes || member.passes.length === 0) {
       return [{ ...member, pass: null }];
     }
     return member.passes.map((pass: any) => ({ ...member, pass }));
   });
 
-  const sortedMembers = [...flatMembers].sort((a, b) => {
-    const dir = sortDir === 'asc' ? 1 : -1;
-    if (sortKey === 'balance') {
-      return ((Number(a.pass?.balance) || 0) - (Number(b.pass?.balance) || 0)) * dir;
-    }
-    return (a.name || '').localeCompare(b.name || '') * dir;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(sortedMembers.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pagedMembers = sortedMembers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const SortHeader = ({ label, sortField }: { label: string; sortField: SortKey }) => (
+  const SortHeader = ({ label }: { label: string }) => (
     <button
       type="button"
-      onClick={() => toggleSort(sortField)}
+      onClick={() => { setSortDir(d => (d === 'asc' ? 'desc' : 'asc')); setPage(1); }}
       className="flex items-center gap-1 hover:text-ink-dark transition-colors"
     >
       {label}
-      <ArrowUpDown className={`w-3 h-3 ${sortKey === sortField ? 'text-brand-blue' : 'text-ink-muted'}`} strokeWidth={2} />
+      <ArrowUpDown className="w-3 h-3 text-brand-blue" strokeWidth={2} />
     </button>
   );
 
   const columns: DataTableColumn<typeof pagedMembers[number]>[] = [
-    { header: <SortHeader label="Name" sortField="name" />, render: (item) => <span className="font-medium text-ink-dark">{item.name || '—'}</span> },
+    { header: <SortHeader label="Name" />, render: (item) => <span className="font-medium text-ink-dark">{item.name || '—'}</span> },
     { header: 'Phone Number', render: (item) => <span className="font-mono text-ink-secondary">{item.phone}</span> },
     {
       header: 'Pass ID',
@@ -152,7 +151,7 @@ export default function MembersPage() {
         ),
     },
     { header: 'Tier', render: (item) => <span className="text-ink-secondary">{item.pass ? item.pass.tier : '—'}</span> },
-    { header: <SortHeader label="Balance" sortField="balance" />, render: (item) => <span className="text-ink-secondary">{item.pass ? item.pass.balance : '—'}</span> },
+    { header: 'Balance', render: (item) => <span className="text-ink-secondary">{item.pass ? item.pass.balance : '—'}</span> },
     {
       header: 'Test acct',
       render: (item) => (
@@ -243,10 +242,10 @@ export default function MembersPage() {
           emptyMessage="No members found."
           onRowClick={(item) => router.push(`/dashboard/members/${item.id}`)}
         />
-        {!loading && !error && sortedMembers.length > 0 && (
+        {!error && total > 0 && (
           <div className="flex items-center justify-between px-6 py-3 border-t border-border-subtle text-xs text-ink-secondary">
             <span>
-              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sortedMembers.length)} of {sortedMembers.length} member{sortedMembers.length === 1 ? '' : 's'}
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, total)} of {total} member{total === 1 ? '' : 's'}
             </span>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>Prev</Button>

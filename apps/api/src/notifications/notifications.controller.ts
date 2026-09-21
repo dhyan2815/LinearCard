@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WhatsappService } from '../notification/whatsapp.service';
+import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 
 /** Replies that revoke or restore marketing consent (2.4). */
 const STOP_WORDS = ['STOP', 'UNSUBSCRIBE', 'OPTOUT', 'OPT OUT'];
@@ -14,30 +15,51 @@ export class NotificationsController {
     private readonly whatsappService: WhatsappService,
   ) {}
 
+  /**
+   * Phase 6.1 (FE-3) — offset-paged with a `total`, so the activity ledger
+   * can load more instead of always asking for one fixed slab.
+   *
+   * The tenant comes from the guard; the `?tenantId=` the dashboard still
+   * sends is ignored. Before this the route was unauthenticated and read the
+   * tenant straight off the query string, so any caller could read any
+   * brand's notification history.
+   */
   @Get('log')
-  async getnotificationslog(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async getnotificationslog(@Req() req: TenantRequest, @Res() res: Response) {
     try {
-      const tenantId = req.query['tenantId'] as string;
-      const limit = parseInt((req.query['limit'] as string) || '50', 10);
+      const tenantId = req.tenantId;
+      const limit = Math.min(
+        parseInt((req.query['limit'] as string) || '50', 10) || 50,
+        200,
+      );
+      const offset = Math.max(
+        parseInt((req.query['offset'] as string) || '0', 10) || 0,
+        0,
+      );
 
-      if (!tenantId) {
-        return res
-          .status(400)
-          .json({ success: false, error: 'tenantId is required' });
-      }
-
-      const { data: logs, error } = await this.supabaseService.client
+      const {
+        data: logs,
+        error,
+        count,
+      } = await this.supabaseService.client
         .from('NotificationLog')
-        .select('*, member:Member(name, phone)')
+        .select('*, member:Member(name, phone)', { count: 'exact' })
         .eq('tenantId', tenantId)
         .order('sentAt', { ascending: false })
-        .limit(limit);
+        .range(offset, offset + limit - 1);
 
       if (error) {
         throw error;
       }
 
-      return res.status(200).json({ success: true, logs: logs || [] });
+      return res.status(200).json({
+        success: true,
+        logs: logs || [],
+        total: count ?? 0,
+        limit,
+        offset,
+      });
     } catch (error: any) {
       console.error('API Error fetching notification logs:', error);
       return res.status(500).json({ success: false, error: error.message });

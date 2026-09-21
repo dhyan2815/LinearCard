@@ -213,7 +213,8 @@ describe('Phase 2.5 — chunked send', () => {
       expect.objectContaining({
         campaignId: 'c1',
         status: 'failed',
-        errorReason: 'Waha error 500',
+        // Phase 6.2: every logged failure carries a stable code prefix.
+        errorReason: 'UNKNOWN: Waha error 500',
       }),
     );
   });

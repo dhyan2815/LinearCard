@@ -397,10 +397,6 @@ export class AuthController {
         path: '/',
       });
 
-      console.log(
-        '[Auth] admin_session cookie set securely with httpOnly=true',
-      );
-
       return { success: true, token };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;

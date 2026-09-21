@@ -15,6 +15,7 @@ import { AuditService } from '../audit/audit.service';
 import { WebhookService } from '../developers/webhook.service';
 import { DEFAULT_PASS_HEX, Tier } from '@linearcard/types';
 import { decryptSecret } from '../env';
+import { ServiceError, describeError, walletError } from '../errors';
 
 /**
  * Canonical field keys (Phase 1.2, the Passlet pattern).
@@ -130,6 +131,30 @@ export function resolveLoyaltyRules(
   };
 }
 
+/**
+ * The rules a scan is actually scored against: the Program row owns them
+ * (Phase 3.1), falling back to the program's templates, then the defaults.
+ *
+ * Shared by `processOrderTransaction` and `validate-pass` so the preview the
+ * cashier reads on screen and the maths the server does are the same numbers
+ * — the scanner used to hardcode 10% / 50% and quietly disagree with every
+ * brand whose economics differ (WAL-4).
+ */
+export function rulesForPass(
+  programRow: any,
+  templates: any,
+  programId?: string | null,
+): LoyaltyRules {
+  if (programRow && programRow.earnRate !== null) {
+    return {
+      earnRate: Number(programRow.earnRate),
+      redeemRate: Number(programRow.redeemRate ?? 1),
+      redeemCapPercent: Number(programRow.redeemCapPercent ?? 50),
+    };
+  }
+  return resolveLoyaltyRules(templates, programId);
+}
+
 export interface WalletCredentials {
   issuerId: string;
   clientEmail: string;
@@ -204,7 +229,8 @@ export class WalletService {
       : process.env.GOOGLE_PRIVATE_KEY;
 
     if (!issuerId || !clientEmail || !rawKey) {
-      throw new Error(
+      throw new ServiceError(
+        'WALLET_CREDENTIALS_MISSING',
         `Missing Google Wallet credentials for tenant ${tenantId}. Configure Tenant.issuerId/googleClientEmail/googlePrivateKeyEncrypted or set ISSUER_ID/GOOGLE_CLIENT_EMAIL/GOOGLE_PRIVATE_KEY in .env.`,
       );
     }
@@ -227,7 +253,8 @@ export class WalletService {
     const rawKey = process.env.GOOGLE_PRIVATE_KEY;
 
     if (!issuerId || !clientEmail || !rawKey) {
-      throw new Error(
+      throw new ServiceError(
+        'WALLET_CREDENTIALS_MISSING',
         'Missing Google Wallet credentials. Please ensure ISSUER_ID, GOOGLE_CLIENT_EMAIL, and GOOGLE_PRIVATE_KEY are set in .env',
       );
     }
@@ -240,7 +267,10 @@ export class WalletService {
    */
   private formatPrivateKey(rawKey: string): string {
     if (!rawKey) {
-      throw new Error('GOOGLE_PRIVATE_KEY is missing in environment variables');
+      throw new ServiceError(
+        'WALLET_CREDENTIALS_MISSING',
+        'GOOGLE_PRIVATE_KEY is missing in environment variables',
+      );
     }
     let key = rawKey.replace(/\\n/g, '\n').trim();
     // Ensure the private key string contains the necessary PEM headers for JWT signing
@@ -414,12 +444,14 @@ export class WalletService {
     ).replace(/\/$/, '');
 
     if (!base) {
-      throw new Error(
+      throw new ServiceError(
+        'WALLET_CALLBACK_UNSAFE',
         'Cannot resolve a Google Wallet callback URL. Set PUBLIC_CALLBACK_URL (a public https URL, e.g. an ngrok tunnel) before publishing.',
       );
     }
     if (/localhost|127\.0\.0\.1/.test(base)) {
-      throw new Error(
+      throw new ServiceError(
+        'WALLET_CALLBACK_UNSAFE',
         `Refusing to publish a Google Wallet class with a localhost callback URL (${base}). ` +
           'This would repoint live pass holders at a machine that is not on the internet. ' +
           'Set PUBLIC_CALLBACK_URL to a public tunnel URL to publish from a local machine.',
@@ -589,7 +621,7 @@ export class WalletService {
           return { id: classId, existing: true, updated: false };
         }
       }
-      throw error;
+      throw walletError(error, `publishing class ${classId}`);
     }
   }
 
@@ -613,11 +645,7 @@ export class WalletService {
       return res.data as any;
     } catch (error: any) {
       if (error.response?.status === 404) return null;
-      this.logger.error(
-        `Error fetching genericClass ${classId}:`,
-        error.message,
-      );
-      throw error;
+      throw walletError(error, `reading class ${classId}`);
     }
   }
 
@@ -634,11 +662,7 @@ export class WalletService {
       if (error.response?.status === 404) {
         return null;
       }
-      this.logger.error(
-        `Error fetching genericObject ${passId}:`,
-        error.message,
-      );
-      throw error;
+      throw walletError(error, `reading pass ${passId}`);
     }
   }
 
@@ -754,7 +778,7 @@ export class WalletService {
       });
       return res.data;
     } catch (err) {
-      throw err;
+      throw walletError(err, `updating pass ${passId}`);
     }
   }
 
@@ -912,12 +936,10 @@ export class WalletService {
           retryError.response?.data || retryError.message,
         );
 
-        let errorMsg =
-          'Google Wallet API rejected the pass payload. Verify Class ID and image URLs.';
-        if (retryError.response?.data?.error?.message) {
-          errorMsg += ` Details: ${retryError.response.data.error.message}`;
-        }
-        throw new Error(errorMsg);
+        throw walletError(
+          retryError,
+          `issuing pass ${passId} (class ${classId} auto-create retry also failed — verify the class id and image URLs)`,
+        );
       }
     }
 
@@ -1075,15 +1097,7 @@ export class WalletService {
         data: response.data,
       };
     } catch (error: any) {
-      this.logger.error(
-        `sendOfferMessage failed for ${resourceId}: ${error.message}`,
-      );
-
-      throw new HttpException(
-        error.response?.data?.error?.message ||
-          'Google Wallet addMessage failed',
-        error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw walletError(error, `sending a message to pass ${resourceId}`);
     }
   }
 
@@ -1132,7 +1146,7 @@ export class WalletService {
         type: 'promo_message',
         channel: 'wallet_push',
         status: 'failed',
-        errorReason: error.message,
+        errorReason: describeError(error),
         header,
         body,
       });
@@ -1227,7 +1241,7 @@ export class WalletService {
         type: isAward ? 'points_awarded' : 'points_redeemed',
         channel: 'wallet_push',
         status: 'failed',
-        errorReason: err.message,
+        errorReason: describeError(err),
         header: pushTitle,
         body: pushBody,
       });
@@ -1580,14 +1594,11 @@ export class WalletService {
       );
     }
 
-    const rules: LoyaltyRules =
-      programRow && programRow.earnRate !== null
-        ? {
-            earnRate: Number(programRow.earnRate),
-            redeemRate: Number(programRow.redeemRate ?? 1),
-            redeemCapPercent: Number(programRow.redeemCapPercent ?? 50),
-          }
-        : resolveLoyaltyRules(pass.Tenant?.PassTemplate, pass.programId);
+    const rules: LoyaltyRules = rulesForPass(
+      programRow,
+      pass.Tenant?.PassTemplate,
+      pass.programId,
+    );
 
     const currentBalance = Number(pass.balance) || 0;
     let pointsChanged = 0;

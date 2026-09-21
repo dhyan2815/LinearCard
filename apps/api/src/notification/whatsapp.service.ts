@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotifyService } from './notify.service';
 import { WhatsappProvider, WahaProvider } from './whatsapp.provider';
+import { describeError } from '../errors';
 
 @Injectable()
 export class WhatsappService {
@@ -50,7 +51,7 @@ export class WhatsappService {
         type: opts.type,
         channel: 'whatsapp',
         status: 'failed',
-        errorReason: err?.message || String(err),
+        errorReason: describeError(err),
         campaignId: opts.campaignId,
         header: opts.header,
         body: text,

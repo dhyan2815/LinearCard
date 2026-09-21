@@ -17,6 +17,7 @@ import { NotifyService } from '../notification/notify.service';
 import { WalletService } from '../wallet/wallet.service';
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { AuditService } from '../audit/audit.service';
+import { describeError } from '../errors';
 
 @Controller('members')
 export class MembersController {
@@ -34,15 +35,22 @@ export class MembersController {
     @Query('limit') limitQuery?: string,
     @Query('offset') offsetQuery?: string,
     @Query('q') q?: string,
+    @Query('dir') dir?: string,
   ) {
     try {
-      const limit = Number(limitQuery) > 0 ? Number(limitQuery) : 50;
+      // Phase 6.1 (FE-3) — `total` is what lets the caller page instead of
+      // fetching the whole table and slicing it client-side.
+      const limit = Math.min(
+        Number(limitQuery) > 0 ? Number(limitQuery) : 50,
+        200,
+      );
       const offset = Number(offsetQuery) >= 0 ? Number(offsetQuery) : 0;
 
       let query = this.supabaseService.client
         .from('Member')
         .select(
           'id, name, phone, tenantId, createdAt, isTestAccount, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
+          { count: 'exact' },
         )
         .eq('tenantId', req.tenantId);
 
@@ -50,14 +58,21 @@ export class MembersController {
         query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
       }
 
-      const { data: members, error } = await query
+      const {
+        data: members,
+        error,
+        count,
+      } = await query
+        // Only a Member column can order a paged query; balance lives on the
+        // child Pass rows, so sorting by it would only ever sort the page.
+        .order('name', { ascending: dir !== 'desc' })
         .order('createdAt', { ascending: false })
         .range(offset, offset + limit - 1);
 
       if (error) {
         throw error;
       }
-      return { success: true, members };
+      return { success: true, members, total: count ?? 0, limit, offset };
     } catch {
       throw new HttpException(
         { success: false, error: 'Failed to fetch members' },
@@ -315,7 +330,7 @@ export class MembersController {
             type: 'balance_update',
             channel: 'wallet_push',
             status: 'failed',
-            errorReason: err?.message || String(err),
+            errorReason: describeError(err),
           }),
         );
 

@@ -229,7 +229,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           console.error('Failed to fetch stats:', err);
         });
 
-      apiClient(`/members?tenantId=${selectedTenantId}`)
+      // Phase 6.1 — this feeds the "select from history" picker, not a full
+      // listing; the bound is explicit so it can't silently grow into one.
+      apiClient(`/members?tenantId=${selectedTenantId}&limit=50`)
         .then(data => {
           if (data.success) {
              const allPasses = data.members?.flatMap((m: any) => m.passes?.map((p: any) => ({

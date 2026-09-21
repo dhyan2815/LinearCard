@@ -90,8 +90,6 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
 
   const response = await fetchWithRetry(fullUrl, fetchOptions);
 
-  console.debug(`[API] ${response.status > 399 ? 'ERROR' : 'OK'} ${cleanEndpoint} | Credentials: ${!isServer ? 'sent via httpOnly cookie' : 'N/A (server)'} | Status: ${response.status}`);
-
   if (!response.ok) {
     let errorMsg = response.statusText;
     try {
@@ -101,12 +99,7 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
 
     // Throw UnauthorizedError for 401 so callers can distinguish auth failures
     if (response.status === 401) {
-      console.warn(`[API] 401 Unauthorized for ${cleanEndpoint}. Token missing or invalid.`);
       throw new UnauthorizedError(`API Error (${response.status}): ${errorMsg}`);
-    }
-
-    if (response.status === 500) {
-      console.error(`[API] 500 Server Error for ${cleanEndpoint}. Details: ${errorMsg}`);
     }
 
     throw new Error(`API Error (${response.status}): ${errorMsg}`);

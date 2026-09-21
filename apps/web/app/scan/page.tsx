@@ -38,7 +38,13 @@ interface PassData {
   fullPassId: string;
   phone?: string;
   tenantName?: string;
+  /** A ticket pass has no points pipeline at all (D9/D14). */
+  programKind?: 'loyalty' | 'ticket';
+  /** Phase 6.3 - the program's real economics, not a hardcoded 10% / 50%. */
+  rules?: { earnRate: number; redeemRate: number; redeemCapPercent: number };
 }
+
+const DEFAULT_RULES = { earnRate: 0.1, redeemRate: 1, redeemCapPercent: 50 };
 
 interface TransactionResult {
   success: boolean;
@@ -113,10 +119,19 @@ export default function ScanPage() {
     ? parseInt(passData.balance.replace(/[^0-9]/g, '')) || 0
     : 0;
 
+  // The cashier reads these numbers out loud, so they must be the ones the
+  // server will actually apply. They used to be hardcoded 10% / 50% while
+  // the backend scored against the program's own rates (WAL-4).
+  const rules = passData?.rules || DEFAULT_RULES;
+  const isTicket = passData?.programKind === 'ticket';
+
   const parsedAmount = parseFloat(orderAmount) || 0;
-  const awardPreview = Math.floor(parsedAmount * 0.10);
-  const maxDeductible = Math.floor(parsedAmount * 0.50);
-  const redeemPreview = Math.min(currentPoints, maxDeductible);
+  const awardPreview = Math.floor(parsedAmount * rules.earnRate);
+  const maxDeductible = Math.floor(parsedAmount * (rules.redeemCapPercent / 100));
+  const redeemPreview = Math.min(
+    currentPoints,
+    Math.floor(maxDeductible / rules.redeemRate),
+  );
 
   const processPassId = async (scannedId: string) => {
     setPassId(scannedId);
@@ -497,8 +512,14 @@ export default function ScanPage() {
                   </div>
                 </div>
 
-                {/* Transaction Result / Customer Receipt State */}
-                {transactionResult ? (
+                {/* A ticket program has no points pipeline (D9/D14): the
+                    server rejects award/redeem, so don't offer the form. */}
+                {isTicket ? (
+                  <div className="p-4 rounded-xl bg-canvas border border-border-subtle text-sm text-ink-secondary">
+                    This is a ticket pass. Ticket programs carry no loyalty
+                    points, so there is nothing to award or redeem here.
+                  </div>
+                ) : transactionResult ? (
                   <div className="p-5 rounded-2xl bg-canvas border border-brand-blue/30 space-y-4 animate-in zoom-in-95">
                     <div className="flex items-center justify-between border-b border-white/5 pb-3">
                       <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
@@ -543,7 +564,7 @@ export default function ScanPage() {
                             +{transactionResult.pointsChanged} Pts
                           </p>
                           <p className="text-xs text-ink-secondary mt-1">
-                            10% loyalty credit on ₹{transactionResult.orderAmount} order
+                            {Math.round(rules.earnRate * 100)}% loyalty credit on ₹{transactionResult.orderAmount} order
                           </p>
                         </div>
 
@@ -614,14 +635,14 @@ export default function ScanPage() {
                     {parsedAmount > 0 && (
                       <div className="p-3 bg-canvas rounded-xl border border-border-subtle text-xs space-y-1.5">
                         <div className="flex justify-between items-center text-ink-secondary">
-                          <span>Award 10%:</span>
+                          <span>Award {Math.round(rules.earnRate * 100)}%:</span>
                           <span className="text-emerald-400 font-bold">+{awardPreview} Pts</span>
                         </div>
                         <div className="flex justify-between items-center text-ink-secondary">
-                          <span>Redeem Max 50%:</span>
+                          <span>Redeem max {rules.redeemCapPercent}%:</span>
                           <span className="text-brand-blue font-bold">
                             {currentPoints > 0
-                              ? `Save ₹${redeemPreview} (${redeemPreview} pts)`
+                              ? `Save ₹${redeemPreview * rules.redeemRate} (${redeemPreview} pts)`
                               : '0 pts (Insufficient balance)'}
                           </span>
                         </div>

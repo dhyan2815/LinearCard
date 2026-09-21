@@ -4,6 +4,7 @@ import { NotifyService } from '../notification/notify.service';
 import { WhatsappService } from '../notification/whatsapp.service';
 import { WalletService } from '../wallet/wallet.service';
 import type { AudienceFilter } from '@linearcard/types';
+import { describeError } from '../errors';
 
 export interface AudienceMember {
   id: string;
@@ -221,7 +222,7 @@ export class CampaignsService {
         ...base,
         channel: campaign.channel,
         status: 'failed',
-        errorReason: err?.message || String(err),
+        errorReason: describeError(err),
       });
       return false;
     }

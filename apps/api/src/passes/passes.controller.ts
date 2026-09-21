@@ -3,7 +3,11 @@ import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
-import { WalletService } from '../wallet/wallet.service';
+import {
+  WalletService,
+  PASS_TEMPLATE_RULE_FIELDS,
+  rulesForPass,
+} from '../wallet/wallet.service';
 import { NotifyService } from '../notification/notify.service';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
@@ -11,6 +15,7 @@ import { JWT_SECRET } from '../env';
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { AuditService } from '../audit/audit.service';
 import { WebhookService } from '../developers/webhook.service';
+import { describeError } from '../errors';
 
 export function resolveImageUrl(url?: string): string | undefined {
   if (!url) return undefined;
@@ -224,12 +229,16 @@ export class PassesController {
       }
 
       let pass: any = null;
+      // Phase 6.3 — the same columns processOrderTransaction scores with, so
+      // the scanner's on-screen preview can use the real rates instead of a
+      // hardcoded 10% / 50%.
+      const PASS_SELECT = `*, Member!inner(*), Tenant(name, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`;
 
       // 1. Phone number lookup — exact phone, this tenant only.
       if (/^\d{8,}$/.test(passId) || /^\+\d+$/.test(passId)) {
         const { data: phonePasses } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*), Tenant(name)')
+          .select(PASS_SELECT)
           .eq('tenantId', tenantId)
           .ilike('Member.phone', '%' + passId)
           .order('createdAt', { ascending: false });
@@ -244,7 +253,7 @@ export class PassesController {
           : `${process.env.ISSUER_ID}.${passId}`;
         const { data: exactPass } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*), Tenant(name)')
+          .select(PASS_SELECT)
           .eq('tenantId', tenantId)
           .eq('fullPassId', fullPassId)
           .maybeSingle();
@@ -256,7 +265,7 @@ export class PassesController {
       if (!pass) {
         const { data: fallbackPass } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*), Tenant(name)')
+          .select(PASS_SELECT)
           .eq('tenantId', tenantId)
           .ilike('fullPassId', `%.${passId}`)
           .order('createdAt', { ascending: false })
@@ -273,6 +282,14 @@ export class PassesController {
 
       const member = pass.Member;
 
+      const { data: programRow } = pass.programId
+        ? await this.supabaseService.client
+            .from('Program')
+            .select('id, kind, earnRate, redeemRate, redeemCapPercent')
+            .eq('id', pass.programId)
+            .maybeSingle()
+        : { data: null };
+
       return res.status(200).json({
         valid: true,
         memberName: member?.name || 'Unknown Member',
@@ -281,6 +298,14 @@ export class PassesController {
         fullPassId: pass.fullPassId,
         phone: member?.phone,
         tenantName: pass.Tenant?.name || member?.Tenant?.name || null,
+        // A ticket pass has no points pipeline (D9/D14) — process-order
+        // rejects it, so the scanner must not offer award/redeem at all.
+        programKind: programRow?.kind ?? 'loyalty',
+        rules: rulesForPass(
+          programRow,
+          pass.Tenant?.PassTemplate,
+          pass.programId,
+        ),
       });
     } catch (error: any) {
       console.error('API Error validating pass:', error);
@@ -409,7 +434,7 @@ export class PassesController {
               type: 'balance_update',
               channel: 'wallet_push',
               status: 'failed',
-              errorReason: err?.message || String(err),
+              errorReason: describeError(err),
             }),
           ),
         pass.Member?.phone || phone

@@ -12,7 +12,8 @@
     "kill-ports": "npx -y kill-port 3000 3001 || true",
     "build": "turbo run build",
     "start": "turbo run start",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "demo:reset": "npm run demo:reset -w apps/api --"
   },
   "devDependencies": {
     "@googleapis/walletobjects": "^18.0.0",

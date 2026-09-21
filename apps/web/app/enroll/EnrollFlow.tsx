@@ -19,6 +19,17 @@ import { toast } from 'sonner';
  * `/enroll/:tenantSlug` resolves to the tenant's default program so links
  * already in the wild keep working.
  */
+/** FE-5: India-first. The list is deliberately short - this is a POC. */
+const COUNTRIES = [
+  { name: 'India', code: '+91', flag: '🇮🇳' },
+  { name: 'United States', code: '+1', flag: '🇺🇸' },
+  { name: 'United Kingdom', code: '+44', flag: '🇬🇧' },
+  { name: 'Australia', code: '+61', flag: '🇦🇺' },
+  { name: 'Germany', code: '+49', flag: '🇩🇪' },
+  { name: 'Singapore', code: '+65', flag: '🇸🇬' },
+  { name: 'United Arab Emirates', code: '+971', flag: '🇦🇪' },
+];
+
 export default function EnrollFlow() {
   const params = useParams();
   const slug = params.slug as string;
@@ -30,7 +41,6 @@ export default function EnrollFlow() {
   const [currentScreen, setCurrentScreen] = useState<'loading' | 'error' | 'consumer_phone' | 'consumer_otp' | 'consumer_success'>('loading');
   const [proximityTipDismissed, setProximityTipDismissed] = useState(false);
   const [countryCode, setCountryCode] = useState('+91');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [onboardingName, setOnboardingName] = useState('');
   const [onboardingPhone, setOnboardingPhone] = useState('');
   const [onboardingOtp, setOnboardingOtp] = useState('');
@@ -68,24 +78,6 @@ export default function EnrollFlow() {
     }
     fetchTenant();
   }, [slug, programSlug]);
-
-  const COUNTRIES = [
-    { name: 'United States', code: '+1', flag: '🇺🇸' },
-    { name: 'Canada', code: '+1', flag: '🇨🇦' },
-    { name: 'United Kingdom', code: '+44', flag: '🇬🇧' },
-    { name: 'India', code: '+91', flag: '🇮🇳' },
-    { name: 'Australia', code: '+61', flag: '🇦🇺' },
-    { name: 'Germany', code: '+49', flag: '🇩🇪' },
-    { name: 'France', code: '+33', flag: '🇫🇷' },
-    { name: 'Brazil', code: '+55', flag: '🇧🇷' },
-    { name: 'Japan', code: '+81', flag: '🇯🇵' },
-    { name: 'China', code: '+86', flag: '🇨🇳' },
-  ];
-
-  const filteredCountries = COUNTRIES.filter(c =>
-    c.name.toLowerCase().includes(countryCode.toLowerCase()) ||
-    c.code.includes(countryCode)
-  );
 
   const [generatedPassUrl, setGeneratedPassUrl] = useState<string | null>(null);
 
@@ -155,56 +147,25 @@ export default function EnrollFlow() {
                 <Label>Full Name</Label>
                 <Input type="text" value={onboardingName} onChange={(e) => setOnboardingName(e.target.value)} placeholder="Jane Doe" autoFocus required />
               </div>
-              <div className="flex flex-row gap-3 relative">
-                <div className="w-[30%] sm:w-1/3 space-y-1">
-                  <Label>Country Code</Label>
-                  <Input
-                    type="text"
+              <div className="flex flex-row gap-3">
+                {/* Phase 6.6 (FE-5) - India-first, and a native <select> the
+                    phone renders as its own picker. The old control was a
+                    free-text box with a hand-rolled text-match dropdown that
+                    accepted any string as a dialling code. */}
+                <div className="w-[34%] sm:w-1/3 space-y-1">
+                  <Label>Country</Label>
+                  <select
                     value={countryCode}
-                    onChange={(e) => {
-                      let val = e.target.value;
-                      // Automatically prepend the '+' sign for valid country codes
-                      if (/^\d/.test(val)) val = '+' + val;
-                      setCountryCode(val);
-                      setIsDropdownOpen(true);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && isDropdownOpen) {
-                        e.preventDefault();
-                        if (filteredCountries.length > 0) {
-                          setCountryCode(filteredCountries[0].code);
-                        }
-                        setIsDropdownOpen(false);
-                      }
-                    }}
-                    onFocus={() => setIsDropdownOpen(true)}
-                    onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
-                    placeholder="+1"
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    className="w-full h-10 bg-surface-bone border border-border-strong rounded-lg px-2 text-sm text-ink-dark focus:outline-none focus:border-brand-blue"
                     required
-                  />
-                  {isDropdownOpen && (
-                    <div className="absolute z-10 w-70 sm:w-64 mt-2 max-h-48 overflow-y-auto bg-surface-card border border-border-subtle rounded-xl shadow-xl custom-scrollbar left-0">
-                      {filteredCountries.length > 0 ? filteredCountries.map((c, i) => (
-                        <div
-                          key={i}
-                          className="px-4 py-2 hover:bg-surface-bone cursor-pointer flex items-center gap-3 text-sm text-ink-dark transition-colors border-b border-border-subtle/50 last:border-0"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setCountryCode(c.code);
-                            setIsDropdownOpen(false);
-                          }}
-                        >
-                          <span className="text-base">{c.flag}</span>
-                          <span className="text-brand-blue font-medium w-10">{c.code}</span>
-                          <span className="truncate text-ink-secondary">{c.name}</span>
-                        </div>
-                      )) : (
-                        <div className="px-4 py-3 text-sm text-ink-muted italic">
-                          Use custom code: {countryCode}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c.name} value={c.code}>
+                        {c.flag} {c.code}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex-1 sm:w-2/3 space-y-1">
                   <Label>Phone Number</Label>
