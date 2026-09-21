@@ -7,25 +7,30 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?style=flat-square&logo=tailwind-css)
 ![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?style=flat-square&logo=supabase)
 
-**LinearCard** is a premium, end-to-end digital pass generator for Google Wallet (and Apple Wallet). It features a sleek, Linear-inspired dark mode UI, seamless 3D live previews, and enterprise-grade backend infrastructure. 
+**LinearCard** is a premium, multi-tenant digital pass platform for Google Wallet (with Apple Wallet planned). It combines a sleek Linear-inspired dark mode admin dashboard, real-time 3D pass previews, enterprise-grade backend infrastructure, and a complete loyalty & redemption engine with order-linked points tracking.
 
-LinearCard enables brands to issue, manage, and dynamically update digital passes directly via the Google Wallet API using signed JWTs.
+LinearCard enables brands to issue, manage, and dynamically update digital passes directly via the Google Wallet REST API using RS256 JWT signing. Includes staff QR scanner, multi-channel campaigns (WhatsApp + Google Wallet push), real-time member CRM, and full GDPR-aligned audit trails. Built as a Turborepo monorepo with Next.js 16 frontend, NestJS 10 backend, and shared TypeScript types.
 
 ---
 
 ## ✨ Features
 
-- **Google Wallet Integration:** On-the-fly RS256 JWT creation and official `savetowallet` link generation. No third-party middlemen.
-- **Premium Design System:** Linear-inspired aesthetic with global dark/light mode, brand-blue accents, glassmorphism, metallic shine animations, and a responsive 3D card tilt effect.
-- **Tenant Isolation:** Multi-tenant architecture with tenant-aware filtering, customizable webhooks, and separate data silos per brand.
-- **Consumer Onboarding Flow:** Beautiful mobile-first enrollment, real-time OTP verification, and DPDP consent tracking.
-- **Admin Dashboard & CRM:** 
-  - Manage live digital pass templates (Loyalty, Membership, ID Card, Access Badge).
-  - Modify member points/balances live via the Google Wallet REST API.
-  - Complete CRM view with full audit trails and customer consent logs.
-- **Notification Deliveries:** Built-in multi-channel marketing campaigns through WhatsApp and Google Wallet Push Notifications.
-- **Integrated QR Scanner:** Built-in staff-facing application to scan passes and process redemptions securely.
-- **Robust Security:** HTTP-only JWT admin authentication, persistent audit logs, and SHA-256 OTP hashing with rate limits.
+- **Google Wallet Integration:** RS256 JWT signing, real-time pass updates via REST API, discoverable save callbacks, promotional push notifications (`addMessage`), and proximity-based geofence notifications.
+- **Premium Design System:** Linear-inspired dark mode UI, glassmorphism, responsive 3D card preview, live template editing with real-time pass sync.
+- **Multi-Tenant Isolation:** Application-level tenant filtering, RLS policies on Supabase, separate webhook configurations, and per-tenant Google Wallet class namespacing.
+- **Consumer Onboarding:** Mobile-first enrollment flow, 4-digit OTP verification (SHA-256 hashed), marketing consent tracking (DPDP Phase 7.6).
+- **Admin Dashboard:** 
+  - Nested App Router pages: Template Designer, Live Activity, Push Campaigns, Members, Settings, POS Simulator.
+  - Pass Template CRUD with preset catalog (Coffee Loyalty, Gym, Event Tickets, Travel Tickets).
+  - Program & Tier management—each tier maps to its own Google Wallet class.
+  - Live member balance adjustments with real-time wallet sync.
+  - Full audit trails and consent logs.
+- **Loyalty & Redemption Engine:** Order-linked points award/redeem, tier computation on every transaction, WhatsApp tier-up notifications, 10% earn and up-to-50% discount preview.
+- **Multi-Channel Campaigns:** Send-now broadcasts with audience segmentation (tier, balance, inactivity, test-account), chunked delivery (25/batch), and per-campaign delivery reporting.
+- **Staff Scanner (`/scan`):** QR/barcode scanning, real-time member lookup, order amount entry, and transaction history.
+- **Webhook Integrations:** Google Wallet save callback (JWS verification), WhatsApp inbound (`STOP`/`START` opt-out), payment simulator with HMAC-SHA256 signature.
+- **Idempotency (Phase 7.1):** Global interceptor ensures POST/PUT/PATCH/DELETE execute at most once per `Idempotency-Key`.
+- **Security:** HTTP-only JWT cookies, timing-safe OTP verification, rate-limited attempts (5 max), verified Google JWS callbacks, HMAC webhook signing.
 
 ## 🛠 Tech Stack
 
@@ -44,20 +49,39 @@ LinearCard enables brands to issue, manage, and dynamically update digital passe
 - **Utilities:** `qrcode.react` (QR generation), `@yudiel/react-qr-scanner` (live QR scanning)
 - **API Client:** Type-safe HTTP client (`lib/api-client.ts`) communicating with the NestJS backend via `NEXT_PUBLIC_API_URL`
 
-### Backend (`apps/api`)
-- **Framework:** NestJS 10 (Port `3001`)
-- **Modular Architecture:**
-  - `AuthModule`: OTP generation, SHA-256 verification, and authentication
-  - `DashboardModule`: Tenant dashboard metrics, analytics, and overview data
-  - `MembersModule`: CRM member profiles, balances, and pass associations
-  - `NotificationsModule`: Multi-channel marketing (WhatsApp & Google Wallet push notifications)
-  - `PassesModule`: Pass issuance, live pass updates, and PassTemplate CRUD
-  - `TenantModule`: Tenant profiles and webhook management
-  - `WalletModule`: Google Wallet REST API integration and cryptographic RS256 JWT signing
-- **Database / BaaS:** Supabase (PostgreSQL) for multi-tenant data, templates, and audit logs
-- **Google Wallet Integration:** `google-auth-library` to securely interact with the Wallet REST API
-- **Cryptography & Security:** `jsonwebtoken` (for JWTs) and native Node.js `crypto` (for SHA-256 OTP hashing)
-- **Environment:** `dotenv`
+### Backend (`apps/api` — NestJS 10 + Google Wallet)
+- **Framework:** NestJS 10 (Port `3001`), TypeScript
+- **Ten Core Modules:**
+  1. **AuthModule** — OTP generation (4-digit), SHA-256 hashing, timing-safe verification, rate-limiting (5 attempts), JWT issuance for admins, dev OTP bypass.
+  2. **DashboardModule** — Tenant metrics, pass statistics, program overview, analytics queries.
+  3. **MembersModule** — CRM: member profiles, loyalty point balances, pass lifecycle, cascading deletion on member erase/purge.
+  4. **NotificationsModule** — Notification log, inbound WhatsApp webhook (`POST /notifications/webhooks/whatsapp-inbound`) for `STOP`/`START` opt-out, WhatsAppProvider interface.
+  5. **PassesModule** — Pass issuance, live balance updates via REST API, redemption processing, scan history, webhook callbacks.
+  6. **TenantModule** — Tenant profiles, customizable webhook URLs, per-tenant isolation.
+  7. **WalletModule** — Google Wallet REST API integration, RS256 JWT signing (`jsonwebtoken`), GenericClass/GenericObject creation, promotional messages, discoverable callback handler.
+  8. **TiersModule** — Tier lifecycle management, pure `computeTier()` function for tier evaluation, upgrade/downgrade detection, WhatsApp notifications.
+  9. **ProgramsModule** — Program CRUD, preset catalog (Coffee Loyalty, Gym, Event Tickets, Travel Tickets), per-program tier editing, publish (one Google Wallet class per tier).
+  10. **CampaignsModule** — Send-now campaigns, audience segmentation (tier/balance/inactivity/test-account), dry-run preview, chunked dispatch (25/batch), delivery reporting via `NotificationLog.campaignId`.
+- **Database:** Supabase (PostgreSQL), RLS policies (Phase 7.3), application-level tenant filtering (service-role bypasses RLS).
+- **Audit Trail:** `AuditLog` (all transactions), `ConsentLog` (member consent), `NotificationLog` (delivery tracking).
+- **Security Patterns:** HTTP-only JWT cookies, SHA-256 OTP hashing, JWS signature verification (Google Wallet callbacks), HMAC-SHA256 webhook signing, idempotency interceptor (Phase 7.1).
+- **Google Wallet:** `google-auth-library`, RS256 signing, 3-hour JWT expiry, async REST updates, resilient error handling.
+- **Data Protection (Phase 7.6):** `GET /members/:id/export` returns full data principal export, `DELETE /members/:id` anonymises (erase mode) or hard-deletes (purge mode).
+- **Testing:** Jest + Supertest (controller & service layers), E2E tests via `test/jest-e2e.json`.
+
+### Shared Types (`packages/types` — @linearcard/types)
+
+Monorepo-wide TypeScript interfaces, published to both frontend and backend via npm workspaces:
+
+- **Core Domain:** `User`, `Tenant`, `Member`, `Pass`, `PassTemplate`, `Program`, `Tier`, `Admin`.
+- **Audit & Compliance:** `AuditLog`, `ConsentLog`, `NotificationLog`.
+- **Program/Tier Design:** 
+  - `Program`: `kind` field (`'loyalty'` | `'ticket'`), owns multiple `Tier` rows and `PassTemplate`s.
+  - `Tier`: DB row with `minPoints`, `templateId`, `sortOrder` — source of truth for tier thresholds (Phase 3 dropped `PassTemplate.tierThresholds`).
+  - `tier`: computed field on `Member` and `Pass` (tier name at runtime).
+- **Wallet Integration:** Pass state including loyalty points, barcode, QR, member consent, marketing opt-out (`marketingOptOutAt`).
+- **Hot-Reload:** Uses `*` version specifier in workspace dependents — frontend & backend pick up type changes instantly without rebuild/republish.
+- **Import Path:** `@linearcard/types` (npm workspace alias resolution).
 
 ---
 
@@ -111,6 +135,18 @@ Run from the root directory:
 
 ---
 
+## 🏗 Key Architectural Patterns
+
+- **Workspace Isolation:** Frontend (`apps/web`) and backend (`apps/api`) are separate npm workspaces with shared types in `packages/types`.
+- **Type Safety:** `@linearcard/types` defines all DTOs; both frontend and backend import from the same source via `*` version specifier (instant hot-reload).
+- **API-First:** Frontend routes all requests through `lib/api-client.ts` (single fetch wrapper) to backend at `${hostname}:3001`.
+- **No Job Queue (Phase 7.4):** Campaign sends and pass resyncs run **synchronously** inside the request (consequence: sends that outlive the request do not resume on restart).
+- **Tier Computation:** Pure `computeTier()` function evaluates loyalty points against program `Tier` rows on every transaction; detects upgrades/downgrades; triggers tier-up WhatsApp notifications.
+- **Stable Field Binding:** Pass templates bind Google Wallet generic fields by stable `col.key` (not position), ensuring correct mapping across template edits.
+- **`applyRaw` Escape Hatch:** `createGenericClass` accepts `templateData.rawClass` and `createGoogleWalletPass` accepts `options.rawObject` — deep-merged into payload before Google request (unmodelled Wallet fields stay in template row, not code).
+
+---
+
 ## 🗂 Project Structure
 
 ```
@@ -139,18 +175,64 @@ linearcard/
 │   └── types/                 # Shared TypeScript types (@linearcard/types)
 │       ├── index.ts           # Shared data models (User, Tenant, Member, Pass)
 │       └── package.json
-├── docs/                      # PRDs, architecture briefing, and testing guides
+├── docs/                      # PRDs, architecture briefing, deployment, testing guides
+├── plans/                     # Feature specs and design docs (e.g., proximity notifications)
+├── supabase/migrations/       # Database schema versioning
 ├── turbo.json                 # Turborepo task pipeline configuration
 ├── package.json               # Root monorepo configuration & scripts
+├── CLAUDE.md                  # Project-specific development guide
 └── README.md
 ```
 
+## 📚 Documentation & References
+
+- **CLAUDE.md** — Comprehensive development guide (commands, architecture, patterns, troubleshooting).
+- **Architecture Briefing:** `docs/LinearCard_Architecture_Briefing.md` — Deep-dive on all 10 backend modules, data flow, security patterns.
+- **User Flows:** `docs/LinearCard_User_Flows.md` — Enrollment, admin dashboard, staff scanner, notification pipelines.
+- **Testing:** 
+  - Manual QA: `plans/LinearCard_Manual_Testing_Guide_v4.md`
+  - Automated: `docs/LinearCard_E2E_Testing_Guide.md`
+- **Deployment:** `docs/DEPLOYMENT_GUIDE.md` — Vercel build, Supabase migrations, env var setup.
+- **Next.js Breaking Changes:** `AGENTS.md` — Auto-generated differences from Next.js 14/15.
+
+## 🔄 Recent Implementation Phases
+
+- **Phase 7.1 (Idempotency):** Global `IdempotencyInterceptor` for idempotent mutations (POST/PUT/PATCH/DELETE).
+- **Phase 7.2 (Google JWS):** Implemented JWS signature verification for Google Wallet save callbacks; moved from JWT to ECv2SigningOnly.
+- **Phase 7.3 (RLS):** Supabase Row-Level Security policies on tenant-owned tables (Phase 7.3); application-level filtering still required.
+- **Phase 7.4 (Sync Execution):** Removed job queue; campaign sends and pass resyncs now run synchronously inside requests.
+- **Phase 7.6 (DPDP):** Data export, erasure (soft-delete with anonymisation), and purge (hard-delete) endpoints for data principals.
+- **Phase 7.7 (Save-Link Origins):** WALLET_SAVE_ORIGINS env var for cross-origin `savetowallet` link control.
+- **Payment Gateway (Phase 5):** Webhook simulator with HMAC-SHA256 signing, replay protection, order-linked redemption engine.
+- **Loyalty & Redemption:** Tier computation on every transaction, 10% earn preview, up-to-50% discount on redemption.
+
 ## Security & Compliance
 
-- Rate-limited and SHA-256 hashed OTPs for consumer protection.
-- Strict multi-tenant data segregation.
-- Persistent audit logs for all point adjustments, pass creations, and administrative actions.
-- Admin dashboard protected behind proxy-based HTTP-only JWT verification.
+### Authentication & Authorization
+- **HTTP-only JWT Cookies:** Admin login uses SHA-256 hashed OTPs (4-digit, timing-safe verification).
+- **Rate Limiting:** 5 wrong OTP attempts burn the session; brute-force protected.
+- **Tenant Isolation:** Application-level filtering on every query; RLS policies on Supabase tables (Phase 7.3).
+
+### Data Protection (Phase 7.6 — DPDP)
+- **Data Export:** `GET /members/:id/export` returns complete data principal record.
+- **Erasure:** `DELETE /members/:id?mode=erase` soft-deletes member, anonymises passes, retains audit trail.
+- **Purge:** `DELETE /members/:id?mode=purge` hard-deletes member and related logs.
+
+### Webhook Security
+- **Google Wallet Callbacks (Phase 7.2):** JWS signature verification (ECv2SigningOnly ECDSA-P256), cached Google key validation, rejects unverifiable callbacks with 401.
+- **Payment Webhooks:** HMAC-SHA256 signing, timestamp window (replay protection), per-tenant nonce validation.
+- **WhatsApp Inbound:** Opt-out handling (`STOP`/`START` messages set `marketingOptOutAt`).
+
+### Idempotency (Phase 7.1)
+- **Global Interceptor:** Every POST/PUT/PATCH/DELETE can carry an `Idempotency-Key` header.
+- **Guarantee:** Execute at most once; replay returns cached response with `Idempotent-Replay: true`.
+- **Handled Errors:** Key collision (422), in-flight request (409), handler failure releases key for retry.
+- **Frontend Integration:** `lib/api-client.ts` auto-generates idempotency keys for all mutations.
+
+### Audit Trails
+- **AuditLog:** All sensitive operations (pass creation, balance adjustments, OTP verification).
+- **ConsentLog:** Member marketing consent tracking (GDPR-aligned).
+- **NotificationLog:** Campaign delivery reporting with per-recipient status.
 
 ## 📄 License
 

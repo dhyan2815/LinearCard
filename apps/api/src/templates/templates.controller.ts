@@ -547,7 +547,10 @@ export class TemplatesController {
           HttpStatus.NOT_FOUND,
         );
 
-      const result = await this.templatesService.resyncPasses(req.tenantId!, id);
+      const result = await this.templatesService.resyncPasses(
+        req.tenantId!,
+        id,
+      );
       return { success: true, queued: false, ...result };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;

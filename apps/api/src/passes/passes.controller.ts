@@ -150,7 +150,6 @@ export class PassesController {
         tier: body.tier ?? body.issueTier,
         hexBackgroundColor:
           body.hexBackgroundColor ?? passDesign.hexBackgroundColor,
-        barcodeValue: body.barcodeValue, // will fallback to passId if not provided
         barcodeAltText: body.barcodeAltText, // will fallback to passId if not provided
         classSuffix: body.classSuffix ?? passDesign.classSuffix,
         logoUrl: resolveImageUrl(body.logoUrl ?? passDesign.logoUrl),

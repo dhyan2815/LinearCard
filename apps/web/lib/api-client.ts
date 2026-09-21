@@ -1,5 +1,10 @@
-const API_TIMEOUT = 15000; // 15s timeout (dev: backend may restart)
-const MAX_RETRIES = 3;
+// In dev the API restarts on every save (nest --watch). A request made during
+// that window used to sit on the full 15s timeout and then burn three
+// exponential retries — ~22s of a frozen-looking page. Dev fails fast and
+// loud instead; production keeps the patient settings.
+const IS_DEV = process.env.NODE_ENV !== 'production';
+const API_TIMEOUT = IS_DEV ? 4000 : 15000;
+const MAX_RETRIES = IS_DEV ? 1 : 3;
 const RETRY_DELAY_MS = 1000; // exponential: 1s, 2s, 4s
 
 /** crypto.randomUUID is unavailable on http:// origins in some browsers. */
@@ -71,21 +76,11 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
     }
     fullUrl = `${(baseApiUrl || 'http://localhost:3001').replace(/\/+$/, '')}${cleanEndpoint}`;
   } else {
-    // Use the page's own hostname verbatim. Rewriting 'localhost' to
-    // '127.0.0.1' here (old IPv6 workaround) made the backend set the
-    // admin_session cookie on a different host than the page, so the
-    // Next.js middleware never saw it and redirected to /login in a loop.
-    // The backend now dual-stack-binds (see main.ts), so no rewrite is needed.
-    const hostname = window.location.hostname;
-
-    if (hostname.includes('.vercel.app')) {
-      const apiHostname = hostname.replace(/^linearcard(-git)?/, 'linearcard-api$1');
-      fullUrl = `${window.location.protocol}//${apiHostname}${cleanEndpoint}`;
-    } else if (baseApiUrl && baseApiUrl.startsWith('http')) {
-      fullUrl = `${baseApiUrl.replace(/\/+$/, '')}${cleanEndpoint}`;
-    } else {
-      fullUrl = `${window.location.protocol}//${hostname}:3001${cleanEndpoint}`;
-    }
+    // Same-origin: next.config.mjs rewrites /api/* to the backend. No host
+    // rewriting, no ports, no CORS, and the admin_session cookie is always
+    // set on the host the page is served from — which is what the old
+    // localhost/127.0.0.1 juggling kept getting wrong.
+    fullUrl = `/api${cleanEndpoint}`;
   }
 
   // Phase 7.1 — every mutating request gets an idempotency key unless the

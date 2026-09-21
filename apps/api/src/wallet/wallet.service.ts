@@ -34,6 +34,71 @@ export const MEMBER_ID_FIELD_KEY = 'memberId';
 export const MEMBER_NAME_FIELD_KEY = 'memberName';
 
 /**
+ * Part 4 — the Passmint `applyRaw` escape hatch.
+ *
+ * Google ships Wallet fields faster than this service models them. Without an
+ * escape hatch, wanting one unmodelled field (`notifyPreference`,
+ * `linksModuleData`, a `textModulesData` shape we do not build) means editing
+ * the builder and redeploying. `applyRaw` deep-merges a caller-supplied object
+ * into the payload immediately before the request, so an unmodelled field is a
+ * template row rather than a code change.
+ *
+ * Protected paths are the exception. `id` and `classId` decide *which* class or
+ * object gets written — under one shared issuer (D15), letting raw change them
+ * turns a template edit into a write against someone else's pass. And
+ * `callbackOptions` is the ENV-4 guard: `resolveCallbackUrl()` throws on a
+ * localhost URL, which raw could otherwise put back. These stay under the
+ * builder's control and a raw attempt to set them is dropped, loudly.
+ */
+export const RAW_PROTECTED_KEYS = ['id', 'classId', 'callbackOptions'];
+
+/**
+ * Recursive merge. Plain objects merge key by key; arrays and scalars replace
+ * wholesale, because a half-merged `merchantLocations` or `cardRowTemplateInfos`
+ * is never what the caller meant.
+ */
+export function deepMergeRaw(base: any, raw: any): any {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
+  const out = { ...base };
+  for (const [key, value] of Object.entries(raw)) {
+    if (value === undefined) continue;
+    const isPlainObject =
+      value !== null && typeof value === 'object' && !Array.isArray(value);
+    out[key] =
+      isPlainObject &&
+      out[key] !== null &&
+      typeof out[key] === 'object' &&
+      !Array.isArray(out[key])
+        ? deepMergeRaw(out[key], value)
+        : value;
+  }
+  return out;
+}
+
+/**
+ * `deepMergeRaw` with the protected top-level keys stripped first. Returns the
+ * merged payload plus the names of any keys that were refused, so the caller
+ * can log them rather than letting an override vanish silently — a raw field
+ * that does nothing with no explanation is the bug this pattern exists to
+ * prevent.
+ */
+export function applyRaw(
+  base: any,
+  raw: any,
+): { payload: any; refused: string[] } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    return { payload: base, refused: [] };
+
+  const refused: string[] = [];
+  const allowed: Record<string, any> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (RAW_PROTECTED_KEYS.includes(key)) refused.push(key);
+    else allowed[key] = value;
+  }
+  return { payload: deepMergeRaw(base, allowed), refused };
+}
+
+/**
  * Per-brand loyalty economics (Phase 1.3, WAL-4). These live on
  * `PassTemplate` as the interim home — they move onto `Program` in Phase 3.
  * The defaults are exactly what used to be hardcoded in
@@ -168,12 +233,15 @@ export interface GoogleWalletPassOptions {
   balance?: string;
   tier?: string;
   hexBackgroundColor?: string;
-  barcodeValue?: string;
+  // No barcodeValue: the barcode payload is derived from passId (AUTH-4) and is
+  // deliberately not caller-supplied, so no call site can put a phone in it.
   barcodeAltText?: string;
   classSuffix?: string;
   logoUrl?: string;
   heroImageUrl?: string;
   rows?: any[];
+  /** Part 4 escape hatch — deep-merged last. See `applyRaw`. */
+  rawObject?: Record<string, any>;
 }
 
 @Injectable()
@@ -584,12 +652,24 @@ export class WalletService {
     // Throws on a localhost URL rather than poisoning a live class (ENV-4).
     classPayload.callbackOptions = { url: this.resolveCallbackUrl() };
 
+    // Part 4 — applied last, so raw can override anything the builder set
+    // above except the protected keys.
+    const { payload: finalClassPayload, refused } = applyRaw(
+      classPayload,
+      templateData.rawClass,
+    );
+    if (refused.length) {
+      this.logger.warn(
+        `rawClass tried to set protected ${refused.join(', ')} on ${classId} — ignored.`,
+      );
+    }
+
     const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass`;
 
     try {
       if (templateData.isUpdate) {
         this.logger.log(`Class ${classId} exists. Updating directly...`);
-        const patchPayload = { ...classPayload };
+        const patchPayload = { ...finalClassPayload };
         const updateRes = await client.request({
           url: `${url}/${classId}`,
           method: 'PATCH',
@@ -600,7 +680,7 @@ export class WalletService {
         const res = await client.request({
           url,
           method: 'POST',
-          data: classPayload,
+          data: finalClassPayload,
         });
         return res.data;
       }
@@ -902,8 +982,13 @@ export class WalletService {
       );
     }
 
-    const barcodeValue =
-      options.barcodeValue || `https://linearcard.vercel.app/m/${passId}`;
+    // AUTH-4: the barcode is publicly scannable, so it carries the passId and
+    // never the member's phone number. The domain comes from the same origin
+    // list the save link is signed against rather than a hardcoded host, so a
+    // preview deployment does not mint barcodes pointing at production.
+    const barcodeBase =
+      this.saveLinkOrigins()[0] || 'https://linearcard.vercel.app';
+    const barcodeValue = `${barcodeBase}/m/${passId}`;
     const barcodeAltText = options.barcodeAltText || passId;
 
     const { issuerId, clientEmail, privateKey } = this.getCredentialsOrThrow();
@@ -1001,12 +1086,25 @@ export class WalletService {
       genericObjectPayload.heroImage = { sourceUri: { uri: heroImageUrl } };
     }
 
+    // Part 4 — same escape hatch on the object side. `classId` is protected
+    // here too: an object pointing at another tenant's class is exactly the
+    // cross-brand write RAW_PROTECTED_KEYS exists to stop.
+    const { payload: finalObjectPayload, refused: objectRefused } = applyRaw(
+      genericObjectPayload,
+      options.rawObject,
+    );
+    if (objectRefused.length) {
+      this.logger.warn(
+        `rawObject tried to set protected ${objectRefused.join(', ')} on ${fullPassId} — ignored.`,
+      );
+    }
+
     const client = await this.getGoogleAuthClient();
     try {
       await client.request({
         url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject',
         method: 'POST',
-        data: genericObjectPayload,
+        data: finalObjectPayload,
       });
     } catch (error: any) {
       this.logger.error(
@@ -1034,7 +1132,7 @@ export class WalletService {
         await client.request({
           url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject',
           method: 'POST',
-          data: genericObjectPayload,
+          data: finalObjectPayload,
         });
       } catch (retryError: any) {
         this.logger.error(

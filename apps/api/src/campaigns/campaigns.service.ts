@@ -40,16 +40,24 @@ export class CampaignsService {
   ) {}
 
   /**
-   * Phase 7.4 — the body of a send, run by the worker rather than inside the
-   * HTTP request that created the campaign.
+   * The body of a send. Phase 7.4 ran this on a job queue; that queue was
+   * removed, so it now runs synchronously inside the HTTP request that
+   * created the campaign.
    *
-   * The audience is resolved *here*, not at enqueue time: a send that is
-   * retried after a crash should go to the audience as it stands when it
-   * actually sends, and re-resolving is cheaper than storing a recipient
-   * list on the job.
+   * Consequence to know about: a send that outlives the request does not
+   * resume. A large audience holds the connection open, and a deploy
+   * mid-send loses every unreached recipient. The chunking in `dispatch`
+   * keeps a normal-sized send inside the timeout, which is what makes this
+   * tolerable for now.
+   *
+   * The audience is still resolved *here* rather than by the caller, so the
+   * send goes to the audience as it stands at send time.
+   *
+   * ponytail: synchronous send, rebuild the queue when a campaign outgrows
+   * the request timeout or when D10 scheduling comes back.
    */
   async runCampaign(tenantId: string, campaignId: string) {
-    if (!campaignId) throw new Error('campaignId missing from job payload');
+    if (!campaignId) throw new Error('campaignId missing');
 
     const { data: campaign } = await this.supabaseService.client
       .from('Campaign')

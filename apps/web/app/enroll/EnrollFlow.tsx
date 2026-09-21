@@ -210,8 +210,9 @@ export default function EnrollFlow() {
                     tenantId: tenantConfig.tenantId,
                     programId: tenantConfig.program?.id,
                     memberName: onboardingName,
-                    barcodeValue: `https://linearcard.vercel.app/m/${onboardingPhone.replace(/\D/g, '')}`,
-                    barcodeAltText: onboardingPhone.replace(/\D/g, '')
+                    // AUTH-4: barcode payload and alt text are derived from the
+                    // passId server-side. Never send the phone number — the
+                    // barcode is publicly scannable.
                   })
                 }).then((data) => {
                   if (!data.success) throw new Error(data.error);

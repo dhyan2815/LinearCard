@@ -1,9 +1,20 @@
 'use client';
 import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { MapPin, Target, X, ChevronDown, ChevronRight, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+
+// Leaflet touches `window` at import time, so it cannot be server-rendered.
+const StoreLocationMap = dynamic(() => import('./StoreLocationMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-56 w-full rounded-lg border border-border-subtle bg-surface-bone flex items-center justify-center">
+      <Loader2 className="w-4 h-4 animate-spin text-ink-muted" />
+    </div>
+  ),
+});
 
 interface StoreLocationEntryProps {
   location: { id?: string; latitude: string; longitude: string; label: string };
@@ -94,6 +105,20 @@ export function StoreLocationEntry({ location, index, onUpdate, onRemove }: Stor
         </div>
 
         <div className="flex flex-col gap-2">
+          {/* Phase 4.4 — click the map to set the geofence. The manual number
+              inputs below stay as the precise-entry path. */}
+          <StoreLocationMap
+            latitude={location.latitude}
+            longitude={location.longitude}
+            onPick={(lat, lng) => {
+              setErrorMessage(null);
+              onUpdate(index, { latitude: lat, longitude: lng });
+            }}
+          />
+          <p className="text-[11px] text-ink-muted">
+            Click anywhere on the map to drop this location&apos;s pin.
+          </p>
+
           <Button
             type="button"
             variant="secondary"

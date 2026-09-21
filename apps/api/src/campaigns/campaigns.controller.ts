@@ -93,11 +93,10 @@ export class CampaignsController {
   /**
    * Create and send immediately (D10 — send-now only, no scheduling).
    *
-   * Phase 7.4: the send itself now runs on the job queue. The request
-   * returns as soon as the campaign row and its job exist, so a large
-   * audience no longer holds an HTTP connection open for minutes, and a
-   * deploy mid-send resumes instead of losing every unreached recipient.
-   * Progress is read back from `GET /campaigns/:id`.
+   * The send runs synchronously inside this request — Phase 7.4's job queue
+   * was removed. A large audience therefore holds the connection open, and a
+   * deploy mid-send loses the unreached recipients. Delivery is read back
+   * from `GET /campaigns/:id`.
    */
   @Post()
   async send(@Req() req: TenantRequest, @Body() body: CampaignBody) {
@@ -106,7 +105,7 @@ export class CampaignsController {
     const filter = body.audienceFilter || {};
 
     // Resolved once up front purely to report the recipient count back to
-    // the admin who pressed Send. The worker re-resolves at send time.
+    // the admin who pressed Send. `runCampaign` re-resolves at send time.
     const audience = await this.campaignsService.resolveAudience(
       tenantId,
       filter,
@@ -138,7 +137,10 @@ export class CampaignsController {
       );
     }
 
-    const { sent, failed } = await this.campaignsService.runCampaign(tenantId, campaign.id);
+    const { sent, failed } = await this.campaignsService.runCampaign(
+      tenantId,
+      campaign.id,
+    );
 
     return {
       success: true,

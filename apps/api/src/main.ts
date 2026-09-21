@@ -29,44 +29,6 @@ async function bootstrap() {
   // Binding '0.0.0.0' only accepted IPv4, forcing the frontend workaround
   // that rewrote 'localhost' to '127.0.0.1' before every fetch call.
   await app.listen(process.env.PORT || 3001);
-  printEnvironmentBanner();
 }
 
-/**
- * Phase 0.2/0.2b: local, preview and production share one Supabase project
- * (D13) and one Google Wallet issuer (D15). Print, at boot, exactly which
- * data and which wallet classes this process is about to mutate.
- */
-function printEnvironmentBanner() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '(unset)';
-  const projectRef =
-    supabaseUrl.match(/https?:\/\/([^.]+)\./)?.[1] || supabaseUrl;
-  const envPrefix =
-    process.env.WALLET_ENV_PREFIX?.trim() ||
-    (process.env.VERCEL_ENV === 'production'
-      ? '(none — production)'
-      : process.env.VERCEL_ENV === 'preview'
-        ? 'preview'
-        : 'dev');
-  const callbackBase = (
-    process.env.PUBLIC_CALLBACK_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '(unset)')
-  ).replace(/\/$/, '');
-  const localCallback = /localhost|127\.0\.0\.1/.test(callbackBase);
-
-  console.log(
-    [
-      '',
-      '──────────── LinearCard API ────────────',
-      `  Supabase project : ${projectRef}`,
-      `  Wallet issuer    : ${process.env.ISSUER_ID || '(per-tenant only)'}`,
-      `  Wallet env prefix: ${envPrefix}`,
-      `  Callback base    : ${callbackBase}${localCallback ? '  ← publishing a class is BLOCKED (set PUBLIC_CALLBACK_URL)' : ''}`,
-      '  Writes go to the shared project above — this is production data.',
-      '────────────────────────────────────────',
-      '',
-    ].join('\n'),
-  );
-}
 bootstrap();
