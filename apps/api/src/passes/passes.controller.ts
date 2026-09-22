@@ -17,6 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { WebhookService } from '../developers/webhook.service';
 import { describeError } from '../errors';
 import { verifyWalletCallback } from '../wallet/google-jws';
+import { computeTier } from '../tiers/tier.util';
 
 /** Parses a raw body string, returning undefined rather than throwing. */
 function safeJson(raw: string): any {
@@ -403,8 +404,29 @@ export class PassesController {
 
       const newBalance = parseInt(balance, 10);
 
+      let finalTier = tier || pass.tier;
+
+      // Auto-promotion: if the tier parameter matches the old tier (meaning the user
+      // didn't manually change it in the Live Activity UI), or wasn't provided,
+      // evaluate it automatically against the program's tiers.
+      if (!tier || tier === pass.tier) {
+        if (pass.programId) {
+          const { data: tiers } = await this.supabaseService.client
+            .from('Tier')
+            .select('*')
+            .eq('programId', pass.programId);
+
+          if (tiers && tiers.length > 0) {
+            const computedTierRow = computeTier(newBalance, tiers);
+            if (computedTierRow) {
+              finalTier = computedTierRow.name;
+            }
+          }
+        }
+      }
+
       // Duplicate check: if the balance and tier are the same, just return success early.
-      if (pass.balance === newBalance && pass.tier === tier) {
+      if (pass.balance === newBalance && pass.tier === finalTier) {
         return res.status(200).json({
           success: true,
           updatedData: { skipped: true, reason: 'Duplicate' },
@@ -416,7 +438,7 @@ export class PassesController {
         .from('Pass')
         .update({
           balance: newBalance,
-          tier: tier || pass.tier,
+          tier: finalTier,
         })
         .eq('id', pass.id);
 
@@ -426,7 +448,7 @@ export class PassesController {
         tenantWallet
           .updateGenericObject(pass.fullPassId, {
             balance: balance.toString(),
-            tier: tier || pass.tier,
+            tier: finalTier,
             pushNotification,
           })
           .then(() =>
@@ -464,7 +486,7 @@ export class PassesController {
         console.error('Async follow-up failed (non-fatal):', err);
       });
 
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, tier: finalTier });
     } catch (error: any) {
       console.error('API Error updating pass:', error);
       return res.status(500).json({

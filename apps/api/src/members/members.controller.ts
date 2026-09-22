@@ -19,6 +19,7 @@ import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { AuditService } from '../audit/audit.service';
 import { describeError } from '../errors';
 import { buildMemberQuery } from './member-query';
+import { computeTier } from '../tiers/tier.util';
 
 @Controller('members')
 export class MembersController {
@@ -85,11 +86,13 @@ export class MembersController {
           HttpStatus.NOT_FOUND,
         );
 
-      const [passesResult, auditLogResult, consentLogResult] =
+      const [passesResult, auditLogResult, consentLogResult, paymentsResult] =
         await Promise.all([
+          // The joined Program is what the dashboard shows as "programs this
+          // member belongs to" — a member holds one pass per program.
           this.supabaseService.client
             .from('Pass')
-            .select('*')
+            .select('*, Program(id, name, kind, status, enrollmentSlug)')
             .eq('memberId', id)
             .order('createdAt', { ascending: false }),
           this.supabaseService.client
@@ -103,10 +106,21 @@ export class MembersController {
             .select('*')
             .eq('memberId', id)
             .order('consentedAt', { ascending: false }),
+          // PaymentEvent is keyed by phone, not memberId (Phase 5.1): the
+          // payment arrives before the member exists. Scoped to the member's
+          // own tenant so one phone number in two tenants can't leak across.
+          this.supabaseService.client
+            .from('PaymentEvent')
+            .select('*')
+            .eq('tenantId', member.tenantId)
+            .eq('phone', member.phone)
+            .order('occurredAt', { ascending: false })
+            .limit(50),
         ]);
       let passes = passesResult.data;
       const auditLog = auditLogResult.data;
       const consentLog = consentLogResult.data;
+      const payments = paymentsResult.data;
 
       // Check Google Wallet synchronization
       if (passes && passes.length > 0) {
@@ -164,6 +178,7 @@ export class MembersController {
           passes: passes || [],
           auditLog: formattedAuditLog,
           consentLog: consentLog || [],
+          payments: payments || [],
         },
       };
     } catch (error: any) {
@@ -427,9 +442,25 @@ export class MembersController {
         return { success: false, error: 'Pass not found' };
 
       const newBalance = (pass.balance || 0) + Number(amount);
+
+      let finalTier = pass.tier;
+      if (pass.programId) {
+        const { data: tiers } = await this.supabaseService.client
+          .from('Tier')
+          .select('*')
+          .eq('programId', pass.programId);
+
+        if (tiers && tiers.length > 0) {
+          const computedTierRow = computeTier(newBalance, tiers);
+          if (computedTierRow) {
+            finalTier = computedTierRow.name;
+          }
+        }
+      }
+
       const { error: updateError } = await this.supabaseService.client
         .from('Pass')
-        .update({ balance: newBalance })
+        .update({ balance: newBalance, tier: finalTier })
         .eq('id', passId);
       if (updateError) throw updateError;
 
@@ -447,7 +478,7 @@ export class MembersController {
       this.walletService
         .updateGenericObject(pass.fullPassId, {
           balance: String(newBalance),
-          tier: pass.tier,
+          tier: finalTier,
           pushNotification: `Balance updated: ${newBalance} Pts. (${reason})`,
         })
         .then(() =>

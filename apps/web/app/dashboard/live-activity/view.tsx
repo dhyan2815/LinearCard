@@ -46,11 +46,18 @@ export default function LiveActivityPage() {
         if (!data.success && data.error !== 'Duplicate') throw new Error(data.error || 'Failed to update pass');
         msg += `Pass data updated. `;
         
+        const updatedTier = data.tier || manageData.tier;
+
         setPassHistory(prev => prev.map(p => {
           if (p.passId === manageData.passId || p.fullPassId === manageData.passId) {
-            return { ...p, passData: { ...p.passData, balance: manageData.balance, tier: manageData.tier }};
+            return { ...p, passData: { ...p.passData, balance: manageData.balance, tier: updatedTier }};
           }
           return p;
+        }));
+        
+        setManageData(prev => ({
+          ...prev,
+          tier: updatedTier
         }));
       }
 
