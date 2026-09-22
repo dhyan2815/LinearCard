@@ -10,6 +10,8 @@ export interface LogNotificationOpts {
   errorReason?: string;
   header?: string;
   body?: string;
+  /** Phase 2.1 — per-recipient rows roll up into their Campaign. */
+  campaignId?: string;
 }
 
 @Injectable()
@@ -29,6 +31,7 @@ export class NotifyService {
       errorReason,
       header,
       body,
+      campaignId,
     } = opts;
     try {
       const { error } = await this.supabaseService.client
@@ -42,6 +45,7 @@ export class NotifyService {
           error: errorReason || null,
           header: header || null,
           body: body || null,
+          campaignId: campaignId || null,
         });
       if (error) {
         this.logger.error('[notify] Failed to write NotificationLog:', error);

@@ -152,7 +152,14 @@ export class WebhookService {
           0,
           RESPONSE_BODY_TRUNCATE,
         );
-        await this.logDelivery(endpoint.id, event, payload, res.status, responseBody, attempt);
+        await this.logDelivery(
+          endpoint.id,
+          event,
+          payload,
+          res.status,
+          responseBody,
+          attempt,
+        );
         if (res.ok) return;
       } catch (err: any) {
         await this.logDelivery(

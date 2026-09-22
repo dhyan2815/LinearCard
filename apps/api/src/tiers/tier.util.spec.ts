@@ -11,7 +11,11 @@ describe('computeTier', () => {
     sortOrder,
   });
 
-  const tiers = [tier('Bronze', 0, 0), tier('Silver', 500, 1), tier('Gold', 2000, 2)];
+  const tiers = [
+    tier('Bronze', 0, 0),
+    tier('Silver', 500, 1),
+    tier('Gold', 2000, 2),
+  ];
 
   it('returns the lowest tier for a balance below every threshold', () => {
     expect(computeTier(-5, tiers)?.name).toBe('Bronze');
@@ -30,7 +34,11 @@ describe('computeTier', () => {
   });
 
   it('sorts unordered tiers before computing', () => {
-    const unordered = [tier('Gold', 2000, 2), tier('Bronze', 0, 0), tier('Silver', 500, 1)];
+    const unordered = [
+      tier('Gold', 2000, 2),
+      tier('Bronze', 0, 0),
+      tier('Silver', 500, 1),
+    ];
     expect(computeTier(600, unordered)?.name).toBe('Silver');
   });
 

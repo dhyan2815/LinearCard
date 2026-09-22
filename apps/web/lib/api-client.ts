@@ -1,6 +1,17 @@
-const API_TIMEOUT = 15000; // 15s timeout (dev: backend may restart)
-const MAX_RETRIES = 3;
+// In dev the API restarts on every save (nest --watch). A request made during
+// that window used to sit on the full 15s timeout and then burn three
+// exponential retries — ~22s of a frozen-looking page. Dev fails fast and
+// loud instead; production keeps the patient settings.
+const IS_DEV = process.env.NODE_ENV !== 'production';
+const API_TIMEOUT = IS_DEV ? 4000 : 15000;
+const MAX_RETRIES = IS_DEV ? 1 : 3;
 const RETRY_DELAY_MS = 1000; // exponential: 1s, 2s, 4s
+
+/** crypto.randomUUID is unavailable on http:// origins in some browsers. */
+function newIdempotencyKey(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return uuid || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 export class UnauthorizedError extends Error {
   constructor(message: string) {
@@ -23,9 +34,21 @@ async function fetchWithRetry(url: string, options: RequestInit, attempt = 1): P
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // Retry on timeout or network errors; don't retry on 4xx (client errors)
+    // Retry on timeout or network errors; don't retry on 4xx (client errors).
+    // FE-1: only for safe methods. A timed-out POST may well have been
+    // processed server-side, so retrying it could award points 3x.
+    //
+    // Phase 7.1: a mutating request that carries an Idempotency-Key is safe
+    // to retry — the backend interceptor guarantees it executes at most
+    // once, and a replay returns the first response rather than repeating
+    // the work. That is what makes a timed-out `process-order` recoverable
+    // instead of simply lost.
+    const method = (options.method || 'GET').toUpperCase();
+    const headers = (options.headers || {}) as Record<string, string>;
+    const isSafeMethod =
+      method === 'GET' || method === 'HEAD' || !!headers['Idempotency-Key'];
     const isNetworkError = error instanceof TypeError || error?.name === 'AbortError';
-    if (isNetworkError && attempt < MAX_RETRIES) {
+    if (isSafeMethod && isNetworkError && attempt < MAX_RETRIES) {
       const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetry(url, options, attempt + 1);
@@ -53,28 +76,28 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
     }
     fullUrl = `${(baseApiUrl || 'http://localhost:3001').replace(/\/+$/, '')}${cleanEndpoint}`;
   } else {
-    // Use the page's own hostname verbatim. Rewriting 'localhost' to
-    // '127.0.0.1' here (old IPv6 workaround) made the backend set the
-    // admin_session cookie on a different host than the page, so the
-    // Next.js middleware never saw it and redirected to /login in a loop.
-    // The backend now dual-stack-binds (see main.ts), so no rewrite is needed.
-    const hostname = window.location.hostname;
-
-    if (hostname.includes('.vercel.app')) {
-      const apiHostname = hostname.replace(/^linearcard(-git)?/, 'linearcard-api$1');
-      fullUrl = `${window.location.protocol}//${apiHostname}${cleanEndpoint}`;
-    } else if (baseApiUrl && baseApiUrl.startsWith('http')) {
-      fullUrl = `${baseApiUrl.replace(/\/+$/, '')}${cleanEndpoint}`;
-    } else {
-      fullUrl = `${window.location.protocol}//${hostname}:3001${cleanEndpoint}`;
-    }
+    // Same-origin: next.config.mjs rewrites /api/* to the backend. No host
+    // rewriting, no ports, no CORS, and the admin_session cookie is always
+    // set on the host the page is served from — which is what the old
+    // localhost/127.0.0.1 juggling kept getting wrong.
+    fullUrl = `/api${cleanEndpoint}`;
   }
+
+  // Phase 7.1 — every mutating request gets an idempotency key unless the
+  // caller supplied its own. Generated per call rather than per retry: the
+  // whole point is that the retries of one logical request share a key.
+  const method = (options.method || 'GET').toUpperCase();
+  const needsKey = method !== 'GET' && method !== 'HEAD';
+  const suppliedHeaders = (options.headers || {}) as Record<string, string>;
 
   const fetchOptions: RequestInit = {
     cache: 'no-store',
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(needsKey && !suppliedHeaders['Idempotency-Key']
+        ? { 'Idempotency-Key': newIdempotencyKey() }
+        : {}),
       ...options.headers,
     },
   };
@@ -85,8 +108,6 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
 
   const response = await fetchWithRetry(fullUrl, fetchOptions);
 
-  console.debug(`[API] ${response.status > 399 ? 'ERROR' : 'OK'} ${cleanEndpoint} | Credentials: ${!isServer ? 'sent via httpOnly cookie' : 'N/A (server)'} | Status: ${response.status}`);
-
   if (!response.ok) {
     let errorMsg = response.statusText;
     try {
@@ -96,12 +117,7 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
 
     // Throw UnauthorizedError for 401 so callers can distinguish auth failures
     if (response.status === 401) {
-      console.warn(`[API] 401 Unauthorized for ${cleanEndpoint}. Token missing or invalid.`);
       throw new UnauthorizedError(`API Error (${response.status}): ${errorMsg}`);
-    }
-
-    if (response.status === 500) {
-      console.error(`[API] 500 Server Error for ${cleanEndpoint}. Details: ${errorMsg}`);
     }
 
     throw new Error(`API Error (${response.status}): ${errorMsg}`);

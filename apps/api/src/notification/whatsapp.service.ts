@@ -1,73 +1,77 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotifyService } from './notify.service';
+import { WhatsappProvider, WahaProvider } from './whatsapp.provider';
+import { describeError } from '../errors';
 
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
 
-  constructor(private readonly notifyService: NotifyService) { }
+  /**
+   * D6/Phase 2.6: every outbound message goes through one provider
+   * interface. WAHA is the default implementation; a Cloud API provider
+   * swaps in here and nowhere else.
+   */
+  private readonly provider: WhatsappProvider = new WahaProvider();
 
-  private toWahaId(phone: string): string {
-    // Convert E.164 (+919876543210) -> Waha format (919876543210@c.us)
-    return `${phone.replace(/^\+/, '')}@c.us`;
+  constructor(private readonly notifyService: NotifyService) {}
+
+  /**
+   * Send-and-log, used by every message type below and by campaigns. Logging
+   * both outcomes is the whole reason callers don't talk to the provider
+   * directly.
+   */
+  public async sendTextWithLog(
+    phone: string,
+    text: string,
+    opts: {
+      tenantId: string;
+      memberId?: string;
+      type: string;
+      campaignId?: string;
+      header?: string;
+    },
+  ): Promise<void> {
+    try {
+      await this.provider.sendText(phone, text);
+      await this.notifyService.logNotification({
+        tenantId: opts.tenantId,
+        memberId: opts.memberId,
+        type: opts.type,
+        channel: 'whatsapp',
+        status: 'sent',
+        campaignId: opts.campaignId,
+        header: opts.header,
+        body: text,
+      });
+    } catch (err: any) {
+      await this.notifyService.logNotification({
+        tenantId: opts.tenantId,
+        memberId: opts.memberId,
+        type: opts.type,
+        channel: 'whatsapp',
+        status: 'failed',
+        errorReason: describeError(err),
+        campaignId: opts.campaignId,
+        header: opts.header,
+        body: text,
+      });
+      throw err;
+    }
   }
 
-  private async wahaPost(endpoint: string, body: object) {
-    const WAHA_BASE_URL = process.env.WAHA_BASE_URL;
-    const WAHA_API_KEY = process.env.WAHA_API_KEY;
-    const WAHA_SESSION = process.env.WAHA_SESSION;
-
-    // Gracefully handle missing base URL so the app can still run in offline/dev modes
-    if (!WAHA_BASE_URL) {
-      this.logger.warn(
-        'WAHA_BASE_URL not set in .env. Skipping WhatsApp message.',
-      );
-      return;
-    }
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
-
-    // Optionally append the API key if configured
-    if (WAHA_API_KEY) {
-      headers['X-Api-Key'] = WAHA_API_KEY;
-    }
-
-    const url = `${WAHA_BASE_URL.replace(/\/$/, '')}${endpoint}`;
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ session: WAHA_SESSION, ...body }),
-      });
-
-      // Throw a detailed error if the WAHA provider rejects the payload
-      if (!res.ok) {
-        const text = await res.text();
-        this.logger.error(`Waha error ${res.status}: ${text}`);
-        throw new Error(`Waha error ${res.status}: ${text}`);
-      }
-
-      return await res.json();
-    } catch (error) {
-      this.logger.error(
-        `Failed to send WhatsApp message to ${endpoint}:`,
-        error,
-      );
-      throw error;
-    }
+  /** Unlogged send. Campaigns and one-offs that log themselves use this. */
+  public async sendText(phone: string, text: string): Promise<any> {
+    return this.provider.sendText(phone, text);
   }
 
   public async sendOtp(phone: string, otp: string, brandName?: string) {
     const brand = brandName || 'LinearCard';
     this.logger.log(`[DEV OTP] Target: ${phone} | Code: ${otp}`);
-    return this.wahaPost('/api/sendText', {
-      chatId: this.toWahaId(phone),
-      text: `🔐 Your ${brand} verification code is: *${otp}*\n\nThis code expires in 5 minutes. Do not share it with anyone.`,
-    });
+    return this.provider.sendText(
+      phone,
+      `🔐 Your ${brand} verification code is: *${otp}*\n\nThis code expires in 5 minutes. Do not share it with anyone.`,
+    );
   }
 
   public async sendPassLink(
@@ -76,10 +80,10 @@ export class WhatsappService {
     memberName: string,
     brandName: string,
   ) {
-    return this.wahaPost('/api/sendText', {
-      chatId: this.toWahaId(phone),
-      text: `🎉 Welcome, ${memberName}!\n\nYour *${brandName}* card has been securely saved to your Google Wallet.\nYou can now access it anytime to check your balance or scan at the store.\n\n_*Powered by LinearCard*_`,
-    });
+    return this.provider.sendText(
+      phone,
+      `🎉 Welcome, ${memberName}!\n\nYour *${brandName}* card has been securely saved to your Google Wallet.\nYou can now access it anytime to check your balance or scan at the store.\n\n_*Powered by LinearCard*_`,
+    );
   }
 
   public async sendRedemptionReceipt(
@@ -87,10 +91,10 @@ export class WhatsappService {
     newBalance: string,
     brandName: string,
   ) {
-    return this.wahaPost('/api/sendText', {
-      chatId: this.toWahaId(phone),
-      text: `✅ *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your wallet pass will refresh automatically._`,
-    });
+    return this.provider.sendText(
+      phone,
+      `✅ *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your wallet pass will refresh automatically._`,
+    );
   }
 
   // Logged wrappers
@@ -101,30 +105,11 @@ export class WhatsappService {
     brandName: string,
     opts: { tenantId: string; memberId?: string },
   ): Promise<void> {
-    const text = `🎟️ Welcome, ${memberName}!\n\nYour *${brandName}* loyalty pass is ready.\n\nTap to add it to Google Wallet:\n${walletUrl}\n\n_Powered by LinearCard_`;
-    try {
-      await this.wahaPost('/api/sendText', {
-        chatId: this.toWahaId(phone),
-        text,
-      });
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: 'pass_link',
-        channel: 'whatsapp',
-        status: 'sent',
-      });
-    } catch (err: any) {
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: 'pass_link',
-        channel: 'whatsapp',
-        status: 'failed',
-        errorReason: err?.message || String(err),
-      });
-      throw err;
-    }
+    return this.sendTextWithLog(
+      phone,
+      `🎟️ Welcome, ${memberName}!\n\nYour *${brandName}* loyalty pass is ready.\n\nTap to add it to Google Wallet:\n${walletUrl}\n\n_Powered by LinearCard_`,
+      { ...opts, type: 'pass_link' },
+    );
   }
 
   public async sendRedemptionReceiptWithLog(
@@ -133,30 +118,11 @@ export class WhatsappService {
     brandName: string,
     opts: { tenantId: string; memberId?: string },
   ): Promise<void> {
-    const text = `🛒 *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your wallet pass will refresh automatically._`;
-    try {
-      await this.wahaPost('/api/sendText', {
-        chatId: this.toWahaId(phone),
-        text,
-      });
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: 'receipt',
-        channel: 'whatsapp',
-        status: 'sent',
-      });
-    } catch (err: any) {
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: 'receipt',
-        channel: 'whatsapp',
-        status: 'failed',
-        errorReason: err?.message || String(err),
-      });
-      throw err;
-    }
+    return this.sendTextWithLog(
+      phone,
+      `🛒 *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your wallet pass will refresh automatically._`,
+      { ...opts, type: 'receipt' },
+    );
   }
 
   public async sendWalletSaveConfirmationWithLog(
@@ -164,30 +130,11 @@ export class WhatsappService {
     brandName: string,
     opts: { tenantId: string; memberId?: string },
   ): Promise<void> {
-    const text = `🎉 Success! Your ${brandName} card has been securely saved to your Google Wallet. You can now access it anytime to check your balance or scan at the store.`;
-    try {
-      await this.wahaPost('/api/sendText', {
-        chatId: this.toWahaId(phone),
-        text,
-      });
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: 'wallet_save_confirmation' as any,
-        channel: 'whatsapp',
-        status: 'sent',
-      });
-    } catch (err: any) {
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: 'wallet_save_confirmation' as any,
-        channel: 'whatsapp',
-        status: 'failed',
-        errorReason: err?.message || String(err),
-      });
-      throw err;
-    }
+    return this.sendTextWithLog(
+      phone,
+      `🎉 Success! Your ${brandName} card has been securely saved to your Google Wallet. You can now access it anytime to check your balance or scan at the store.`,
+      { ...opts, type: 'wallet_save_confirmation' },
+    );
   }
 
   public async sendTierUpgradeMessage(
@@ -196,29 +143,10 @@ export class WhatsappService {
     brandName: string,
     opts: { tenantId: string; memberId?: string },
   ): Promise<void> {
-    const text = `🏆 Congratulations! You've been upgraded to *${tierName}* tier on your *${brandName}* card. Enjoy your new perks!`;
-    try {
-      await this.wahaPost('/api/sendText', {
-        chatId: this.toWahaId(phone),
-        text,
-      });
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: 'tier_upgrade' as any,
-        channel: 'whatsapp',
-        status: 'sent',
-      });
-    } catch (err: any) {
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: 'tier_upgrade' as any,
-        channel: 'whatsapp',
-        status: 'failed',
-        errorReason: err?.message || String(err),
-      });
-      throw err;
-    }
+    return this.sendTextWithLog(
+      phone,
+      `🏆 Congratulations! You've been upgraded to *${tierName}* tier on your *${brandName}* card. Enjoy your new perks!`,
+      { ...opts, type: 'tier_upgrade' },
+    );
   }
 }

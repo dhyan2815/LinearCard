@@ -40,6 +40,16 @@ export default function PassPreviewCard({
   platform = 'google'
 }: PassPreviewCardProps): React.JSX.Element {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [logoError, setLogoError] = useState(false);
+  const [heroError, setHeroError] = useState(false);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [logoUrl]);
+
+  useEffect(() => {
+    setHeroError(false);
+  }, [heroImageUrl]);
 
   useEffect(() => {
     // Detect system preference to toggle dark mode
@@ -133,9 +143,9 @@ export default function PassPreviewCard({
 
   const logo = (
     <div className="w-12 h-12 rounded-full bg-white overflow-hidden flex items-center justify-center shrink-0 shadow-sm border border-black/5">
-      {logoUrl ? (
+      {logoUrl && !logoError ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" onError={() => setLogoError(true)} />
       ) : (
         <div className="w-full h-full bg-slate-100 flex items-center justify-center font-bold text-slate-400 text-sm">
           {cardTitle ? cardTitle.substring(0, 2).toUpperCase() : 'LC'}
@@ -174,10 +184,10 @@ export default function PassPreviewCard({
                 <span className="text-white/70 text-[11px] font-medium uppercase tracking-wide block mb-1">{tierLabel}</span>
                 <span className="text-white text-2xl font-semibold truncate block leading-tight">{memberName || 'Your Name'}</span>
               </div>
-              {heroImageUrl && (
+              {heroImageUrl && !heroError && (
                 <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-white/20">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={heroImageUrl} alt="Strip" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  <img src={heroImageUrl} alt="Strip" className="w-full h-full object-cover" onError={() => setHeroError(true)} />
                 </div>
               )}
             </div>
@@ -188,7 +198,7 @@ export default function PassPreviewCard({
 
             <div className="px-6 py-8 flex flex-col items-center justify-center bg-white border-t border-black/5">
               <div className="w-42.5 h-42.5 flex items-center justify-center mb-3">
-                <QRCodeSVG value={displayBarcodeValue} size={160} level="M" includeMargin={false} />
+                <QRCodeSVG value={displayBarcodeValue} size={170} level="Q" includeMargin={true} />
               </div>
               <span className="text-zinc-600 font-mono text-[13px] tracking-widest mt-1">{shortPassId}</span>
             </div>
@@ -224,30 +234,32 @@ export default function PassPreviewCard({
               {memberName || 'Your Name'}
             </span>
          </div>
+
+         {/* Barcode Section */}
+         <div className="flex flex-col items-center justify-center mt-10 mb-2">
+           <div className="bg-white p-3 rounded-[20px] shadow-sm">
+             <div className="w-42.5 h-42.5 flex items-center justify-center">
+               <QRCodeSVG
+                  value={displayBarcodeValue}
+                  size={170}
+                  level="Q"
+                  includeMargin={true}
+                />
+             </div>
+           </div>
+           <span className="text-white/90 font-medium text-[13px] tracking-wide mt-4">{shortPassId}</span>
+         </div>
       </div>
 
       {/* Hero Image */}
-      {heroImageUrl && (
-        <div className="w-full h-45 bg-neutral-200 overflow-hidden shrink-0 border-b border-black/5">
+      {heroImageUrl && !heroError && (
+        <div className="w-full h-45 bg-neutral-200 overflow-hidden shrink-0 border-y border-black/5">
            {/* eslint-disable-next-line @next/next/no-img-element */}
-           <img src={heroImageUrl} alt="Hero" className="w-full h-full object-cover transition-opacity duration-500" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+           <img src={heroImageUrl} alt="Hero" className="w-full h-full object-cover transition-opacity duration-500" onError={() => setHeroError(true)} />
         </div>
       )}
 
       {renderRows()}
-
-      {/* Barcode Section */}
-      <div className="px-6 py-8 flex flex-col items-center justify-center bg-white transition-colors duration-500 mt-auto border-t border-black/5">
-         <div className="w-42.5 h-42.5 flex items-center justify-center mb-3">
-           <QRCodeSVG
-              value={displayBarcodeValue}
-              size={160}
-              level="M"
-              includeMargin={false}
-            />
-         </div>
-         <span className="text-zinc-600 font-mono text-[13px] tracking-widest mt-1">{shortPassId}</span>
-      </div>
     </div>
   );
 }

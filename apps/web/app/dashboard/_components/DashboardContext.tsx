@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient, UnauthorizedError } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
-import { Tenant, DEFAULT_PASS_HEX } from '@linearcard/types';
+import { Tenant, Program, Tier, DEFAULT_PASS_HEX } from '@linearcard/types';
 
 type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
 
@@ -14,8 +14,11 @@ export interface DesignData {
   logoUrl: string;
   heroImageUrl: string;
   rows: Array<{ id: string; columns: Array<{ key: string; header: string; body: string }> }>;
-  tierThresholds: Array<{ name: string; min: number }>;
   storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }>;
+  /** Loyalty economics (Phase 1.3) — interim home is the template row. */
+  earnRate: number;
+  redeemRate: number;
+  redeemCapPercent: number;
 }
 
 export interface StatsData {
@@ -40,6 +43,22 @@ interface DashboardContextType {
   currentTenant?: Tenant;
   selectedTenantId: string;
   handleTenantChange: (id: string) => void;
+
+  /** Phase 3.4 — a tenant runs several programs (D8); one is active at a time. */
+  programs: Program[];
+  currentProgram?: Program;
+  selectedProgramId: string;
+  handleProgramChange: (id: string) => void;
+  refreshPrograms: () => Promise<void>;
+
+  /**
+   * Phase 3.2 — the active program's real `Tier` rows. This is the only tier
+   * source of truth; the old `tierThresholds` JSONB on the template was
+   * written by the designer and ignored by the runtime (DB-9).
+   */
+  tiers: Tier[];
+  setTiers: React.Dispatch<React.SetStateAction<Tier[]>>;
+
   
   designData: DesignData;
   setDesignData: React.Dispatch<React.SetStateAction<DesignData>>;
@@ -85,10 +104,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     rows: [
       { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
     ],
-    tierThresholds: [],
-    storeLocations: []
+    storeLocations: [],
+    earnRate: 0.1,
+    redeemRate: 1,
+    redeemCapPercent: 50
   });
 
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [selectedProgramId, setSelectedProgramId] = useState<string>('');
+  const [tiers, setTiers] = useState<Tier[]>([]);
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
   const [templateStatus, setTemplateStatus] = useState<'unsaved' | 'draft' | 'published'>('unsaved');
   const [manageData, setManageData] = useState<ManageData>({
@@ -134,6 +158,60 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const currentTenant = tenants.find(t => t.id === selectedTenantId);
+  const currentProgram = programs.find(p => p.id === selectedProgramId);
+
+  // Phase 3.4 — programs belong to the selected tenant, and every
+  // program-scoped view (designer, tiers) reads `selectedProgramId`.
+  const loadPrograms = React.useCallback(async () => {
+    if (!selectedTenantId) return;
+    try {
+      const data = await apiClient('/programs');
+      if (data.success) {
+        setPrograms(data.programs);
+        setSelectedProgramId(prev =>
+          data.programs.some((p: Program) => p.id === prev)
+            ? prev
+            : data.programs[0]?.id || ''
+        );
+      }
+    } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        router.push('/login');
+        return;
+      }
+      console.error('Failed to fetch programs:', err);
+    }
+  }, [selectedTenantId, router]);
+
+  useEffect(() => {
+    loadPrograms();
+  }, [loadPrograms]);
+
+  // The active program's tiers — loaded here so the designer's tier editor
+  // and any future tier view share one copy.
+  useEffect(() => {
+    if (!selectedProgramId) {
+      setTiers([]);
+      return;
+    }
+    apiClient(`/programs/${selectedProgramId}/tiers`)
+      .then(data => {
+        if (data.success) setTiers(data.tiers);
+      })
+      .catch(err => {
+        if (err instanceof UnauthorizedError) {
+          router.push('/login');
+          return;
+        }
+        console.error('Failed to fetch tiers:', err);
+      });
+  }, [selectedProgramId, router]);
+
+  const handleProgramChange = (id: string) => {
+    setSelectedProgramId(id);
+    setSavedTemplateId(null);
+    setTemplateStatus('unsaved');
+  };
 
   useEffect(() => {
     if (selectedTenantId) {
@@ -151,7 +229,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           console.error('Failed to fetch stats:', err);
         });
 
-      apiClient(`/members?tenantId=${selectedTenantId}`)
+      // Phase 6.1 — this feeds the "select from history" picker, not a full
+      // listing; the bound is explicit so it can't silently grow into one.
+      apiClient(`/members?tenantId=${selectedTenantId}&limit=50`)
         .then(data => {
           if (data.success) {
              const allPasses = data.members?.flatMap((m: any) => m.passes?.map((p: any) => ({
@@ -188,11 +268,16 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       rows: [
         { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
       ],
-      tierThresholds: [],
-      storeLocations: []
+      storeLocations: [],
+      earnRate: 0.1,
+      redeemRate: 1,
+      redeemCapPercent: 50
     });
     setSavedTemplateId(null);
     setTemplateStatus('unsaved');
+    setPrograms([]);
+    setSelectedProgramId('');
+    setTiers([]);
     setStats({
       memberCount: 0,
       passCount: 0,
@@ -206,8 +291,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     if (currentTenant) {
       apiClient(`/templates?tenantId=${currentTenant.id}`)
         .then(data => {
-          if (data.success && data.templates && data.templates.length > 0) {
-            const t = data.templates[0];
+          // PRG-2: pick the template of the *selected program*, not whichever
+          // of the tenant's templates happens to sort first — under D8 that
+          // would load the gym design while the coffee program is open.
+          const scoped = (data.templates || []).filter((t: any) =>
+            selectedProgramId ? t.programId === selectedProgramId : true
+          );
+          if (data.success && scoped.length > 0) {
+            const t = scoped[0];
             setSavedTemplateId(t.id);
             setTemplateStatus(t.status || 'draft');
             setDesignData({
@@ -224,8 +315,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                   key: col.key || `${row.id}_${idx}`,
                 })),
               })),
-              tierThresholds: t.tierThresholds || [],
-              storeLocations: t.storeLocations || []
+              storeLocations: t.storeLocations || [],
+              earnRate: t.earnRate ?? 0.1,
+              redeemRate: t.redeemRate ?? 1,
+              redeemCapPercent: t.redeemCapPercent ?? 50
             });
           } else {
             setSavedTemplateId(null);
@@ -240,8 +333,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               rows: [
                 { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
               ],
-              tierThresholds: [],
-              storeLocations: []
+              storeLocations: [],
+              earnRate: 0.1,
+              redeemRate: 1,
+              redeemCapPercent: 50
             });
           }
         })
@@ -255,7 +350,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           setTemplateStatus('unsaved');
         });
     }
-  }, [currentTenant, router]);
+  }, [currentTenant, selectedProgramId, router]);
 
   return (
     <DashboardContext.Provider value={{
@@ -263,6 +358,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       currentTenant,
       selectedTenantId,
       handleTenantChange,
+      programs,
+      currentProgram,
+      selectedProgramId,
+      handleProgramChange,
+      refreshPrograms: loadPrograms,
+      tiers,
+      setTiers,
       designData,
       setDesignData,
       savedTemplateId,

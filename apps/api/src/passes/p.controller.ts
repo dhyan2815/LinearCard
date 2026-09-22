@@ -44,6 +44,8 @@ export class PController {
 
       const passDesign = await this.walletService.resolveTenantPassDesign(
         pass.tenantId,
+        undefined,
+        pass.programId ?? undefined,
       );
 
       const tenantWallet = await this.walletService.forTenant(pass.tenantId);
@@ -53,9 +55,7 @@ export class PController {
         balance: String(pass.balance),
         tier: pass.tier,
         hexBackgroundColor: passDesign.hexBackgroundColor,
-        barcodeValue: `https://linearcard.vercel.app/m/${pass.member.phone.replace(/[^0-9]/g, '')}`,
-        barcodeAltText:
-          pass.barcodeAlt || pass.member.phone.replace(/[^0-9]/g, ''),
+        barcodeAltText: pass.barcodeAlt || undefined,
         classSuffix: passDesign.classSuffix || pass.tenant.classSuffix,
         logoUrl: resolveImageUrl(passDesign.logoUrl),
         heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),

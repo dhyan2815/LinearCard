@@ -63,10 +63,18 @@ export function TemplateWorkspace({
   setTemplateStatus,
   currentTenant,
   selectedTenantId,
+  currentProgram,
+  tiers = [],
+  setTiers,
   passCount = 0
 }: any) {
   const [fieldsExpanded, setFieldsExpanded] = React.useState(true);
   const [tiersExpanded, setTiersExpanded] = React.useState(false);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  // Phase 4.1 — the live class as Google actually holds it, not as we assume.
+  const [liveClass, setLiveClass] = React.useState<any>(null);
+  const [liveClassLoading, setLiveClassLoading] = React.useState(false);
 
   // Any design edit invalidates whatever is currently published (or makes an
   // unsaved template as-yet-unpublished), so every mutation routes through
@@ -126,27 +134,36 @@ export function TemplateWorkspace({
     updateDesignData({ ...designData, rows: newRows });
   };
 
-  const tierThresholds: Array<{ name: string; min: number }> = designData.tierThresholds || [];
+  // Phase 3.2 — the editor works on the program's real `Tier` rows and saves
+  // them through PATCH /programs/:id/tiers. The old `tierThresholds` JSONB it
+  // used to write was never read by the scan pipeline (DB-9), so editing a
+  // tier here changed nothing about what the next scan computed.
+  const isTicketProgram = currentProgram?.kind === 'ticket';
+
+  const setTierList = (next: any[]) => {
+    setTiers?.(next);
+    setTemplateStatus((prev: any) => (prev === 'published' ? 'draft' : prev));
+  };
 
   const addTier = () => {
-    updateDesignData({ ...designData, tierThresholds: [...tierThresholds, { name: '', min: 0 }] });
+    setTierList([...tiers, { name: '', minPoints: 0, templateId: null }]);
   };
 
   const updateTier = (
     index: number,
-    field: 'name' | 'min',
+    field: 'name' | 'minPoints',
     value: string,
   ) => {
-    const next = [...tierThresholds];
+    const next = [...tiers];
     next[index] = {
       ...next[index],
-      [field]: field === 'min' ? Number(value) || 0 : value,
+      [field]: field === 'minPoints' ? Number(value) || 0 : value,
     };
-    updateDesignData({ ...designData, tierThresholds: next });
+    setTierList(next);
   };
 
   const removeTier = (index: number) => {
-    updateDesignData({ ...designData, tierThresholds: tierThresholds.filter((_, i) => i !== index) });
+    setTierList(tiers.filter((_: any, i: number) => i !== index));
   };
 
   const storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }> =
@@ -178,47 +195,79 @@ export function TemplateWorkspace({
     updateDesignData({ ...designData, storeLocations: storeLocations.filter((_, i) => i !== index) });
   };
 
-  const handleSaveDraft = async () => {
-    const savePromise = async () => {
-      if (savedTemplateId) {
-        const data = await apiClient(`/templates/${savedTemplateId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            name: designData.cardTitle,
-            archetype: designData.archetype,
-            fieldRows: designData.rows,
-            tierThresholds,
-            storeLocations,
-            hexBackgroundColor: designData.hexBackgroundColor,
-            logoUrl: designData.logoUrl || null,
-            heroImageUrl: designData.heroImageUrl || null,
-          }),
-        });
-        if (!data.success) throw new Error(data.error || 'Error saving draft');
-        setTemplateStatus('draft');
-      } else {
-        const data = await apiClient('/templates', {
-          method: 'POST',
-          body: JSON.stringify({
-            tenantId: currentTenant?.id || selectedTenantId,
-            classSuffix: designData.classSuffix,
-            name: designData.cardTitle,
-            archetype: designData.archetype,
-            fieldRows: designData.rows,
-            tierThresholds,
-            storeLocations,
-            hexBackgroundColor: designData.hexBackgroundColor,
-            logoUrl: designData.logoUrl || null,
-            heroImageUrl: designData.heroImageUrl || null,
-          }),
-        });
-        if (!data.success) throw new Error(data.error || 'Error saving draft');
-        setSavedTemplateId(data.template.id);
-        setTemplateStatus('draft');
-      }
+  // Saves the current design and returns the template id, so callers that
+  // need a persisted template (publish, preview-on-device) don't each
+  // re-implement the create-or-update dance.
+  const saveTemplate = async (): Promise<string> => {
+    const payload = {
+      name: designData.cardTitle,
+      archetype: designData.archetype,
+      fieldRows: designData.rows,
+      storeLocations,
+      earnRate: designData.earnRate,
+      redeemRate: designData.redeemRate,
+      redeemCapPercent: designData.redeemCapPercent,
+      hexBackgroundColor: designData.hexBackgroundColor,
+      logoUrl: designData.logoUrl || null,
+      heroImageUrl: designData.heroImageUrl || null,
     };
 
-    toast.promise(savePromise(), {
+    // A saved design on a loyalty program also persists its tiers and its
+    // economics onto the Program row, which is what the scan pipeline reads.
+    const saveProgramConfig = async () => {
+      if (!currentProgram?.id || currentProgram.kind !== 'loyalty') return;
+      await apiClient(`/programs/${currentProgram.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          earnRate: designData.earnRate,
+          redeemRate: designData.redeemRate,
+          redeemCapPercent: designData.redeemCapPercent,
+        }),
+      });
+      const named = tiers.filter((t: any) => t.name?.trim());
+      const data = await apiClient(`/programs/${currentProgram.id}/tiers`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          tiers: named.map((t: any) => ({
+            name: t.name,
+            minPoints: Number(t.minPoints) || 0,
+            templateId: t.templateId ?? null,
+          })),
+        }),
+      });
+      if (!data.success) throw new Error(data.error || 'Error saving tiers');
+      setTiers?.(data.tiers);
+    };
+
+    if (savedTemplateId) {
+      const data = await apiClient(`/templates/${savedTemplateId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      if (!data.success) throw new Error(data.error || 'Error saving draft');
+      await saveProgramConfig();
+      setTemplateStatus('draft');
+      return savedTemplateId;
+    }
+
+    const data = await apiClient('/templates', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...payload,
+        tenantId: currentTenant?.id || selectedTenantId,
+        programId: currentProgram?.id ?? null,
+        classSuffix: designData.classSuffix,
+      }),
+    });
+    if (!data.success) throw new Error(data.error || 'Error saving draft');
+    await saveProgramConfig();
+    setSavedTemplateId(data.template.id);
+    setTemplateStatus('draft');
+    return data.template.id;
+  };
+
+  const handleSaveDraft = async () => {
+    toast.promise(saveTemplate(), {
       loading: 'Saving draft...',
       success: 'Draft saved successfully!',
       error: (err: any) => err.message || 'Error saving draft'
@@ -227,47 +276,13 @@ export function TemplateWorkspace({
 
   const handlePublish = async () => {
     const publishPromise = async () => {
-      let tplId = savedTemplateId;
-      if (!tplId) {
-        const data = await apiClient('/templates', {
-          method: 'POST',
-          body: JSON.stringify({
-            tenantId: currentTenant?.id || selectedTenantId,
-            name: designData.cardTitle || 'New Template',
-            archetype: designData.archetype,
-            classSuffix: designData.classSuffix,
-            fieldRows: designData.rows,
-            tierThresholds,
-            storeLocations,
-            hexBackgroundColor: designData.hexBackgroundColor,
-            logoUrl: designData.logoUrl || null,
-            heroImageUrl: designData.heroImageUrl || null,
-          }),
-        });
-        if (!data.success) throw new Error(data.error || 'Failed to create template');
-        tplId = data.template.id;
-        setSavedTemplateId(tplId);
-      } else {
-        const data = await apiClient(`/templates/${tplId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            name: designData.cardTitle,
-            archetype: designData.archetype,
-            fieldRows: designData.rows,
-            tierThresholds,
-            storeLocations,
-            hexBackgroundColor: designData.hexBackgroundColor,
-            logoUrl: designData.logoUrl || null,
-            heroImageUrl: designData.heroImageUrl || null,
-          }),
-        });
-        if (!data.success) throw new Error(data.error || 'Failed to sync edits before publish');
-        setTemplateStatus('draft');
-      }
-      
+      const tplId = await saveTemplate();
       const publishData = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
       if (!publishData.success) throw new Error(publishData.error || 'Failed to publish');
       setTemplateStatus('published');
+      // Phase 4.1 — Google can accept the publish and still drop the
+      // geofences; that must not look like a clean success.
+      if (publishData.warning) toast.warning(publishData.warning);
     };
 
     toast.promise(publishPromise(), {
@@ -277,6 +292,43 @@ export function TemplateWorkspace({
     });
   };
 
+  // Phase 1.1 — saves the current design, then mints a throwaway pass against
+  // the template's `_preview` class so the admin can scan it onto their own
+  // phone. Saving first is what makes the QR show the edit they just made.
+  const handlePreviewOnDevice = async () => {
+    setPreviewLoading(true);
+    const previewPromise = async () => {
+      const tplId = await saveTemplate();
+      const data = await apiClient(`/templates/${tplId}/preview-pass`, { method: 'POST' });
+      if (!data.success) throw new Error(data.error || 'Failed to build preview pass');
+      setPreviewUrl(data.googleWalletUrl);
+      return data;
+    };
+
+    toast.promise(previewPromise().finally(() => setPreviewLoading(false)), {
+      loading: 'Building preview pass...',
+      success: 'Scan the QR to add it to your Wallet.',
+      error: (err: any) => err.message || 'Preview failed',
+    });
+  };
+
+  // Phase 4.1 — verification harness. Asks Google what the class really
+  // contains, so "the geofences didn't publish" and "Google didn't fire" stop
+  // being the same symptom.
+  const handleInspectClass = async () => {
+    if (!savedTemplateId) return;
+    setLiveClassLoading(true);
+    try {
+      const data = await apiClient(`/templates/${savedTemplateId}/wallet-class`);
+      if (!data.success) throw new Error(data.error || 'Failed to read class');
+      setLiveClass(data);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to read class from Google');
+    } finally {
+      setLiveClassLoading(false);
+    }
+  };
+
   const handleResyncPasses = async () => {
     if (!savedTemplateId) return;
     const resyncPromise = async () => {
@@ -284,18 +336,59 @@ export function TemplateWorkspace({
         method: 'POST',
       });
       if (!data.success) throw new Error(data.error || 'Failed to resync passes');
+
+      // 7.4: the resync ran on the job queue previously, but is now synchronous
       return data;
     };
 
     toast.promise(resyncPromise(), {
       loading: 'Pushing design to existing passes...',
-      success: (data: any) => `Updated ${data.succeeded}/${data.total} existing passes.`,
+      success: (r: any) => `Updated ${r.succeeded}/${r.total} existing passes.`,
       error: (err: any) => err.message || 'Resync failed'
     });
   };
 
+  const previewModal = previewUrl ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-surface-card border border-border-subtle rounded-2xl p-6 shadow-xl text-center">
+        <div className="flex items-start justify-between mb-4">
+          <div className="text-left">
+            <h3 className="text-sm font-semibold text-ink-dark">Preview on device</h3>
+            <p className="text-xs text-ink-muted mt-1">
+              Scan with the phone you want the pass on. This is a throwaway
+              pass — it never counts in your stats.
+            </p>
+          </div>
+          <button type="button" onClick={() => setPreviewUrl(null)} className="text-ink-muted hover:text-ink-dark shrink-0" aria-label="Close preview">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="inline-block p-3 bg-white rounded-xl">
+          <QRCodeSVG value={previewUrl} size={256} level="Q" includeMargin={true} />
+        </div>
+        <div className="mt-4 flex gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="flex-1"
+            onClick={() => {
+              navigator.clipboard.writeText(previewUrl);
+              toast.success('Preview link copied');
+            }}
+          >
+            Copy link
+          </Button>
+          <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button type="button" className="w-full">Open</Button>
+          </a>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="flex flex-col gap-8 w-full max-w-3xl">
+      {previewModal}
 
 
       {origin && (
@@ -319,8 +412,8 @@ export function TemplateWorkspace({
               </Button>
             </div>
           </div>
-          <div className="p-2 bg-white rounded-lg shrink-0 shadow-sm">
-            <QRCodeSVG value={`${origin}/enroll/${designData.classSuffix}`} size={64} level="L" includeMargin={false} />
+          <div className="p-2 bg-white rounded-lg shrink-0 shadow-sm flex items-center justify-center">
+            <QRCodeSVG value={`${origin}/enroll/${designData.classSuffix}`} size={90} level="Q" includeMargin={true} />
           </div>
         </div>
       )}
@@ -514,13 +607,111 @@ export function TemplateWorkspace({
               ))}
             </div>
           )}
+
+          {/* Phase 4.1 — verify against Google rather than against hope. */}
+          <div className="mt-3 pt-3 border-t border-border-subtle">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-ink-muted">
+                Check what Google actually holds for this class.
+              </span>
+              <button
+                type="button"
+                onClick={handleInspectClass}
+                disabled={!savedTemplateId || liveClassLoading}
+                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors disabled:opacity-50 shrink-0"
+              >
+                {liveClassLoading ? 'Checking…' : 'Verify on Google'}
+              </button>
+            </div>
+
+            {liveClass && (
+              <div className="mt-2 space-y-1 text-xs font-mono">
+                {!liveClass.exists ? (
+                  <p className="text-amber-600 dark:text-amber-400">
+                    No class on Google yet — publish this template first.
+                  </p>
+                ) : (
+                  <>
+                    <p
+                      className={
+                        liveClass.geofenceCount === liveClass.expectedGeofenceCount
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }
+                    >
+                      Geofences live on Google: {liveClass.geofenceCount}
+                      {liveClass.geofenceCount === liveClass.expectedGeofenceCount
+                        ? ' ✓'
+                        : ` ✗ (${liveClass.expectedGeofenceCount} saved here)`}
+                    </p>
+                    <p
+                      className={
+                        liveClass.callbackIsLocalhost
+                          ? 'text-red-600 dark:text-red-400 break-all'
+                          : 'text-ink-muted break-all'
+                      }
+                    >
+                      Callback: {liveClass.callbackUrl || 'none'}
+                      {liveClass.callbackIsLocalhost &&
+                        ' — points at a localhost machine, so live callbacks go nowhere. Republish from a public environment.'}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
+        {!isTicketProgram && (
+        <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
+          <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Loyalty Economics</h3>
+          <p className="text-xs text-ink-muted mb-3">
+            Applied on every scan. Earn rate is points per ₹1 spent; redeem
+            rate is the ₹ discount each point buys; the cap limits how much of
+            an order points may cover.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {([
+              { field: 'earnRate', label: 'Earn rate (pts per ₹1)', step: 0.01, min: 0, max: 10 },
+              { field: 'redeemRate', label: 'Redeem rate (₹ per pt)', step: 0.01, min: 0.01, max: 1000 },
+              { field: 'redeemCapPercent', label: 'Redeem cap (% of order)', step: 1, min: 0, max: 100 },
+            ] as const).map(({ field, label, step, min, max }) => (
+              <div key={field} className="space-y-1.5">
+                <Label className="text-[11px] font-semibold text-ink-secondary">{label}</Label>
+                <Input
+                  type="number"
+                  step={step}
+                  min={min}
+                  max={max}
+                  value={designData[field]}
+                  onChange={(e) => updateDesignData({ ...designData, [field]: Number(e.target.value) })}
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-3">
+            A ₹1,000 order earns {Math.floor(1000 * (Number(designData.earnRate) || 0))} pts, and points may
+            cover at most ₹{Math.floor(1000 * ((Number(designData.redeemCapPercent) || 0) / 100))} of it.
+          </p>
+        </div>
+        )}
+
+        {isTicketProgram && (
+          <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
+            <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Ticket Program</h3>
+            <p className="text-xs text-ink-muted">
+              Tickets have no points and no tiers — they are single-use and
+              dated. Set the event date and venue on the program itself.
+            </p>
+          </div>
+        )}
+
+        {!isTicketProgram && (
         <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm">
           <button type="button" onClick={() => setTiersExpanded(!tiersExpanded)} className="w-full flex items-center justify-between p-4">
             <span className="flex items-center gap-2 text-xs font-semibold text-ink-dark">
               <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${tiersExpanded ? 'rotate-180' : ''}`} strokeWidth={1.75} />
-              Tier Thresholds {tierThresholds.length > 0 ? `(${tierThresholds.length})` : ''}
+              Tiers {tiers.length > 0 ? `(${tiers.length})` : ''}
             </span>
             {tiersExpanded && (
               <span
@@ -538,9 +729,10 @@ export function TemplateWorkspace({
             <div className="px-4 pb-4">
               <p className="text-xs text-ink-muted mb-3">
                 Members are auto-promoted to a tier once their points balance
-                reaches its minimum, on every scan transaction.
+                reaches its minimum, on every scan transaction. Saved onto the
+                program, which is what the scanner reads.
               </p>
-              {tierThresholds.map((tier, idx) => (
+              {tiers.map((tier: any, idx: number) => (
                 <div key={idx} className="flex items-center gap-2 mb-2">
                   <input
                     type="text"
@@ -552,8 +744,8 @@ export function TemplateWorkspace({
                   <input
                     type="number"
                     min={0}
-                    value={tier.min}
-                    onChange={(e) => updateTier(idx, 'min', e.target.value)}
+                    value={tier.minPoints}
+                    onChange={(e) => updateTier(idx, 'minPoints', e.target.value)}
                     placeholder="Min points"
                     className="text-sm w-32 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
                   />
@@ -570,29 +762,33 @@ export function TemplateWorkspace({
             </div>
           )}
         </div>
+        )}
       </div>
 
-      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-1 bg-linear-to-t from-canvas via-canvas/95 to-transparent">
+      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-4 bg-linear-to-t from-canvas via-canvas/95 to-transparent">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle pt-4 gap-4">
-          <div>
+          <div className="shrink-0">
             {templateStatus !== 'unsaved' && (
               <Badge tone={templateStatus === 'published' ? 'success' : 'warning'}>
                 {templateStatus === 'published' ? 'Published Live' : 'Draft Saved'}
               </Badge>
             )}
           </div>
-          <div className="flex gap-3 flex-wrap justify-end">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
             {templateStatus === 'published' && savedTemplateId && (
-              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="flex-1 sm:flex-none">
+              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="w-full sm:w-auto">
                 Sync Existing Passes {passCount > 0 ? `(${passCount})` : ''}
               </Button>
             )}
             {templateStatus !== 'published' && (
-              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="flex-1 sm:flex-none">
+              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="w-full sm:w-auto">
                 Save Draft
               </Button>
             )}
-            <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="flex-1 sm:flex-none">
+            <Button type="button" variant="secondary" disabled={previewLoading} onClick={handlePreviewOnDevice} className="w-full sm:w-auto">
+              Preview on device
+            </Button>
+            <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="w-full sm:w-auto">
               Publish Template
             </Button>
           </div>

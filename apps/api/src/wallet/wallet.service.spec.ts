@@ -1,4 +1,8 @@
 import { WalletService } from './wallet.service';
+
+// Phase 0.2: publishing a class refuses a localhost callback URL, and the
+// repo .env points at localhost. Give these tests a public one.
+process.env.PUBLIC_CALLBACK_URL = 'https://api.test.linearcard.example';
 import { encryptSecret, decryptSecret } from '../env';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
@@ -56,10 +60,30 @@ describe('WalletService.sendPromoMessageWithAudit', () => {
     ).rejects.toThrow('Member has not consented');
   });
 
+  // Phase 2.4 (DB-8): a grant on file is not enough — a later STOP overrides it.
+  it('should reject a member who opted out after consenting', async () => {
+    mockSupabaseService.client.single
+      .mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } })
+      .mockResolvedValueOnce({
+        data: { marketingOptOutAt: '2026-09-01T00:00:00Z' },
+      });
+
+    await expect(
+      service.sendPromoMessageWithAudit(
+        'pass-1',
+        'mem-1',
+        'tenant-1',
+        'Header',
+        'Body',
+      ),
+    ).rejects.toThrow('opted out');
+  });
+
   it('should log success after Google API succeeds', async () => {
-    mockSupabaseService.client.single.mockResolvedValueOnce({
-      data: { consentedAt: '2023-01-01' },
-    });
+    mockSupabaseService.client.single
+      .mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } })
+      // Phase 2.4: consent is re-checked against Member.marketingOptOutAt.
+      .mockResolvedValueOnce({ data: { marketingOptOutAt: null } });
 
     const fakeClient = {
       request: jest.fn().mockResolvedValue({ data: { success: true } }),
@@ -86,10 +110,9 @@ describe('WalletService.sendPromoMessageWithAudit', () => {
   });
 
   it('should log failure if Google API fails', async () => {
-    mockSupabaseService.client.single.mockResolvedValueOnce({
-      data: { consentedAt: '2023-01-01' },
-    });
-    mockSupabaseService.client.gte.mockResolvedValueOnce({ count: 1 });
+    mockSupabaseService.client.single
+      .mockResolvedValueOnce({ data: { consentedAt: '2023-01-01' } })
+      .mockResolvedValueOnce({ data: { marketingOptOutAt: null } });
 
     const fakeClient = {
       request: jest.fn().mockRejectedValue(new Error('Google API Error')),
@@ -111,7 +134,8 @@ describe('WalletService.sendPromoMessageWithAudit', () => {
     expect(mockNotifyService.logNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'failed',
-        errorReason: 'Google Wallet addMessage failed',
+        // Phase 6.2: a stable code plus a cause, not a bare HTTP message.
+        errorReason: expect.stringContaining('WALLET_UNAVAILABLE:'),
       }),
     );
   });
@@ -119,7 +143,8 @@ describe('WalletService.sendPromoMessageWithAudit', () => {
 
 describe('AES-256-GCM private key encryption (env.ts)', () => {
   it('round-trips a private key through encrypt then decrypt', () => {
-    const original = '-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----\n';
+    const original =
+      '-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----\n';
     const encrypted = encryptSecret(original);
     expect(encrypted).not.toContain('BEGIN PRIVATE KEY');
     expect(decryptSecret(encrypted)).toBe(original);
@@ -137,7 +162,10 @@ describe('AES-256-GCM private key encryption (env.ts)', () => {
 
 describe('wallet.service.ts no longer hardcodes the issuer literal', () => {
   it('does not contain the old hardcoded issuer string anywhere in the file', () => {
-    const source = fs.readFileSync(path.join(__dirname, 'wallet.service.ts'), 'utf8');
+    const source = fs.readFileSync(
+      path.join(__dirname, 'wallet.service.ts'),
+      'utf8',
+    );
     expect(source).not.toContain('3388000000023177673');
   });
 });
@@ -308,7 +336,13 @@ describe('updateGenericObject — hexBackgroundColor patching', () => {
   let mockGoogleAuthClient: { request: jest.Mock };
 
   beforeEach(() => {
-    service = new WalletService({} as any, {} as any, {} as any, {} as any, {} as any);
+    service = new WalletService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
     mockGoogleAuthClient = { request: jest.fn() };
     jest
       .spyOn(service, 'getGoogleAuthClient')
@@ -346,7 +380,13 @@ describe('createGenericClass — stable field keys', () => {
   let mockGoogleAuthClient: { request: jest.Mock };
 
   beforeEach(() => {
-    service = new WalletService({} as any, {} as any, {} as any, {} as any, {} as any);
+    service = new WalletService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
     mockGoogleAuthClient = { request: jest.fn() };
     jest
       .spyOn(service, 'getGoogleAuthClient')
@@ -420,7 +460,9 @@ describe('createGenericClass — stable field keys', () => {
 
     // 2. Build the object and collect its textModulesData ids.
     const objectClient = { request: jest.fn().mockResolvedValue({ data: {} }) };
-    jest.spyOn(service, 'getGoogleAuthClient').mockResolvedValue(objectClient as any);
+    jest
+      .spyOn(service, 'getGoogleAuthClient')
+      .mockResolvedValue(objectClient as any);
     const { privateKey } = crypto.generateKeyPairSync('rsa', {
       modulusLength: 2048,
       privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
@@ -430,11 +472,20 @@ describe('createGenericClass — stable field keys', () => {
     process.env.GOOGLE_CLIENT_EMAIL = 'test@example.com';
     process.env.GOOGLE_PRIVATE_KEY = privateKey.replace(/\n/g, '\\n');
 
-    await service.createGoogleWalletPass({ passId: 'pass1', rows });
+    // Phase 7.7 — identity fields are required now; no demo defaults.
+    await service.createGoogleWalletPass({
+      passId: 'pass1',
+      rows,
+      memberName: 'Asha',
+      cardTitle: 'Bean House',
+      balance: '0 Pts',
+      classSuffix: 'beanhouse_coffee_standard',
+    });
 
-    const objectIds = objectClient.request.mock.calls[0][0].data.textModulesData.map(
-      (m: any) => m.id,
-    );
+    const objectIds =
+      objectClient.request.mock.calls[0][0].data.textModulesData.map(
+        (m: any) => m.id,
+      );
 
     for (const id of fieldPathIds) {
       expect(objectIds).toContain(id);
@@ -447,7 +498,13 @@ describe('createGenericClass — merchantLocations (geofencing)', () => {
   let mockGoogleAuthClient: { request: jest.Mock };
 
   beforeEach(() => {
-    service = new WalletService({} as any, {} as any, {} as any, {} as any, {} as any);
+    service = new WalletService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
     mockGoogleAuthClient = { request: jest.fn() };
     jest
       .spyOn(service, 'getGoogleAuthClient')
@@ -469,10 +526,29 @@ describe('createGenericClass — merchantLocations (geofencing)', () => {
 
     const payload = mockGoogleAuthClient.request.mock.calls[0][0].data;
     expect(payload.merchantLocations).toEqual([
-      { latitude: 19.076, longitude: 72.877 },
-      { latitude: 28.6139, longitude: 77.209 },
+      {
+        kind: 'walletobjects#latLongPoint',
+        latitude: 19.076,
+        longitude: 72.877,
+      },
+      {
+        kind: 'walletobjects#latLongPoint',
+        latitude: 28.6139,
+        longitude: 77.209,
+      },
     ]);
-    expect(payload.locations).toBeUndefined();
+    expect(payload.locations).toEqual([
+      {
+        kind: 'walletobjects#latLongPoint',
+        latitude: 19.076,
+        longitude: 72.877,
+      },
+      {
+        kind: 'walletobjects#latLongPoint',
+        latitude: 28.6139,
+        longitude: 77.209,
+      },
+    ]);
   });
 
   it('truncates to a max of 10 locations', async () => {
@@ -521,9 +597,30 @@ describe('syncPassAfterTransaction', () => {
     tier: 'Bronze',
     phone: '+919876543210',
     tiers: [
-      { id: 't-bronze', programId: 'program-1', name: 'Bronze', minPoints: 0, templateId: 'tpl-bronze', sortOrder: 0 },
-      { id: 't-silver', programId: 'program-1', name: 'Silver', minPoints: 500, templateId: 'tpl-silver', sortOrder: 1 },
-      { id: 't-gold', programId: 'program-1', name: 'Gold', minPoints: 2000, templateId: 'tpl-gold', sortOrder: 2 },
+      {
+        id: 't-bronze',
+        programId: 'program-1',
+        name: 'Bronze',
+        minPoints: 0,
+        templateId: 'tpl-bronze',
+        sortOrder: 0,
+      },
+      {
+        id: 't-silver',
+        programId: 'program-1',
+        name: 'Silver',
+        minPoints: 500,
+        templateId: 'tpl-silver',
+        sortOrder: 1,
+      },
+      {
+        id: 't-gold',
+        programId: 'program-1',
+        name: 'Gold',
+        minPoints: 2000,
+        templateId: 'tpl-gold',
+        sortOrder: 2,
+      },
     ],
   };
 
@@ -609,9 +706,9 @@ describe('syncPassAfterTransaction', () => {
   });
 
   it('swallows WhatsApp send failures without throwing', async () => {
-    (whatsappService.sendRedemptionReceiptWithLog as jest.Mock).mockRejectedValueOnce(
-      new Error('WAHA down'),
-    );
+    (
+      whatsappService.sendRedemptionReceiptWithLog as jest.Mock
+    ).mockRejectedValueOnce(new Error('WAHA down'));
     await expect(
       service.syncPassAfterTransaction(
         basePass,
@@ -637,7 +734,12 @@ describe('syncPassAfterTransaction', () => {
     const goldPass = { ...basePass, tier: 'Gold' };
     const result = await service.syncPassAfterTransaction(
       goldPass,
-      { type: 'redeem', pointsChanged: 1900, newBalance: 100, orderAmount: 3800 },
+      {
+        type: 'redeem',
+        pointsChanged: 1900,
+        newBalance: 100,
+        orderAmount: 3800,
+      },
       'Acme Cafe',
     );
     expect(result.tier).toBe('Bronze');
@@ -656,10 +758,11 @@ describe('syncPassAfterTransaction', () => {
     expect(whatsappService.sendTierUpgradeMessage).toHaveBeenCalled();
   });
 
-  it('resolves the design of the new tier\'s templateId and pushes it to the wallet object on a tier change', async () => {
-    jest
-      .spyOn(service, 'resolveTenantPassDesign')
-      .mockResolvedValue({ hexBackgroundColor: '#SILVER', logoUrl: 'https://logo/silver.png' });
+  it("resolves the design of the new tier's templateId and pushes it to the wallet object on a tier change", async () => {
+    jest.spyOn(service, 'resolveTenantPassDesign').mockResolvedValue({
+      hexBackgroundColor: '#SILVER',
+      logoUrl: 'https://logo/silver.png',
+    });
 
     await service.syncPassAfterTransaction(
       basePass,
@@ -670,6 +773,7 @@ describe('syncPassAfterTransaction', () => {
     expect(service.resolveTenantPassDesign).toHaveBeenCalledWith(
       basePass.tenantId,
       'tpl-silver',
+      undefined,
     );
     expect(service.updateGenericObject).toHaveBeenCalledWith(
       basePass.fullPassId,
@@ -703,6 +807,10 @@ describe('processOrderTransaction — tier propagation', () => {
     supabaseServiceMock = {
       client: {
         from: jest.fn(),
+        // Phase 1.4: balance mutation goes through the atomic RPC. `data:
+        // null` means "no authoritative balance returned", so these tests
+        // keep asserting against the locally computed one.
+        rpc: jest.fn().mockResolvedValue({ data: null, error: null }),
       },
     };
     const mockNotifyService: any = {
@@ -810,21 +918,30 @@ describe('processOrderTransaction — tier propagation', () => {
     );
   });
 
-  it('resolves tiers from the tenant\'s one canonical Program, not a merge across stale duplicates', async () => {
-    // Simulates the pre-fix bug: a tenant somehow has two Program rows (e.g.
-    // a leftover from before the Program.tenantId unique index existed).
-    // The fetch must pick exactly one Program (oldest first) and use only
-    // its Tier rows -- never merge tiers across both Programs.
-    const programsForTenant = [
-      { id: 'program-old', createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'program-new', createdAt: '2026-06-01T00:00:00Z' },
-    ];
+  it("scores a pass against its own program, not the tenant's oldest one (PRG-1)", async () => {
+    // D8: one tenant, two programs. Before Phase 3.3 this resolved the
+    // tenant's oldest Program and scored every scan against it, so a coffee
+    // pass was ranked by the gym program's tiers.
     const tiersByProgram: Record<string, any[]> = {
-      'program-old': [
-        { id: 't-old-silver', programId: 'program-old', name: 'Silver', minPoints: 500, templateId: 'tpl-old', sortOrder: 0 },
+      'program-coffee': [
+        {
+          id: 't-coffee-silver',
+          programId: 'program-coffee',
+          name: 'Silver',
+          minPoints: 500,
+          templateId: 'tpl-coffee',
+          sortOrder: 0,
+        },
       ],
-      'program-new': [
-        { id: 't-new-gold', programId: 'program-new', name: 'Gold', minPoints: 9999, templateId: 'tpl-new', sortOrder: 0 },
+      'program-gym': [
+        {
+          id: 't-gym-gold',
+          programId: 'program-gym',
+          name: 'Gold',
+          minPoints: 9999,
+          templateId: 'tpl-gym',
+          sortOrder: 0,
+        },
       ],
     };
 
@@ -839,6 +956,9 @@ describe('processOrderTransaction — tier propagation', () => {
                   fullPassId: 'issuer.pass-1',
                   memberId: 'member-1',
                   tenantId: 'tenant-1',
+                  // The pass belongs to the coffee program, which is NOT the
+                  // tenant's oldest.
+                  programId: 'program-coffee',
                   balance: 100,
                   tier: 'Bronze',
                   Member: { phone: '+919876543210' },
@@ -854,13 +974,9 @@ describe('processOrderTransaction — tier propagation', () => {
       if (table === 'Program') {
         return {
           select: () => ({
-            eq: () => ({
-              order: () => ({
-                // Oldest-first ordering: the mock returns the oldest
-                // program's id, matching real Postgres ORDER BY behaviour.
-                limit: () => ({
-                  maybeSingle: async () => ({ data: programsForTenant[0] }),
-                }),
+            eq: (_col: string, id: string) => ({
+              maybeSingle: async () => ({
+                data: { id, kind: 'loyalty', earnRate: null },
               }),
             }),
           }),
@@ -891,6 +1007,7 @@ describe('processOrderTransaction — tier propagation', () => {
 
     const passedTiers = syncSpy.mock.calls[0][0].tiers;
     expect(passedTiers).toHaveLength(1);
-    expect(passedTiers[0].name).toBe('Silver'); // from program-old, not program-new's Gold
+    expect(passedTiers[0].name).toBe('Silver'); // coffee's tier, not gym's Gold
+    expect(syncSpy.mock.calls[0][0].programId).toBe('program-coffee');
   });
 });

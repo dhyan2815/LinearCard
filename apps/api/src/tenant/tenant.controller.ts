@@ -99,7 +99,6 @@ export class TenantController {
   @UseGuards(TenantGuard)
   async getTenants() {
     try {
-      console.log('[TenantController] getTenants() called');
       const { data: tenants, error } = await this.supabaseService.client
         .from('Tenant')
         .select(
@@ -108,14 +107,11 @@ export class TenantController {
         .order('name', { ascending: true });
 
       if (error) {
-        console.log('[TenantController] Supabase query error:', error.message);
         throw new Error(`DB Error: ${error.message}`);
       }
-      console.log('[TenantController] Tenants fetched successfully, count:', tenants?.length || 0);
       return { success: true, tenants };
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.log('[TenantController] Exception in getTenants:', errMsg);
       throw new HttpException(
         { success: false, error: 'Failed to fetch tenants', details: errMsg },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -167,6 +163,15 @@ export class TenantController {
         );
       }
 
+      // Phase 3.6 — the enrollment page needs the tenant's programs so it can
+      // resolve /enroll/:tenantSlug/:programSlug, and fall back to the
+      // default (oldest) program on the bare /enroll/:tenantSlug URL.
+      const { data: programs } = await this.supabaseService.client
+        .from('Program')
+        .select('id, name, kind, enrollmentSlug, status')
+        .eq('tenantId', tenant.id)
+        .order('createdAt', { ascending: true });
+
       return {
         tenantId: tenant.id,
         name: tenant.name,
@@ -174,6 +179,8 @@ export class TenantController {
         logoUrl: tenant.logoUrl,
         heroUrl: tenant.heroUrl,
         classSuffix: tenant.classSuffix,
+        programs: programs || [],
+        defaultProgramId: (programs || [])[0]?.id ?? null,
       };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;

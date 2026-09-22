@@ -12,14 +12,11 @@ import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
-import { WalletService } from '../wallet/wallet.service';
 import { NotifyService } from '../notification/notify.service';
-import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import { SendOtpRequest, VerifyOtpRequest } from '@linearcard/types';
 import { JWT_SECRET } from '../env';
-import { resolveImageUrl } from '../passes/passes.controller';
-import { WebhookService } from '../developers/webhook.service';
+import { PassIssuanceService } from '../passes/pass-issuance.service';
 
 @Controller('auth')
 export class AuthController {
@@ -27,9 +24,8 @@ export class AuthController {
     private readonly supabaseService: SupabaseService,
     private readonly otpService: OtpService,
     private readonly whatsappService: WhatsappService,
-    private readonly walletService: WalletService,
     private readonly notifyService: NotifyService,
-    private readonly webhookService: WebhookService,
+    private readonly passIssuanceService: PassIssuanceService,
   ) {}
 
   @Post('send-otp')
@@ -83,10 +79,47 @@ export class AuthController {
     }
   }
 
+  /**
+   * Phase 3.6 — which program an enrollment issues against.
+   *
+   * An explicit `programId` must belong to the tenant, or the caller is
+   * trying to enroll someone into someone else's program. With none, the
+   * tenant's oldest program is the default, which is what keeps the
+   * pre-Phase-3 `/enroll/:slug` URL working.
+   */
+  private async resolveEnrollmentProgram(
+    tenantId: string,
+    programId?: string,
+  ): Promise<any | null> {
+    if (programId) {
+      const { data } = await this.supabaseService.client
+        .from('Program')
+        .select('*')
+        .eq('id', programId)
+        .eq('tenantId', tenantId)
+        .maybeSingle();
+      if (!data)
+        throw new HttpException(
+          'Program not found for this brand.',
+          HttpStatus.NOT_FOUND,
+        );
+      return data;
+    }
+
+    const { data } = await this.supabaseService.client
+      .from('Program')
+      .select('*')
+      .eq('tenantId', tenantId)
+      .order('createdAt', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    return data ?? null;
+  }
+
   @Post('verify-otp')
   async verifyOtp(@Body() body: VerifyOtpRequest, @Req() req: Request) {
     try {
-      const { otp, consentGiven, tenantId, ...passData } = body;
+      const { otp, consentGiven, tenantId, programId, ...passData } = body;
       let { phone } = body;
       if (!phone || !otp || !consentGiven)
         throw new HttpException(
@@ -119,10 +152,15 @@ export class AuthController {
           HttpStatus.UNAUTHORIZED,
         );
       }
-      if (!this.otpService.verifyOtp(otp, otpSession.otpHash)) {
+      const attempt = await this.otpService.verifyOtpAttempt(otp, otpSession);
+      if (!attempt.ok) {
         throw new HttpException(
-          'Incorrect code. Please try again.',
-          HttpStatus.UNAUTHORIZED,
+          attempt.locked
+            ? 'Too many incorrect attempts. Please request a new code.'
+            : 'Incorrect code. Please try again.',
+          attempt.locked
+            ? HttpStatus.TOO_MANY_REQUESTS
+            : HttpStatus.UNAUTHORIZED,
         );
       }
 
@@ -152,15 +190,21 @@ export class AuthController {
       if (tenantError || !tenant)
         throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
 
+      // AUTH-1/DB-3: upsert on (tenantId, phone). Inserting unconditionally
+      // gave a returning customer a duplicate member, a duplicate pass and a
+      // fresh 0 balance, orphaning their real one.
       const { data: member, error: memberError } =
         await this.supabaseService.client
           .from('Member')
-          .insert({
-            phone,
-            name: passData.memberName || phone,
-            tenantId: targetTenantId,
-            consentedAt: new Date().toISOString(),
-          })
+          .upsert(
+            {
+              phone,
+              name: passData.memberName || phone,
+              tenantId: targetTenantId,
+              consentedAt: new Date().toISOString(),
+            },
+            { onConflict: 'tenantId,phone' },
+          )
           .select()
           .single();
       if (memberError || !member)
@@ -174,76 +218,28 @@ export class AuthController {
         legalTextVersion: 'DPDP_v1',
       });
 
-      const startingTier = passData.tier || 'Bronze';
-      const startingBalance = passData.balance || '0 Pts';
-      const explicitPassId = crypto.randomUUID();
-
-      const passDesign = await this.walletService.resolveTenantPassDesign(
+      // Phase 3.6 — the pass is issued against a *program*, not a tenant.
+      // An explicit programId wins; otherwise fall back to the tenant's
+      // oldest program so the old /enroll/:slug URL keeps working.
+      const targetProgram = await this.resolveEnrollmentProgram(
         targetTenantId,
+        programId,
       );
 
-      const tenantWallet = await this.walletService.forTenant(targetTenantId);
-      const passResult = await tenantWallet.createGoogleWalletPass({
-        ...passData,
-        passId: explicitPassId,
-        tier: startingTier,
-        balance: startingBalance,
-        barcodeAltText: `${startingTier} Tier • ${startingBalance}`,
-        cardTitle: passDesign.cardTitle || tenant.name,
-        classSuffix: passDesign.classSuffix || tenant.classSuffix,
-        hexBackgroundColor: passDesign.hexBackgroundColor,
-        logoUrl: resolveImageUrl(passDesign.logoUrl),
-        heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),
+      // Phase 5 — issuance itself lives in PassIssuanceService, shared with
+      // payment-triggered enrollment (5.2).
+      const issued = await this.passIssuanceService.issueForMember({
+        tenantId: targetTenantId,
+        member,
+        program: targetProgram,
+        tenant,
+        passData,
       });
 
-      let passRecordId = null;
-      if (passResult.success && passResult.fullPassId) {
-        const { data: insertedPass, error: passError } =
-          await this.supabaseService.client
-            .from('Pass')
-            .insert({
-              id: explicitPassId,
-              memberId: member.id,
-              tenantId: targetTenantId,
-              fullPassId: passResult.fullPassId,
-              balance: 0,
-              tier: startingTier,
-            })
-            .select()
-            .single();
-        if (!passError && insertedPass) {
-          passRecordId = insertedPass.id;
-          this.webhookService
-            .dispatch(targetTenantId, 'member.enrolled', {
-              passId: passRecordId,
-              memberId: member.id,
-              phone,
-            })
-            .catch(() => {});
-        }
-      }
-
-      if (passResult.googleWalletUrl && passRecordId) {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ||
-          (process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
-            : 'http://localhost:3000');
-        const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
-        this.whatsappService
-          .sendPassLinkWithLog(
-            phone,
-            shortUrl,
-            passData.memberName || phone,
-            tenant.name,
-            { tenantId: targetTenantId, memberId: member.id },
-          )
-          .catch((err) =>
-            console.error('WhatsApp pass link failed (non-fatal):', err),
-          );
-      }
-
-      return { success: true, ...passResult };
+      const { existing, success, ...rest } = issued;
+      return existing
+        ? { success, existing: true, ...rest }
+        : { success, ...rest };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(
@@ -332,10 +328,15 @@ export class AuthController {
         );
       }
 
-      if (!this.otpService.verifyOtp(otp, otpSession.otpHash)) {
+      const attempt = await this.otpService.verifyOtpAttempt(otp, otpSession);
+      if (!attempt.ok) {
         throw new HttpException(
-          'Invalid code. Please try again.',
-          HttpStatus.UNAUTHORIZED,
+          attempt.locked
+            ? 'Too many incorrect attempts. Please request a new code.'
+            : 'Invalid code. Please try again.',
+          attempt.locked
+            ? HttpStatus.TOO_MANY_REQUESTS
+            : HttpStatus.UNAUTHORIZED,
         );
       }
 
@@ -396,8 +397,6 @@ export class AuthController {
         path: '/',
       });
 
-      console.log('[Auth] admin_session cookie set securely with httpOnly=true');
-
       return { success: true, token };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
@@ -415,7 +414,8 @@ export class AuthController {
       (req.headers['authorization']?.startsWith('Bearer ')
         ? req.headers['authorization'].substring(7)
         : null);
-    if (!token) throw new HttpException('Not authenticated', HttpStatus.UNAUTHORIZED);
+    if (!token)
+      throw new HttpException('Not authenticated', HttpStatus.UNAUTHORIZED);
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
       const { data: admin } = await this.supabaseService.client
@@ -423,7 +423,8 @@ export class AuthController {
         .select('phone, role, tenantId')
         .eq('id', decoded.adminId)
         .single();
-      if (!admin) throw new HttpException('Admin not found', HttpStatus.UNAUTHORIZED);
+      if (!admin)
+        throw new HttpException('Admin not found', HttpStatus.UNAUTHORIZED);
       return { success: true, admin };
     } catch {
       throw new HttpException('Invalid session', HttpStatus.UNAUTHORIZED);

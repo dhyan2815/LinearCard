@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { PageShell } from '@/components/ui/PageShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui/Alert';
 import { DataTable, DataTableColumn } from '@/components/ui/DataTable';
 import { SecretReveal } from '@/components/ui/SecretReveal';
 import { apiClient } from '@/lib/api-client';
+import { ChevronDown } from 'lucide-react';
 
 const WEBHOOK_EVENTS = [
   'pass.installed',
@@ -38,6 +39,19 @@ interface Webhook {
   createdAt: string;
 }
 
+interface PaymentConfig {
+  path: string;
+  secret: string;
+}
+
+interface SimulateResult {
+  enrolled: boolean;
+  pointsAwarded: number;
+  newBalance: number;
+  tier: string;
+  tierChanged: boolean;
+}
+
 function fmtDate(d: string | null) {
   if (!d) return '—';
   return new Date(d).toLocaleString();
@@ -61,6 +75,16 @@ export default function DevelopersPage() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testMsg, setTestMsg] = useState<string | null>(null);
 
+  const [payConfig, setPayConfig] = useState<PaymentConfig | null>(null);
+  const [simPhone, setSimPhone] = useState('');
+  const [simAmount, setSimAmount] = useState('450');
+  const [simulating, setSimulating] = useState(false);
+  const [simResult, setSimResult] = useState<SimulateResult | null>(null);
+  const [simError, setSimError] = useState<string | null>(null);
+  const [members, setMembers] = useState<any[]>([]);
+  const [showMembers, setShowMembers] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const loadKeys = () => {
     setKeysLoading(true);
     apiClient('/developers/api-keys')
@@ -80,7 +104,40 @@ export default function DevelopersPage() {
   useEffect(() => {
     loadKeys();
     loadWebhooks();
+    apiClient('/payments/webhook-config')
+      .then((d) => setPayConfig({ path: d.path, secret: d.secret }))
+      .catch(() => setPayConfig(null));
+    apiClient('/members?limit=100')
+      .then((d) => setMembers(d.members || []))
+      .catch(() => setMembers([]));
   }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setShowMembers(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSimulate = async () => {
+    setSimulating(true);
+    setSimError(null);
+    setSimResult(null);
+    try {
+      const data = await apiClient('/payments/simulate', {
+        method: 'POST',
+        body: JSON.stringify({ phone: simPhone, amount: Number(simAmount) }),
+      });
+      setSimResult(data);
+    } catch (err: any) {
+      setSimError(err.message || 'Simulated payment failed');
+    } finally {
+      setSimulating(false);
+    }
+  };
 
   const handleCreateKey = async () => {
     setCreatingKey(true);
@@ -315,6 +372,99 @@ export default function DevelopersPage() {
           loading={webhooksLoading}
           emptyMessage="No webhook endpoints configured."
         />
+      </Card>
+
+      <Card className="p-6 space-y-4 overflow-visible">
+        <div>
+          <h3 className="text-base font-semibold text-ink-dark">Payment Simulator</h3>
+          <p className="text-sm text-ink-secondary">
+            Fires a correctly-signed payment webhook at your real endpoint. An unknown number is
+            enrolled, issued a pass and awarded points in one step.
+          </p>
+        </div>
+
+        {payConfig && (
+          <div className="space-y-1.5">
+            <Label>Endpoint</Label>
+            <code className="block font-mono text-xs text-ink-secondary break-all">
+              POST {payConfig.path}
+            </code>
+            <p className="text-xs text-ink-muted">
+              Sign the raw JSON body with HMAC-SHA256 and send it as{' '}
+              <code className="font-mono">X-LinearCard-Signature</code>. The body needs{' '}
+              <code className="font-mono">phone</code>, <code className="font-mono">amountMinor</code>,{' '}
+              <code className="font-mono">nonce</code> and <code className="font-mono">timestamp</code>.
+            </p>
+            <Label>Signing secret</Label>
+            <code className="block bg-surface-bone border border-border-subtle rounded-lg px-3 py-2 text-xs font-mono text-ink-dark break-all">
+              {payConfig.secret}
+            </code>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row items-end gap-3">
+          <div className="space-y-1.5 flex-1 w-full relative" ref={containerRef}>
+            <Label>Customer phone</Label>
+            <div className="relative">
+              <Input
+                value={simPhone}
+                onChange={(e) => setSimPhone(e.target.value)}
+                placeholder="+919876543210"
+                onFocus={() => setShowMembers(true)}
+              />
+              <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-ink-muted pointer-events-none" />
+            </div>
+            
+            {showMembers && members.length > 0 && (
+              <div className="absolute z-10 top-full mt-1 w-full bg-surface border border-border-subtle rounded-md shadow-lg max-h-60 overflow-y-auto">
+                <div className="text-[10px] uppercase font-semibold text-ink-muted px-3 py-2 bg-surface-bone sticky top-0">Select Member</div>
+                {members.filter(m => !simPhone || m.phone.includes(simPhone) || m.name.toLowerCase().includes(simPhone.toLowerCase())).map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setSimPhone(m.phone);
+                      setShowMembers(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-ink-dark hover:bg-canvas/80 flex items-center justify-between transition-colors border-b border-border-subtle/50 last:border-0"
+                  >
+                    <span>
+                      <span className="font-medium">{m.name || 'Unnamed'}</span>
+                      {' '}
+                      <small className="text-ink-secondary">({m.phone})</small>
+                    </span>
+                    <span className="font-semibold text-emerald-600">{m.passes?.[0]?.balance || 0} Pts</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-1.5 w-full sm:w-40">
+            <Label>Amount (₹)</Label>
+            <Input
+              type="number"
+              min="1"
+              value={simAmount}
+              onChange={(e) => setSimAmount(e.target.value)}
+            />
+          </div>
+          <Button
+            onClick={handleSimulate}
+            disabled={simulating || !simPhone || !simAmount}
+            className="shrink-0"
+          >
+            {simulating ? 'Sending…' : 'Simulate payment'}
+          </Button>
+        </div>
+
+        {simError && <Alert variant="error">{simError}</Alert>}
+        {simResult && (
+          <Alert variant="info">
+            {simResult.enrolled ? 'Enrolled a new member. ' : 'Awarded on the existing pass. '}
+            {simResult.pointsAwarded} points added — new balance {simResult.newBalance} Pts, tier{' '}
+            {simResult.tier}
+            {simResult.tierChanged ? ' (tier changed)' : ''}.
+          </Alert>
+        )}
       </Card>
 
       <Card className="p-6">

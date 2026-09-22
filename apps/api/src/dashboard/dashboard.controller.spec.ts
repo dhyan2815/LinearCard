@@ -61,9 +61,9 @@ describe('DashboardController.getstats', () => {
 
     expect(res.success).toBe(true);
     expect(eqCalls).toHaveLength(3);
-    expect(eqCalls.every(([col, val]) => col === 'tenantId' && val === 't1')).toBe(
-      true,
-    );
+    expect(
+      eqCalls.every(([col, val]) => col === 'tenantId' && val === 't1'),
+    ).toBe(true);
     expect(res.tierDistribution).toEqual({ Gold: 1 });
   });
 

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Param,
   Body,
@@ -16,6 +17,7 @@ import { NotifyService } from '../notification/notify.service';
 import { WalletService } from '../wallet/wallet.service';
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { AuditService } from '../audit/audit.service';
+import { describeError } from '../errors';
 
 @Controller('members')
 export class MembersController {
@@ -33,15 +35,22 @@ export class MembersController {
     @Query('limit') limitQuery?: string,
     @Query('offset') offsetQuery?: string,
     @Query('q') q?: string,
+    @Query('dir') dir?: string,
   ) {
     try {
-      const limit = Number(limitQuery) > 0 ? Number(limitQuery) : 50;
+      // Phase 6.1 (FE-3) — `total` is what lets the caller page instead of
+      // fetching the whole table and slicing it client-side.
+      const limit = Math.min(
+        Number(limitQuery) > 0 ? Number(limitQuery) : 50,
+        200,
+      );
       const offset = Number(offsetQuery) >= 0 ? Number(offsetQuery) : 0;
 
       let query = this.supabaseService.client
         .from('Member')
         .select(
-          'id, name, phone, tenantId, createdAt, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
+          'id, name, phone, tenantId, createdAt, isTestAccount, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
+          { count: 'exact' },
         )
         .eq('tenantId', req.tenantId);
 
@@ -49,14 +58,21 @@ export class MembersController {
         query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
       }
 
-      const { data: members, error } = await query
+      const {
+        data: members,
+        error,
+        count,
+      } = await query
+        // Only a Member column can order a paged query; balance lives on the
+        // child Pass rows, so sorting by it would only ever sort the page.
+        .order('name', { ascending: dir !== 'desc' })
         .order('createdAt', { ascending: false })
         .range(offset, offset + limit - 1);
 
       if (error) {
         throw error;
       }
-      return { success: true, members };
+      return { success: true, members, total: count ?? 0, limit, offset };
     } catch {
       throw new HttpException(
         { success: false, error: 'Failed to fetch members' },
@@ -79,7 +95,7 @@ export class MembersController {
           HttpStatus.NOT_FOUND,
         );
 
-      let [{ data: passes }, { data: auditLog }, { data: consentLog }] =
+      const [passesResult, auditLogResult, consentLogResult] =
         await Promise.all([
           this.supabaseService.client
             .from('Pass')
@@ -98,6 +114,9 @@ export class MembersController {
             .eq('memberId', id)
             .order('consentedAt', { ascending: false }),
         ]);
+      let passes = passesResult.data;
+      const auditLog = auditLogResult.data;
+      const consentLog = consentLogResult.data;
 
       // Check Google Wallet synchronization
       if (passes && passes.length > 0) {
@@ -119,7 +138,7 @@ export class MembersController {
                 deletedPassesCount++;
                 continue;
               }
-            } catch (err) {
+            } catch {
               // Ignore errors and assume pass is active if wallet API fails
             }
           }
@@ -166,17 +185,216 @@ export class MembersController {
     }
   }
 
-  @Delete(':id')
-  async deleteMember(@Param('id') id: string) {
+  /**
+   * Phase 1.5 — marks a member as a test account (§1.7). While the tenant's
+   * `publishStatus` is 'demo', only test accounts may be issued passes; until
+   * now that flag was settable only by a direct DB edit.
+   */
+  @Patch(':id/test-account')
+  @UseGuards(TenantGuard)
+  async setTestAccount(
+    @Param('id') id: string,
+    @Body() body: { isTestAccount: boolean },
+    @Req() req: TenantRequest,
+  ) {
     try {
-      await this.deleteMemberData(id);
-      return { success: true };
+      if (typeof body?.isTestAccount !== 'boolean') {
+        throw new HttpException(
+          { success: false, error: 'isTestAccount must be a boolean' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const { data, error } = await this.supabaseService.client
+        .from('Member')
+        .update({ isTestAccount: body.isTestAccount })
+        .eq('id', id)
+        .eq('tenantId', req.tenantId)
+        .select('id, isTestAccount')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data)
+        throw new HttpException(
+          { success: false, error: 'Member not found' },
+          HttpStatus.NOT_FOUND,
+        );
+
+      await this.auditService.record({
+        tenantId: req.tenantId!,
+        memberId: id,
+        actor: 'admin',
+        action: 'test_account_updated',
+        details: { isTestAccount: body.isTestAccount },
+      });
+
+      return { success: true, member: data };
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new HttpException(
         { success: false, error: error.message },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /**
+   * Phase 7.6 — DPDP §11 data-subject access: everything this platform holds
+   * about one data principal, in one machine-readable response.
+   *
+   * Tenant-guarded and tenant-scoped: an operator can export their own
+   * member and nobody else's. The phone number is the identifier the member
+   * gave us, so it is part of the export rather than redacted out of it.
+   */
+  @Get(':id/export')
+  @UseGuards(TenantGuard)
+  async exportMemberData(@Param('id') id: string, @Req() req: TenantRequest) {
+    try {
+      const member = await this.memberInTenant(id, req.tenantId!);
+
+      const [passes, auditLogs, consentLogs, notificationLogs, payments] =
+        await Promise.all([
+          this.rowsFor('Pass', id),
+          this.rowsFor('AuditLog', id),
+          this.rowsFor('ConsentLog', id),
+          this.rowsFor('NotificationLog', id),
+          // PaymentEvent is keyed by phone, not memberId (Phase 5.1): the
+          // payment arrives before the member exists.
+          this.supabaseService.client
+            .from('PaymentEvent')
+            .select('*')
+            .eq('tenantId', req.tenantId!)
+            .eq('phone', member.phone)
+            .then((r) => r.data || []),
+        ]);
+
+      await this.auditService.record({
+        tenantId: req.tenantId!,
+        memberId: id,
+        actor: 'dashboard',
+        action: 'data_export',
+        details: { legalBasis: 'DPDP_access_request' },
+      });
+
+      return {
+        success: true,
+        exportedAt: new Date().toISOString(),
+        member,
+        passes,
+        auditLogs,
+        consentLogs,
+        notificationLogs,
+        payments,
+      };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Phase 7.6 — DPDP §12 erasure.
+   *
+   * Now tenant-guarded: this route used to accept any member id from any
+   * caller and hard-delete across every table, which is a cross-tenant
+   * erasure primitive sitting on an unauthenticated route.
+   *
+   * `?mode=erase` (the DPDP default) anonymises in place and keeps the audit
+   * trail; `?mode=purge` is the old hard delete, kept for a test member an
+   * operator wants gone entirely. Erasure is the default because a hard
+   * delete destroys the consent record that proves the erasure was lawful.
+   */
+  @Delete(':id')
+  @UseGuards(TenantGuard)
+  async deleteMember(
+    @Param('id') id: string,
+    @Req() req: TenantRequest,
+    @Query('mode') mode?: string,
+  ) {
+    try {
+      await this.memberInTenant(id, req.tenantId!);
+
+      if (mode === 'purge') {
+        await this.deleteMemberData(id);
+        return { success: true, mode: 'purge' };
+      }
+
+      await this.eraseMemberData(id, req.tenantId!);
+      return { success: true, mode: 'erase' };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /** Loads a member, refusing one that belongs to another tenant. */
+  private async memberInTenant(memberId: string, tenantId: string) {
+    const { data: member } = await this.supabaseService.client
+      .from('Member')
+      .select('*')
+      .eq('id', memberId)
+      .eq('tenantId', tenantId)
+      .maybeSingle();
+    if (!member) {
+      throw new HttpException(
+        { success: false, error: 'Member not found' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return member;
+  }
+
+  private async rowsFor(table: string, memberId: string) {
+    const { data } = await this.supabaseService.client
+      .from(table)
+      .select('*')
+      .eq('memberId', memberId);
+    return data || [];
+  }
+
+  /**
+   * Anonymise rather than delete: the personal data is gone, the rows that
+   * make the loyalty ledger and the audit trail add up are not. Passes are
+   * soft-deleted so an erased member's card stops being updated.
+   */
+  private async eraseMemberData(memberId: string, tenantId: string) {
+    const db = this.supabaseService.client;
+    const now = new Date().toISOString();
+    // Keeps the NOT NULL/unique phone column satisfied without holding a
+    // real number, and stays obviously non-personal to anyone reading it.
+    const tombstone = `erased-${memberId}`;
+
+    await db
+      .from('Pass')
+      .update({ deletedAt: now })
+      .eq('memberId', memberId)
+      .is('deletedAt', null);
+
+    const { error } = await db
+      .from('Member')
+      .update({
+        name: 'Erased member',
+        phone: tombstone,
+        erasedAt: now,
+        marketingOptOutAt: now,
+      })
+      .eq('id', memberId)
+      .eq('tenantId', tenantId);
+    if (error) throw error;
+
+    await this.auditService.record({
+      tenantId,
+      memberId,
+      actor: 'dashboard',
+      action: 'data_erased',
+      details: { legalBasis: 'DPDP_erasure_request' },
+    });
   }
 
   private async deleteMemberData(memberId: string) {
@@ -258,7 +476,7 @@ export class MembersController {
             type: 'balance_update',
             channel: 'wallet_push',
             status: 'failed',
-            errorReason: err?.message || String(err),
+            errorReason: describeError(err),
           }),
         );
 

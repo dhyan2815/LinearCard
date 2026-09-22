@@ -49,12 +49,8 @@ export class TenantGuard implements CanActivate {
 
   async resolveTenant(req: Request): Promise<ResolvedTenant | null> {
     const token = extractToken(req);
-    if (!token) {
-      console.log('[TenantGuard] No token found');
-      return null;
-    }
+    if (!token) return null;
 
-    console.log('[TenantGuard] Token found, attempting JWT verification');
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
       if (decoded?.tenantId) {
@@ -65,11 +61,10 @@ export class TenantGuard implements CanActivate {
             finalTenantId = requestedTenant;
           }
         }
-        console.log('[TenantGuard] JWT verified successfully, tenantId:', finalTenantId);
         return { tenantId: finalTenantId, role: decoded.role ?? null };
       }
-    } catch (jwtErr) {
-      console.log('[TenantGuard] JWT verification failed, falling back to API key lookup:', (jwtErr as Error).message);
+    } catch {
+      // Not a JWT (or expired) — fall through to the API-key lookup.
     }
 
     // Hashed ApiKey table first (current path for keys issued via
@@ -78,20 +73,14 @@ export class TenantGuard implements CanActivate {
     // tenants' keys keep working during the migration window — new keys
     // are never written there again.
     const hash = crypto.createHash('sha256').update(token).digest('hex');
-    console.log('[TenantGuard] Querying ApiKey table with hash');
-    const { data: apiKey, error: apiKeyErr } = await this.supabaseService.client
+    const { data: apiKey } = await this.supabaseService.client
       .from('ApiKey')
       .select('id, tenantId, revokedAt')
       .eq('hash', hash)
       .is('revokedAt', null)
       .single();
 
-    if (apiKeyErr) {
-      console.log('[TenantGuard] ApiKey query error:', apiKeyErr.message);
-    }
-
     if (apiKey) {
-      console.log('[TenantGuard] ApiKey found, tenantId:', apiKey.tenantId);
       // Best-effort; must never block/fail auth on a logging write.
       Promise.resolve(
         this.supabaseService.client
@@ -102,45 +91,28 @@ export class TenantGuard implements CanActivate {
       return { tenantId: apiKey.tenantId, role: null };
     }
 
-    console.log('[TenantGuard] Querying legacy Tenant.apiKey');
-    const { data: tenant, error: tenantErr } = await this.supabaseService.client
+    const { data: tenant } = await this.supabaseService.client
       .from('Tenant')
       .select('id')
       .eq('apiKey', token)
       .single();
 
-    if (tenantErr) {
-      console.log('[TenantGuard] Tenant query error:', tenantErr.message);
-    }
+    if (tenant) return { tenantId: tenant.id, role: null };
 
-    if (tenant) {
-      console.log('[TenantGuard] Legacy apiKey found, tenantId:', tenant.id);
-      return { tenantId: tenant.id, role: null };
-    }
-
-    console.log('[TenantGuard] No authentication found (token invalid or not in DB)');
     return null;
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<TenantRequest>();
-    console.log('[TenantGuard] canActivate called for:', req.path);
 
-    try {
-      const resolved = await this.resolveTenant(req);
-      if (!resolved) {
-        console.log('[TenantGuard] Auth failed: no tenant resolved');
-        throw new UnauthorizedException(
-          'Unauthorized: Missing or invalid authentication',
-        );
-      }
-      req.tenantId = resolved.tenantId;
-      req.authRole = resolved.role;
-      console.log('[TenantGuard] Auth passed for tenantId:', resolved.tenantId);
-      return true;
-    } catch (err) {
-      console.log('[TenantGuard] Exception during canActivate:', err instanceof Error ? err.message : String(err));
-      throw err;
+    const resolved = await this.resolveTenant(req);
+    if (!resolved) {
+      throw new UnauthorizedException(
+        'Unauthorized: Missing or invalid authentication',
+      );
     }
+    req.tenantId = resolved.tenantId;
+    req.authRole = resolved.role;
+    return true;
   }
 }
