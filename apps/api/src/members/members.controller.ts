@@ -18,6 +18,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { AuditService } from '../audit/audit.service';
 import { describeError } from '../errors';
+import { buildMemberQuery } from './member-query';
 
 @Controller('members')
 export class MembersController {
@@ -46,28 +47,17 @@ export class MembersController {
       );
       const offset = Number(offsetQuery) >= 0 ? Number(offsetQuery) : 0;
 
-      let query = this.supabaseService.client
-        .from('Member')
-        .select(
-          'id, name, phone, tenantId, createdAt, isTestAccount, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
-          { count: 'exact' },
-        )
-        .eq('tenantId', req.tenantId);
-
-      if (q) {
-        query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
-      }
-
       const {
         data: members,
         error,
         count,
-      } = await query
-        // Only a Member column can order a paged query; balance lives on the
-        // child Pass rows, so sorting by it would only ever sort the page.
-        .order('name', { ascending: dir !== 'desc' })
-        .order('createdAt', { ascending: false })
-        .range(offset, offset + limit - 1);
+      } = await buildMemberQuery(this.supabaseService.client, {
+        tenantId: req.tenantId!,
+        limit,
+        offset,
+        q,
+        dir,
+      });
 
       if (error) {
         throw error;

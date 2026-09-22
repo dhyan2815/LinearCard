@@ -88,8 +88,39 @@ export interface Program {
   eventStartsAt?: string | null;
   eventEndsAt?: string | null;
   venueName?: string | null;
+  /** Phase 8 — WhatsApp message sent on enrollment. Empty means none. */
+  welcomeMessage?: string | null;
+  retentionDays?: number | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** Phase 8 — program Overview tab. */
+export interface ProgramOverview {
+  active: number;
+  created: number;
+  installed: number;
+  deleted: number;
+  devices: { google: number; apple: number; other: number };
+  series: Array<{
+    bucket: string;
+    created: number;
+    installed: number;
+    deleted: number;
+  }>;
+  /** Event recording began here; the chart labels this rather than implying zero. */
+  historyStartsAt: string | null;
+}
+
+/** Phase 8 — program Member Events feed. */
+export interface ProgramMemberEvent {
+  id: string;
+  memberId: string;
+  memberName?: string | null;
+  phone?: string | null;
+  action: string;
+  actor: string;
+  occurredAt: string;
 }
 
 /**

@@ -1,7 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient, UnauthorizedError } from '@/lib/api-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Tenant, Program, Tier, DEFAULT_PASS_HEX } from '@linearcard/types';
 
 type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
@@ -168,10 +168,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const data = await apiClient('/programs');
       if (data.success) {
         setPrograms(data.programs);
+        // Phase 8 — under /dashboard/programs/[id] the URL owns the choice,
+        // so never override it with the first program; elsewhere (gallery,
+        // account pages) a sensible default is still wanted.
         setSelectedProgramId(prev =>
           data.programs.some((p: Program) => p.id === prev)
             ? prev
-            : data.programs[0]?.id || ''
+            : window.location.pathname.startsWith('/dashboard/programs/')
+              ? prev
+              : data.programs[0]?.id || ''
         );
       }
     } catch (err) {
@@ -186,6 +191,20 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadPrograms();
   }, [loadPrograms]);
+
+  // Phase 8 — the URL owns the active program. Deep links must work, and two
+  // tabs open on different programs must not fight over one piece of state.
+  const pathname = usePathname();
+  useEffect(() => {
+    const match = pathname?.match(/^\/dashboard\/programs\/([^/]+)/);
+    const idFromUrl = match?.[1];
+    if (!idFromUrl || idFromUrl === 'new') return;
+    if (idFromUrl !== selectedProgramId) {
+      setSelectedProgramId(idFromUrl);
+      setSavedTemplateId(null);
+      setTemplateStatus('unsaved');
+    }
+  }, [pathname, selectedProgramId]);
 
   // The active program's tiers — loaded here so the designer's tier editor
   // and any future tier view share one copy.
@@ -217,8 +236,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     if (selectedTenantId) {
       apiClient(`/dashboard/stats?tenantId=${selectedTenantId}`)
         .then(data => {
+           // The route returns these at the top level; reading `data.stats`
+           // silently set undefined and emptied the dashboard.
            if (data.success) {
-             setStats(data.stats);
+             setStats({
+               memberCount: data.memberCount ?? 0,
+               passCount: data.passCount ?? 0,
+               walletStatus: data.walletStatus,
+               tierDistribution: data.tierDistribution ?? {},
+             });
            }
         })
         .catch(err => {

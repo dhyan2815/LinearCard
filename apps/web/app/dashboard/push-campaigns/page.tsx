@@ -1,20 +1,15 @@
 'use client';
-import React from 'react';
-import { PushCampaignsView } from '../_components/PushCampaignsView';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDashboard } from '../_components/DashboardContext';
-import { PageShell } from '@/components/ui/PageShell';
-import { PageHeader } from '@/components/ui/PageHeader';
 
-export default function PushCampaignsPage() {
-  const { selectedTenantId } = useDashboard();
-
-  return (
-    <PageShell>
-      <PageHeader
-        title="Push Campaigns"
-        description="Broadcast marketing updates or pass notifications across WhatsApp and Wallet Push."
-      />
-      <PushCampaignsView tenantId={selectedTenantId} />
-    </PageShell>
-  );
+/** Phase 8 — this view moved under its program. Kept so old links still land. */
+export default function LegacyPushCampaignsRedirect() {
+  const router = useRouter();
+  const { selectedProgramId, programs } = useDashboard();
+  useEffect(() => {
+    const id = selectedProgramId || programs[0]?.id;
+    router.replace(id ? `/dashboard/programs/${id}/campaigns` : '/dashboard');
+  }, [selectedProgramId, programs, router]);
+  return null;
 }

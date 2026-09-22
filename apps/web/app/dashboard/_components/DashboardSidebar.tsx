@@ -41,12 +41,11 @@ export function DashboardSidebar() {
     }
   };
 
+  // Phase 8 — two-level nav. Everything program-scoped (design, campaigns,
+  // activity, members) now lives on the program's own tab strip, so the
+  // sidebar carries only account-level destinations.
   const tabs = [
-    { id: 'template-designer', path: '/dashboard/template-designer', label: 'Template Designer', icon: <Palette className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
-    { id: 'programs', path: '/dashboard/programs', label: 'Programs', icon: <Layers className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
-    { id: 'live-activity', path: '/dashboard/live-activity', label: 'Live Activity', icon: <Zap className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
-    { id: 'push-campaigns', path: '/dashboard/push-campaigns', label: 'Push Campaigns', icon: <Bell className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
-    { id: 'members', path: '/dashboard/members', label: 'Members', icon: <Users className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
+    { id: 'programs', path: '/dashboard', label: 'Projects', icon: <Layers className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
     { id: 'developers', path: '/dashboard/developers', label: 'Developers', icon: <Terminal className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
     { id: 'settings', path: '/dashboard/settings', label: 'Settings', icon: <Settings2 className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
   ] as const;
@@ -104,7 +103,11 @@ export function DashboardSidebar() {
       </div>
       <div className="flex-1 py-4 flex flex-col gap-1 px-2 overflow-y-auto">
          {tabs.map((tab) => {
-           const isActive = pathname === tab.path || pathname.startsWith(tab.path + '/');
+           // '/dashboard' is a prefix of every dashboard route, so Projects
+           // matches the gallery and the program routes explicitly instead.
+           const isActive = tab.path === '/dashboard'
+             ? pathname === '/dashboard' || pathname.startsWith('/dashboard/programs')
+             : pathname === tab.path || pathname.startsWith(tab.path + '/');
            return (
              <Link
                 href={tab.path}

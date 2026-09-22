@@ -2,10 +2,14 @@
  * Phase 8 — PassKit project model: self-serve signup and program-scoped views.
  * One assertion per defect the phase closed.
  */
+import * as fs from 'fs';
+import * as path from 'path';
 import * as jwt from 'jsonwebtoken';
 import { PassIssuanceService } from './passes/pass-issuance.service';
 import { AuthController } from './auth/auth.controller';
 import { JWT_SECRET } from './env';
+import { buildMemberQuery } from './members/member-query';
+import { ProgramMembersController } from './programs/program-members.controller';
 
 /** Minimal chainable Supabase stub: one table -> canned rows, records writes. */
 function supabaseStub(tables: Record<string, any[]>) {
@@ -251,6 +255,126 @@ describe('8.3 — self-serve tenant signup', () => {
     const res: any = { cookie: jest.fn() };
     await expect(
       controller.adminSignup({ signupToken: token(), brandName: '   ' }, res),
+    ).rejects.toThrow();
+  });
+});
+
+describe('8.5 — the phase 8 migration', () => {
+  const MIGRATION = fs.readFileSync(
+    path.resolve(
+      __dirname,
+      '../../../supabase/migrations/20260922000007_phase8.sql',
+    ),
+    'utf8',
+  );
+
+  it('adds every column the phase depends on', () => {
+    expect(MIGRATION).toMatch(/ALTER TABLE "AuditLog"[\s\S]*"programId" UUID/);
+    expect(MIGRATION).toMatch(
+      /ALTER TABLE "Pass"[\s\S]*"installedAt" TIMESTAMPTZ/,
+    );
+    expect(MIGRATION).toMatch(/"welcomeMessage" TEXT/);
+    expect(MIGRATION).toMatch(/"retentionDays" INTEGER/);
+    expect(MIGRATION).toMatch(
+      /ALTER TABLE "WebhookEndpoint"[\s\S]*"programId" UUID/,
+    );
+  });
+
+  it('is re-runnable', () => {
+    const adds = MIGRATION.match(/ADD COLUMN/g) || [];
+    const guarded = MIGRATION.match(/ADD COLUMN IF NOT EXISTS/g) || [];
+    expect(guarded.length).toBe(adds.length);
+    expect(MIGRATION).not.toMatch(/CREATE INDEX (?!IF NOT EXISTS)/);
+  });
+
+  it('leaves no pass without a program', () => {
+    expect(MIGRATION).toMatch(/UPDATE "Pass" p[\s\S]*"programId" IS NULL/);
+  });
+});
+
+describe('8.6 — program-scoped member list', () => {
+  /** Records every filter the builder applies, ignoring the row data. */
+  function recordingClient(calls: Array<[string, any]>) {
+    return {
+      from: () => {
+        const chain: any = {
+          select: () => chain,
+          eq: (col: string, val: any) => {
+            calls.push([col, val]);
+            return chain;
+          },
+          is: (col: string, val: any) => {
+            calls.push([`is:${col}`, val]);
+            return chain;
+          },
+          or: () => chain,
+          order: () => chain,
+          range: () => chain,
+        };
+        return chain;
+      },
+    } as any;
+  }
+
+  it('filters passes by program when a programId is given', () => {
+    const calls: Array<[string, any]> = [];
+    buildMemberQuery(recordingClient(calls), {
+      tenantId: 't1',
+      programId: 'p1',
+      limit: 50,
+      offset: 0,
+    });
+
+    expect(calls).toContainEqual(['tenantId', 't1']);
+    expect(calls.some(([c]) => c.includes('programId'))).toBe(true);
+  });
+
+  it('omits the program filter when no programId is given', () => {
+    const calls: Array<[string, any]> = [];
+    buildMemberQuery(recordingClient(calls), {
+      tenantId: 't1',
+      limit: 50,
+      offset: 0,
+    });
+
+    expect(calls.some(([c]) => c.includes('programId'))).toBe(false);
+  });
+});
+
+describe('8.7 — program member events', () => {
+  it("returns this program's audit rows, newest first", async () => {
+    const { client } = supabaseStub({
+      Program: [{ id: 'p1', tenantId: 't1', name: 'Coffee' }],
+      AuditLog: [
+        {
+          id: 'e1',
+          tenantId: 't1',
+          programId: 'p1',
+          memberId: 'm1',
+          action: 'pass_installed',
+          actor: 'google-wallet-webhook',
+          createdAt: '2026-09-20T10:00:00Z',
+          Member: { name: 'Asha', phone: '+911' },
+        },
+      ],
+    });
+    const controller = new ProgramMembersController({ client } as any);
+    const result: any = await controller.events('p1', {
+      tenantId: 't1',
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.events[0].action).toBe('pass_installed');
+    expect(result.events[0].memberName).toBe('Asha');
+  });
+
+  it("404s for another tenant's program", async () => {
+    const { client } = supabaseStub({
+      Program: [{ id: 'p1', tenantId: 'other' }],
+    });
+    const controller = new ProgramMembersController({ client } as any);
+    await expect(
+      controller.events('p1', { tenantId: 't1' } as any),
     ).rejects.toThrow();
   });
 });

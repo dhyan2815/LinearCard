@@ -12,10 +12,15 @@ const read = (rel: string) =>
 
 describe('6.1 — pagination (FE-3)', () => {
   it('members are counted, so a caller can page instead of slicing locally', () => {
+    // Phase 8 extracted the query itself into members/member-query.ts, which
+    // the program-scoped list shares; the controller still returns the count.
     const src = read('members/members.controller.ts');
-    expect(src).toContain("{ count: 'exact' }");
+    const query = read('members/member-query.ts');
+    expect(query).toContain("{ count: 'exact' }");
     expect(src).toContain('total: count ?? 0');
-    expect(src).toContain('.range(offset, offset + limit - 1)');
+    expect(query).toContain(
+      '.range(opts.offset, opts.offset + opts.limit - 1)',
+    );
   });
 
   it('the notification log is offset-paged and tenant-guarded', () => {
