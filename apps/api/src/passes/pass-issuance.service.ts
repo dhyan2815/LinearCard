@@ -229,6 +229,28 @@ export class PassIssuanceService {
         );
     }
 
+    // Program-level welcome, after the save link so the pass arrives first.
+    // Opt-outs are never a choice — same rule every campaign send follows.
+    if (program?.id && passRecordId) {
+      const { data: programRow } = await this.supabaseService.client
+        .from('Program')
+        .select('welcomeMessage')
+        .eq('id', program.id)
+        .maybeSingle();
+      const welcome = (programRow?.welcomeMessage || '').trim();
+      if (welcome && !member.marketingOptOutAt) {
+        this.whatsappService
+          .sendTextWithLog(member.phone, welcome, {
+            tenantId,
+            memberId: member.id,
+            type: 'program_welcome',
+          })
+          .catch((err: any) =>
+            this.logger.warn(`Welcome message failed (non-fatal): ${err}`),
+          );
+      }
+    }
+
     return {
       success: !!passResult.success,
       existing: false,

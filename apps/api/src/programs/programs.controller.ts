@@ -30,6 +30,8 @@ interface ProgramBody {
   eventStartsAt?: string | null;
   eventEndsAt?: string | null;
   venueName?: string | null;
+  welcomeMessage?: string | null;
+  retentionDays?: number | null;
 }
 
 interface TierBody {
@@ -314,6 +316,20 @@ export class ProgramsController {
         payload[field] = body[field];
       }
 
+    // Phase 8 — Settings tab. Both apply to every program kind.
+    if (body.welcomeMessage !== undefined)
+      payload.welcomeMessage = (body.welcomeMessage || '').trim() || null;
+    if (body.retentionDays !== undefined) {
+      if (body.retentionDays === null || body.retentionDays === ('' as any)) {
+        payload.retentionDays = null;
+      } else {
+        const days = Number(body.retentionDays);
+        if (isNaN(days) || days < 1)
+          this.bad('retentionDays must be a positive number of days');
+        payload.retentionDays = Math.floor(days);
+      }
+    }
+
     const { data, error } = await this.supabaseService.client
       .from('Program')
       .update(payload)
@@ -330,8 +346,21 @@ export class ProgramsController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: TenantRequest) {
-    await this.load(id, req.tenantId!);
+  async remove(
+    @Param('id') id: string,
+    @Req() req: TenantRequest,
+    @Body() body?: { confirmName?: string },
+  ) {
+    const program = await this.load(id, req.tenantId!);
+
+    // This expires every issued pass in Google Wallet and hard-deletes the
+    // Pass rows. The UI asks for the name; the check lives here so a stray
+    // curl cannot skip the dialog.
+    if ((body?.confirmName || '').trim() !== program.name) {
+      this.bad(
+        `To delete this program, send confirmName exactly matching "${program.name}".`,
+      );
+    }
 
     // 1. Find all passes associated with this program
     const { data: passes } = await this.supabaseService.client

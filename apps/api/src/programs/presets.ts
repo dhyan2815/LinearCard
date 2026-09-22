@@ -159,6 +159,177 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     ],
     tiers: [],
   },
+  {
+    id: 'modern_membership',
+    name: 'Modern membership',
+    kind: 'loyalty',
+    archetype: 'membership',
+    description:
+      'A plain membership card: member id and renewal date, no points maths.',
+    hexBackgroundColor: '#1F2933',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'memberId', header: 'Member', body: '—' },
+          { key: 'membership_expires', header: 'Renews', body: '—' },
+        ],
+      },
+    ],
+    tiers: [],
+    loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 0 },
+  },
+  {
+    id: 'tiered_membership',
+    name: 'Tiered membership',
+    kind: 'loyalty',
+    archetype: 'membership',
+    description:
+      'Four tiers earned on spend, with the current tier shown on the pass.',
+    hexBackgroundColor: '#2D1B4E',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'points', header: 'Points', body: '0' },
+          { key: 'tier', header: 'Tier', body: 'Member' },
+        ],
+      },
+      {
+        id: 'row2',
+        columns: [{ key: 'memberId', header: 'Member', body: '—' }],
+      },
+    ],
+    tiers: [
+      { name: 'Member', minPoints: 0 },
+      { name: 'Silver', minPoints: 250 },
+      { name: 'Gold', minPoints: 1000 },
+      { name: 'Platinum', minPoints: 5000 },
+    ],
+    loyalty: { earnRate: 0.1, redeemRate: 1, redeemCapPercent: 50 },
+  },
+  {
+    id: 'loyalty_offer',
+    name: 'Loyalty offer',
+    kind: 'loyalty',
+    archetype: 'loyalty',
+    description:
+      'A running offer on a loyalty card — points plus the current reward.',
+    hexBackgroundColor: '#7A2E1D',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'points', header: 'Points', body: '0' },
+          { key: 'reward', header: 'Reward', body: '—' },
+        ],
+      },
+    ],
+    tiers: [{ name: 'Member', minPoints: 0 }],
+    loyalty: { earnRate: 0.1, redeemRate: 1, redeemCapPercent: 100 },
+  },
+  {
+    id: 'business_card',
+    name: 'Business card',
+    kind: 'loyalty',
+    archetype: 'id_card',
+    description:
+      'Name, role and contact — an identity card with nothing to earn.',
+    hexBackgroundColor: '#111827',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'role', header: 'Role', body: '—' },
+          { key: 'memberId', header: 'ID', body: '—' },
+        ],
+      },
+    ],
+    tiers: [],
+    loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 0 },
+  },
+  {
+    id: 'gift_card',
+    name: 'Gift card',
+    kind: 'loyalty',
+    archetype: 'loyalty',
+    description: 'A stored balance spent down to zero: one point is one rupee.',
+    hexBackgroundColor: '#14532D',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'points', header: 'Balance', body: '0' },
+          { key: 'memberId', header: 'Card', body: '—' },
+        ],
+      },
+    ],
+    tiers: [{ name: 'Member', minPoints: 0 }],
+    // Nothing is earned on a gift card; the whole balance is spendable.
+    loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 100 },
+  },
+  {
+    id: 'single_use_coupon',
+    name: 'Single-use coupon',
+    kind: 'loyalty',
+    archetype: 'loyalty',
+    description: 'One redemption, then the coupon is spent. No tiers.',
+    hexBackgroundColor: '#9A3412',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'reward', header: 'Offer', body: '—' },
+          { key: 'expires', header: 'Expires', body: '—' },
+        ],
+      },
+    ],
+    tiers: [],
+    loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 100 },
+  },
+  {
+    id: 'stamp_card',
+    name: 'Stamp card',
+    kind: 'loyalty',
+    archetype: 'loyalty',
+    description: 'Ten stamps, one free — a stamp is a point, the tenth resets.',
+    hexBackgroundColor: '#5B3A1E',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'points', header: 'Stamps', body: '0' },
+          { key: 'reward', header: 'Next reward', body: '10 stamps' },
+        ],
+      },
+    ],
+    tiers: [{ name: 'Member', minPoints: 0 }],
+    // One stamp per visit: the scan sends amount=1.
+    loyalty: { earnRate: 1, redeemRate: 1, redeemCapPercent: 100 },
+  },
+  {
+    id: 'access_pass',
+    name: 'Access pass',
+    kind: 'ticket',
+    archetype: 'event_ticket',
+    description:
+      'Venue or site access for a dated window — zone and gate, no points.',
+    hexBackgroundColor: '#1E3A5F',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'section', header: 'Zone', body: '—' },
+          { key: 'gate', header: 'Gate', body: '—' },
+        ],
+      },
+      {
+        id: 'row2',
+        columns: [{ key: 'event_starts', header: 'Valid from', body: '—' }],
+      },
+    ],
+    tiers: [],
+  },
 ];
 
 export function findPreset(id?: string): ProgramPreset | undefined {

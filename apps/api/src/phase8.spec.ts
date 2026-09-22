@@ -12,6 +12,9 @@ import { buildMemberQuery } from './members/member-query';
 import { ProgramMembersController } from './programs/program-members.controller';
 import { ProgramAnalyticsController } from './programs/program-analytics.controller';
 import { AuditService } from './audit/audit.service';
+import { ProgramsController } from './programs/programs.controller';
+import { WebhookService } from './developers/webhook.service';
+import { PROGRAM_PRESETS } from './programs/presets';
 
 /** Minimal chainable Supabase stub: one table -> canned rows, records writes. */
 function supabaseStub(tables: Record<string, any[]>) {
@@ -511,5 +514,203 @@ describe('8.12 — program overview', () => {
         'day',
       ),
     ).rejects.toThrow();
+  });
+});
+
+describe('8.15 — destructive delete needs the program name', () => {
+  function controllerFor() {
+    const stub = supabaseStub({
+      Program: [{ id: 'p1', tenantId: 't1', name: 'Coffee Loyalty' }],
+      Pass: [],
+      Campaign: [],
+    });
+    return {
+      controller: new ProgramsController(
+        { client: stub.client } as any,
+        {} as any,
+        undefined,
+      ),
+      stub,
+    };
+  }
+
+  it('refuses a mismatched confirmName', async () => {
+    const { controller, stub } = controllerFor();
+    await expect(
+      controller.remove('p1', { tenantId: 't1' } as any, {
+        confirmName: 'coffee',
+      }),
+    ).rejects.toThrow();
+    expect(stub.writes.some((w) => w.op === 'delete')).toBe(false);
+  });
+
+  it('proceeds on an exact match', async () => {
+    const { controller } = controllerFor();
+    const result: any = await controller.remove(
+      'p1',
+      { tenantId: 't1' } as any,
+      { confirmName: 'Coffee Loyalty' },
+    );
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('8.16 — webhook scoping', () => {
+  function serviceWith(endpoints: any[]) {
+    const { client } = supabaseStub({ WebhookEndpoint: endpoints });
+    const service = new WebhookService({ client } as any);
+    const delivered: string[] = [];
+    (service as any).deliverWithRetry = async (endpoint: any) => {
+      delivered.push(endpoint.id);
+    };
+    return { service, delivered };
+  }
+
+  const rows = [
+    {
+      id: 'tenant-wide',
+      tenantId: 't1',
+      programId: null,
+      active: true,
+      events: ['pass.installed'],
+      url: 'https://a',
+      secret: 's',
+    },
+    {
+      id: 'program-p1',
+      tenantId: 't1',
+      programId: 'p1',
+      active: true,
+      events: ['pass.installed'],
+      url: 'https://b',
+      secret: 's',
+    },
+    {
+      id: 'program-p2',
+      tenantId: 't1',
+      programId: 'p2',
+      active: true,
+      events: ['pass.installed'],
+      url: 'https://c',
+      secret: 's',
+    },
+  ];
+
+  it('fires tenant-wide and matching-program hooks only', async () => {
+    const { service, delivered } = serviceWith(rows);
+    await service.dispatch('t1', 'pass.installed', {}, 'p1');
+    expect(delivered.sort()).toEqual(['program-p1', 'tenant-wide']);
+  });
+
+  it('fires only tenant-wide hooks when no program is given', async () => {
+    const { service, delivered } = serviceWith(rows);
+    await service.dispatch('t1', 'pass.installed', {});
+    expect(delivered).toEqual(['tenant-wide']);
+  });
+});
+
+describe('8.17 — welcome message', () => {
+  function serviceFor(
+    welcomeMessage: string | null,
+    marketingOptOutAt: string | null,
+  ) {
+    const sent: Array<{ phone: string; text: string }> = [];
+    const { client } = supabaseStub({
+      Tenant: [{ id: 't1', name: 'Blue Tokai', publishStatus: 'production' }],
+      Program: [{ id: 'p1', tenantId: 't1', welcomeMessage }],
+      Member: [{ id: 'm1', tenantId: 't1', phone: '+911', marketingOptOutAt }],
+      Tier: [],
+      Pass: [],
+    });
+    const whatsapp: any = {
+      sendPassLinkWithLog: async () => {},
+      sendTextWithLog: async (phone: string, text: string) => {
+        sent.push({ phone, text });
+      },
+    };
+    const service = new PassIssuanceService(
+      { client } as any,
+      {
+        resolveTenantPassDesign: async () => ({ classSuffix: 'x' }),
+        forTenant: async () => ({
+          buildSaveLink: () => ({ token: 't', googleWalletUrl: 'https://w' }),
+          createGoogleWalletPass: async () => ({
+            success: true,
+            fullPassId: 'f1',
+            googleWalletUrl: 'https://w',
+          }),
+        }),
+      } as any,
+      whatsapp,
+      { dispatch: async () => {} } as any,
+    );
+    return { service, sent };
+  }
+
+  it('is skipped for a member who opted out of marketing', async () => {
+    const { service, sent } = serviceFor(
+      'Welcome to Blue Tokai',
+      '2026-09-01T00:00:00Z',
+    );
+    await service.issueForMember({
+      tenantId: 't1',
+      member: {
+        id: 'm1',
+        phone: '+911',
+        marketingOptOutAt: '2026-09-01T00:00:00Z',
+      },
+      program: { id: 'p1' },
+    });
+    expect(sent.some((s) => s.text === 'Welcome to Blue Tokai')).toBe(false);
+  });
+
+  it('sends once when the program has one and the member has not opted out', async () => {
+    const { service, sent } = serviceFor('Welcome to Blue Tokai', null);
+    await service.issueForMember({
+      tenantId: 't1',
+      member: { id: 'm1', phone: '+911', marketingOptOutAt: null },
+      program: { id: 'p1' },
+    });
+    expect(sent.filter((s) => s.text === 'Welcome to Blue Tokai')).toHaveLength(
+      1,
+    );
+  });
+
+  it('sends nothing when the program has no welcome message', async () => {
+    const { service, sent } = serviceFor(null, null);
+    await service.issueForMember({
+      tenantId: 't1',
+      member: { id: 'm1', phone: '+911', marketingOptOutAt: null },
+      program: { id: 'p1' },
+    });
+    expect(sent).toHaveLength(0);
+  });
+});
+
+describe('8.18 — the template gallery catalog', () => {
+  it('offers twelve presets', () => {
+    expect(PROGRAM_PRESETS.length).toBe(12);
+  });
+
+  it('gives every preset the fields the gallery card renders', () => {
+    for (const preset of PROGRAM_PRESETS) {
+      expect(preset.id).toMatch(/^[a-z0-9_]+$/);
+      expect(preset.name.length).toBeGreaterThan(0);
+      expect(preset.description.length).toBeGreaterThan(0);
+      expect(preset.hexBackgroundColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
+      expect(Array.isArray(preset.fieldRows)).toBe(true);
+      expect(preset.fieldRows.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('has unique ids', () => {
+    const ids = PROGRAM_PRESETS.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('covers all three gallery categories', () => {
+    const kinds = new Set(PROGRAM_PRESETS.map((p) => p.kind));
+    expect(kinds.has('loyalty')).toBe(true);
+    expect(kinds.has('ticket')).toBe(true);
   });
 });
