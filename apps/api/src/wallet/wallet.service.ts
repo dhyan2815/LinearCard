@@ -746,6 +746,36 @@ export class WalletService {
     }
   }
 
+  /**
+   * Invalidates / expires a pass on Google Wallet when deleted or revoked.
+   * Google Wallet API does not support programmatic deletion of GenericObject
+   * or GenericClass resources, so setting state to 'EXPIRED' deactivates the pass
+   * and moves it out of active cards on user devices.
+   */
+  public async expireGenericObject(passId: string): Promise<boolean> {
+    const client = await this.getGoogleAuthClient();
+    const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${passId}`;
+
+    try {
+      await client.request({
+        url,
+        method: 'PATCH',
+        data: {
+          state: 'EXPIRED',
+        },
+      });
+      return true;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return false;
+      }
+      this.logger.warn(
+        `Failed to expire Google Wallet pass ${passId}: ${error?.message || error}`,
+      );
+      return false;
+    }
+  }
+
   public async updateGenericObject(passId: string, updateData: any) {
     const client = await this.getGoogleAuthClient();
     const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${passId}`;

@@ -2,7 +2,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Check, Plus } from 'lucide-react';
+import { Check, Plus, Trash2 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { useDashboard } from '../_components/DashboardContext';
 import { PageShell } from '@/components/ui/PageShell';
@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
 
 interface Preset {
   id: string;
@@ -39,6 +40,9 @@ export default function ProgramsPage() {
   const [creatingPreset, setCreatingPreset] = React.useState<string | null>(null);
   const [newName, setNewName] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+
+  const [programToDelete, setProgramToDelete] = React.useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   React.useEffect(() => {
     apiClient('/programs/presets')
@@ -82,6 +86,25 @@ export default function ProgramsPage() {
         error: (err: any) => err.message || 'Publish failed',
       },
     );
+  };
+
+  const deleteProgram = async (program: any) => {
+    setIsDeleting(true);
+    const del = async () => {
+      const data = await apiClient(`/programs/${program.id}`, {
+        method: 'DELETE',
+      });
+      if (!data.success) throw new Error(data.error || 'Failed to delete program');
+      await refreshPrograms();
+      setProgramToDelete(null);
+      return data;
+    };
+
+    toast.promise(del().finally(() => setIsDeleting(false)), {
+      loading: 'Deleting program from database and Google Wallet...',
+      success: `Program "${program.name}" deleted successfully.`,
+      error: (err: any) => err.message || 'Failed to delete program',
+    });
   };
 
   return (
@@ -153,6 +176,17 @@ export default function ProgramsPage() {
                 <Button type="button" onClick={() => publish(p.id)}>
                   Publish
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="text-ink-muted hover:text-red-500 hover:border-red-500/30 hover:bg-red-500/10 cursor-pointer"
+                  onClick={() => setProgramToDelete(p)}
+                  title="Delete program"
+                  aria-label="Delete program"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </div>
             </div>
           );
@@ -216,6 +250,22 @@ export default function ProgramsPage() {
           </div>
         ))}
       </div>
+
+      <ConfirmationDialog
+        isOpen={Boolean(programToDelete)}
+        onClose={() => !isDeleting && setProgramToDelete(null)}
+        onConfirm={() => programToDelete && deleteProgram(programToDelete)}
+        title={`Delete "${programToDelete?.name}"?`}
+        description={
+          <>
+            Are you sure you want to delete <strong className="text-ink-dark font-medium">{programToDelete?.name}</strong>? This will permanently remove the program, its tier definitions, and templates from the database, and expire any issued passes in Google Wallet. This action cannot be undone.
+          </>
+        }
+        confirmText="Delete Program"
+        cancelText="Cancel"
+        variant="destructive"
+        isLoading={isDeleting}
+      />
     </PageShell>
   );
 }

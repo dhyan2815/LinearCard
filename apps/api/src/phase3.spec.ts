@@ -341,6 +341,59 @@ describe('3.5 — preset catalog (D9/D14)', () => {
       ctrl.create({ presetId: 'nope' }, { tenantId: 'tenant-1' } as any),
     ).rejects.toThrow('presetId');
   });
+
+  it('deletes a program, expires Google Wallet passes, and removes passes, tiers, templates from DB', async () => {
+    const expiredPassIds: string[] = [];
+    const mockWallet = {
+      forTenant: async () => ({
+        expireGenericObject: async (passId: string) => {
+          expiredPassIds.push(passId);
+          return true;
+        },
+      }),
+    };
+    const stub = supabaseStub({
+      Program: [{ id: 'p-1', tenantId: 'tenant-1', name: 'Apex Events' }],
+      Pass: [
+        {
+          id: 'pass-1',
+          programId: 'p-1',
+          tenantId: 'tenant-1',
+          fullPassId: 'pass.123',
+        },
+      ],
+      Tier: [{ id: 'tier-1', programId: 'p-1' }],
+      PassTemplate: [{ id: 'tpl-1', programId: 'p-1', tenantId: 'tenant-1' }],
+      Campaign: [{ id: 'cmp-1', programId: 'p-1', tenantId: 'tenant-1' }],
+    });
+    const ctrl = new ProgramsController(
+      stub.service,
+      {} as any,
+      mockWallet as any,
+    );
+
+    const res = await ctrl.remove('p-1', { tenantId: 'tenant-1' } as any);
+    expect(res.success).toBe(true);
+    expect(res.expiredPassesCount).toBe(1);
+    expect(expiredPassIds).toContain('pass.123');
+
+    // Check DB writes
+    expect(
+      stub.writes.some((w) => w.table === 'Pass' && w.op === 'delete'),
+    ).toBe(true);
+    expect(
+      stub.writes.some((w) => w.table === 'Tier' && w.op === 'delete'),
+    ).toBe(true);
+    expect(
+      stub.writes.some((w) => w.table === 'PassTemplate' && w.op === 'delete'),
+    ).toBe(true);
+    expect(
+      stub.writes.some((w) => w.table === 'Program' && w.op === 'delete'),
+    ).toBe(true);
+    expect(
+      stub.writes.some((w) => w.table === 'Campaign' && w.op === 'update'),
+    ).toBe(true);
+  });
 });
 
 describe('3.7 — class suffixes (DB-6)', () => {

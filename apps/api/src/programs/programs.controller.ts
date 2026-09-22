@@ -14,7 +14,7 @@ import {
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { SupabaseService } from '../supabase/supabase.service';
 import { TemplatesService } from '../templates/templates.service';
-import { buildClassSuffix } from '../wallet/wallet.service';
+import { buildClassSuffix, WalletService } from '../wallet/wallet.service';
 import { PROGRAM_PRESETS, findPreset, slugify } from './presets';
 import type { ProgramKind } from '@linearcard/types';
 
@@ -49,6 +49,7 @@ export class ProgramsController {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly templatesService: TemplatesService,
+    private readonly walletService?: WalletService,
   ) {}
 
   private bad(message: string): never {
@@ -332,19 +333,87 @@ export class ProgramsController {
   async remove(@Param('id') id: string, @Req() req: TenantRequest) {
     await this.load(id, req.tenantId!);
 
-    // Deleting a program that issued passes would orphan them (the FK is ON
-    // DELETE SET NULL, so they'd silently lose their tiers and design).
+    // 1. Find all passes associated with this program
     const { data: passes } = await this.supabaseService.client
       .from('Pass')
-      .select('id')
+      .select('id, fullPassId')
       .eq('programId', id)
-      .is('deletedAt', null)
-      .limit(1);
-    if (passes?.length)
-      this.bad(
-        'This program has issued passes. Archive it instead of deleting it.',
-      );
+      .eq('tenantId', req.tenantId);
 
+    // 2. Invalidate / expire any issued passes in Google Wallet
+    let expiredCount = 0;
+    if (passes && passes.length > 0 && this.walletService) {
+      try {
+        const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+        const expirePromises = passes
+          .filter((p: any) => p.fullPassId)
+          .map(async (p: any) => {
+            const success = await tenantWallet.expireGenericObject(
+              p.fullPassId,
+            );
+            if (success) expiredCount++;
+          });
+        await Promise.allSettled(expirePromises);
+      } catch (err: any) {
+        // Log wallet error but proceed with database cleanup
+        console.warn(
+          `[ProgramsController] Failed to expire Google Wallet passes for program ${id}: ${err?.message}`,
+        );
+      }
+    }
+
+    // 3. Dissociate Campaign references to avoid foreign key errors
+    await this.supabaseService.client
+      .from('Campaign')
+      .update({ programId: null })
+      .eq('programId', id)
+      .eq('tenantId', req.tenantId);
+
+    // 4. Delete passes for this program from DB
+    const { error: passErr } = await this.supabaseService.client
+      .from('Pass')
+      .delete()
+      .eq('programId', id)
+      .eq('tenantId', req.tenantId);
+    if (passErr) {
+      throw new HttpException(
+        {
+          success: false,
+          error: `Failed to delete passes: ${passErr.message}`,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 5. Delete tiers for this program from DB
+    const { error: tierErr } = await this.supabaseService.client
+      .from('Tier')
+      .delete()
+      .eq('programId', id);
+    if (tierErr) {
+      throw new HttpException(
+        { success: false, error: `Failed to delete tiers: ${tierErr.message}` },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 6. Delete pass templates for this program from DB
+    const { error: tplErr } = await this.supabaseService.client
+      .from('PassTemplate')
+      .delete()
+      .eq('programId', id)
+      .eq('tenantId', req.tenantId);
+    if (tplErr) {
+      throw new HttpException(
+        {
+          success: false,
+          error: `Failed to delete templates: ${tplErr.message}`,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 7. Delete the program row itself
     const { error } = await this.supabaseService.client
       .from('Program')
       .delete()
@@ -355,7 +424,8 @@ export class ProgramsController {
         { success: false, error: error.message },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
-    return { success: true };
+
+    return { success: true, expiredPassesCount: expiredCount };
   }
 
   /**
