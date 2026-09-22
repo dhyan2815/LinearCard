@@ -123,8 +123,10 @@ export class PassesController {
         body.programId,
       );
 
-      // Demo-status tenants may only issue passes to registered test
-      // members — a minimal gate ahead of the production-approval flow.
+      // Demo-status tenants may only issue passes to registered test members.
+      // This route mints directly rather than through PassIssuanceService, so
+      // it carries its own copy of the gate in
+      // `PassIssuanceService.issueForMember` — change both together.
       // Fails OPEN on a missing/unknown status: 'demo' has to be set
       // explicitly (the column defaults to 'production'), so an unreadable
       // tenant row can never silently block a live tenant's issuance.

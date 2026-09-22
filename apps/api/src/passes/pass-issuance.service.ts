@@ -52,7 +52,13 @@ export class PassIssuanceService {
 
   async issueForMember(input: {
     tenantId: string;
-    member: { id: string; phone: string; name?: string | null };
+    member: {
+      id: string;
+      phone: string;
+      name?: string | null;
+      isTestAccount?: boolean;
+      marketingOptOutAt?: string | null;
+    };
     program?: { id: string } | null;
     tenant?: { name?: string; classSuffix?: string } | null;
     /** Extra GenericObject fields (memberName, tier, balance, rows…). */
@@ -76,6 +82,33 @@ export class PassIssuanceService {
         .eq('id', tenantId)
         .single();
       tenant = data;
+    }
+
+    // Demo-status tenants may only issue to registered test members. This is
+    // the one chokepoint every issuance path takes (enrollment OTP, payments
+    // webhook), so the gate lives here rather than at each call site. Fails
+    // OPEN on a missing/unknown status: 'demo' has to be set explicitly, so an
+    // unreadable tenant row can never block a live tenant.
+    if ((tenant as any)?.publishStatus === 'demo') {
+      let isTestAccount = member.isTestAccount;
+      if (isTestAccount === undefined) {
+        const { data: memberRow } = await this.supabaseService.client
+          .from('Member')
+          .select('isTestAccount')
+          .eq('id', member.id)
+          .eq('tenantId', tenantId)
+          .maybeSingle();
+        isTestAccount = memberRow?.isTestAccount ?? false;
+      }
+      if (!isTestAccount) {
+        return {
+          success: false,
+          existing: false,
+          passId: null,
+          error:
+            'This tenant is in demo mode: passes can only be issued to registered test accounts until approved for production.',
+        };
+      }
     }
 
     const entryTier = await this.resolveEntryTier(program?.id);

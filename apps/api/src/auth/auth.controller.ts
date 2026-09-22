@@ -14,7 +14,11 @@ import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
 import { NotifyService } from '../notification/notify.service';
 import * as jwt from 'jsonwebtoken';
-import { SendOtpRequest, VerifyOtpRequest } from '@linearcard/types';
+import {
+  SendOtpRequest,
+  VerifyOtpRequest,
+  DEFAULT_PASS_HEX,
+} from '@linearcard/types';
 import { JWT_SECRET } from '../env';
 import { PassIssuanceService } from '../passes/pass-issuance.service';
 
@@ -346,55 +350,27 @@ export class AuthController {
         .eq('id', otpSession.id);
 
       // Check or create admin
-      let { data: admin } = await this.supabaseService.client
+      const { data: admin } = await this.supabaseService.client
         .from('Admin')
         .select('*')
         .eq('phone', phone)
         .limit(1)
         .single();
       if (!admin) {
-        const { data: tenant } = await this.supabaseService.client
-          .from('Tenant')
-          .select('id')
-          .limit(1)
-          .single();
-        if (!tenant)
-          throw new HttpException(
-            'No tenants configured',
-            HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-
-        const { data: newAdmin, error: adminErr } =
-          await this.supabaseService.client
-            .from('Admin')
-            .insert({
-              phone,
-              tenantId: tenant.id,
-              role: 'admin',
-            })
-            .select()
-            .single();
-        if (adminErr || !newAdmin)
-          throw new Error(`Failed to create admin: ${adminErr?.message}`);
-        admin = newAdmin;
+        // No silent join. Attaching an unknown phone to the first tenant in
+        // the table put one brand's admin inside another brand's account.
+        // The caller completes onboarding at POST /auth/admin/signup, which
+        // is the only path that creates a Tenant.
+        const signupToken = jwt.sign({ phone, purpose: 'signup' }, JWT_SECRET, {
+          expiresIn: '10m',
+        });
+        return { success: true, needsOnboarding: true, signupToken };
       }
 
-      const token = jwt.sign(
-        { adminId: admin.id, tenantId: admin.tenantId, role: admin.role },
-        JWT_SECRET,
-        { expiresIn: '1d' },
-      );
-
-      const isProd = process.env.NODE_ENV === 'production';
-      res.cookie('admin_session', token, {
-        httpOnly: true, // Secure: JS cannot access, only sent automatically with credentials: 'include'
-        secure: isProd, // HTTPS only in production
-        // Prod serves web/api from separate Vercel domains (cross-site), which
-        // requires SameSite=None; dev is same-site (just different ports), so
-        // 'lax' works there and avoids needing HTTPS locally.
-        sameSite: isProd ? 'none' : 'lax',
-        maxAge: 24 * 60 * 60 * 1000,
-        path: '/',
+      const token = this.setAdminSession(res, {
+        adminId: admin.id,
+        tenantId: admin.tenantId,
+        role: admin.role,
       });
 
       return { success: true, token };
@@ -405,6 +381,124 @@ export class AuthController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /**
+   * Issues the admin JWT and sets the session cookie. Shared by login and
+   * signup so the two paths cannot set different cookie options.
+   */
+  private setAdminSession(
+    res: Response,
+    claims: { adminId: string; tenantId: string; role: string },
+  ): string {
+    const token = jwt.sign(claims, JWT_SECRET, { expiresIn: '1d' });
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('admin_session', token, {
+      httpOnly: true, // Secure: JS cannot access, only sent automatically with credentials: 'include'
+      secure: isProd, // HTTPS only in production
+      // Prod serves web/api from separate Vercel domains (cross-site), which
+      // requires SameSite=None; dev is same-site (just different ports), so
+      // 'lax' works there and avoids needing HTTPS locally.
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+    return token;
+  }
+
+  /**
+   * Completes self-serve onboarding. The only path that creates a Tenant.
+   * The signup token proves the phone passed OTP within the last 10 minutes;
+   * it is single-use in effect, because a second call finds the Admin row
+   * this one created and is refused.
+   */
+  @Post('admin/signup')
+  async adminSignup(
+    @Body() body: { signupToken?: string; brandName?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { signupToken, brandName } = body || {};
+    const name = (brandName || '').trim();
+    if (!signupToken || !name)
+      throw new HttpException(
+        'signupToken and brandName are required',
+        HttpStatus.BAD_REQUEST,
+      );
+
+    let phone: string;
+    try {
+      const decoded: any = jwt.verify(signupToken, JWT_SECRET);
+      if (decoded?.purpose !== 'signup' || !decoded?.phone) throw new Error();
+      phone = decoded.phone;
+    } catch {
+      throw new HttpException(
+        'Signup link expired. Please sign in again.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const { data: existingAdmin } = await this.supabaseService.client
+      .from('Admin')
+      .select('id')
+      .eq('phone', phone)
+      .maybeSingle();
+    if (existingAdmin)
+      throw new HttpException(
+        'This number already belongs to an account.',
+        HttpStatus.CONFLICT,
+      );
+
+    const classSuffix = await this.uniqueClassSuffix(name);
+
+    const { data: tenant, error: tenantErr } = await this.supabaseService.client
+      .from('Tenant')
+      .insert({
+        name,
+        classSuffix,
+        brandHexColor: DEFAULT_PASS_HEX,
+        publishStatus: 'demo',
+      })
+      .select()
+      .single();
+    if (tenantErr || !tenant)
+      throw new HttpException(
+        `Failed to create account: ${tenantErr?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+
+    const { data: admin, error: adminErr } = await this.supabaseService.client
+      .from('Admin')
+      .insert({ phone, tenantId: tenant.id, role: 'admin' })
+      .select()
+      .single();
+    if (adminErr || !admin)
+      throw new HttpException(
+        `Failed to create admin: ${adminErr?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+
+    this.setAdminSession(res, {
+      adminId: admin.id,
+      tenantId: tenant.id,
+      role: admin.role,
+    });
+    return { success: true, tenantId: tenant.id };
+  }
+
+  /** `blue_tokai`, then `blue_tokai_2` — the class-id namespace must be unique. */
+  private async uniqueClassSuffix(brandName: string): Promise<string> {
+    const root =
+      brandName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'brand';
+    const { data } = await this.supabaseService.client
+      .from('Tenant')
+      .select('classSuffix');
+    const taken = new Set((data || []).map((t: any) => t.classSuffix));
+    if (!taken.has(root)) return root;
+    for (let i = 2; ; i++)
+      if (!taken.has(`${root}_${i}`)) return `${root}_${i}`;
   }
 
   @Get('me')
