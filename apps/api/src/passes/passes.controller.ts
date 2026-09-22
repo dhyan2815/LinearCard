@@ -989,6 +989,7 @@ export class PassesController {
             tenantId: pass.tenantId,
             memberId: pass.memberId,
             passId: pass.id,
+            programId: pass.programId ?? null,
             actor: 'google-wallet-webhook',
             action: 'pass_deleted',
             details: { objectId, classId, nonce },
@@ -1001,11 +1002,16 @@ export class PassesController {
         }
 
         this.webhookService
-          .dispatch(pass.tenantId, 'pass.deleted', {
-            passId: pass.id,
-            objectId,
-            memberId: pass.memberId,
-          })
+          .dispatch(
+            pass.tenantId,
+            'pass.deleted',
+            {
+              passId: pass.id,
+              objectId,
+              memberId: pass.memberId,
+            },
+            pass.programId ?? null,
+          )
           .catch(() => {});
 
         return res.status(200).send('OK');
@@ -1033,6 +1039,26 @@ export class PassesController {
           .eq('id', pass.id);
       }
 
+      // First install wins: this is the timestamp the Overview tab counts, and
+      // re-adding a removed pass must not move it.
+      if (!pass.installedAt) {
+        await this.supabaseService.client
+          .from('Pass')
+          .update({ installedAt: new Date().toISOString() })
+          .eq('id', pass.id);
+      }
+
+      this.auditService
+        .record({
+          tenantId: pass.tenantId,
+          memberId: pass.memberId,
+          passId: pass.id,
+          programId: pass.programId ?? null,
+          actor: 'google-wallet-webhook',
+          action: 'pass_installed',
+        })
+        .catch(() => {});
+
       if (pass.Member?.phone) {
         await this.whatsappService
           .sendWalletSaveConfirmationWithLog(
@@ -1049,11 +1075,16 @@ export class PassesController {
       }
 
       this.webhookService
-        .dispatch(pass.tenantId, 'pass.installed', {
-          passId: pass.id,
-          objectId,
-          memberId: pass.memberId,
-        })
+        .dispatch(
+          pass.tenantId,
+          'pass.installed',
+          {
+            passId: pass.id,
+            objectId,
+            memberId: pass.memberId,
+          },
+          pass.programId ?? null,
+        )
         .catch(() => {});
 
       return res.status(200).send('OK');

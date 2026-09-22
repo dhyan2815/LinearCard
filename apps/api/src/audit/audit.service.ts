@@ -5,6 +5,8 @@ export interface AuditRecordInput {
   tenantId: string;
   memberId: string;
   passId?: string | null;
+  /** Phase 8 — a real column, so per-program feeds are one indexed filter. */
+  programId?: string | null;
   actor: string;
   action: string;
   details?: Record<string, any> | null;
@@ -23,6 +25,7 @@ export class AuditService {
     tenantId,
     memberId,
     passId,
+    programId,
     actor,
     action,
     details,
@@ -30,6 +33,7 @@ export class AuditService {
     await this.supabaseService.client.from('AuditLog').insert({
       tenantId,
       memberId,
+      programId: programId ?? null,
       actor,
       action,
       details: passId ? { passId, ...details } : details || {},

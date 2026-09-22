@@ -33,11 +33,16 @@ describe('6.1 — pagination (FE-3)', () => {
   });
 
   it('the members page asks the server for one page, not the whole table', () => {
+    // Phase 8 moved this view under its program; /dashboard/members is now a
+    // redirect stub. The paging assertion follows the page that does the work.
     const src = fs.readFileSync(
-      path.resolve(__dirname, '../../web/app/dashboard/members/page.tsx'),
+      path.resolve(
+        __dirname,
+        '../../web/app/dashboard/programs/[id]/members/page.tsx',
+      ),
       'utf8',
     );
-    expect(src).toContain('offset: String((page - 1) * PAGE_SIZE)');
+    expect(src).toContain('offset: String(offset)');
     // The old client-side slice is gone.
     expect(src).not.toContain('sortedMembers.slice');
   });

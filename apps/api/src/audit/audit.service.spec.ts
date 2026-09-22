@@ -25,6 +25,8 @@ describe('AuditService.record', () => {
     expect(insertMock).toHaveBeenCalledWith({
       tenantId: 't1',
       memberId: 'm1',
+      // Phase 8 — a real column; NULL when the caller has no program.
+      programId: null,
       actor: 'admin1',
       action: 'balance_adjusted',
       details: { passId: 'p1', amount: 5 },

@@ -10,6 +10,8 @@ import { AuthController } from './auth/auth.controller';
 import { JWT_SECRET } from './env';
 import { buildMemberQuery } from './members/member-query';
 import { ProgramMembersController } from './programs/program-members.controller';
+import { ProgramAnalyticsController } from './programs/program-analytics.controller';
+import { AuditService } from './audit/audit.service';
 
 /** Minimal chainable Supabase stub: one table -> canned rows, records writes. */
 function supabaseStub(tables: Record<string, any[]>) {
@@ -375,6 +377,139 @@ describe('8.7 — program member events', () => {
     const controller = new ProgramMembersController({ client } as any);
     await expect(
       controller.events('p1', { tenantId: 't1' } as any),
+    ).rejects.toThrow();
+  });
+});
+
+describe('8.11 — pass lifecycle events', () => {
+  it('writes programId as its own column, not inside details', async () => {
+    const { client, writes } = supabaseStub({ AuditLog: [] });
+    await new AuditService({ client } as any).record({
+      tenantId: 't1',
+      memberId: 'm1',
+      passId: 'pass1',
+      programId: 'p1',
+      actor: 'system',
+      action: 'pass_created',
+    });
+
+    const row = writes.find((w) => w.table === 'AuditLog').payload;
+    expect(row.programId).toBe('p1');
+    expect(row.action).toBe('pass_created');
+    expect(row.details.passId).toBe('pass1');
+  });
+
+  it('omits programId when the caller has none', async () => {
+    const { client, writes } = supabaseStub({ AuditLog: [] });
+    await new AuditService({ client } as any).record({
+      tenantId: 't1',
+      memberId: 'm1',
+      actor: 'system',
+      action: 'data_export',
+    });
+    const row = writes.find((w) => w.table === 'AuditLog').payload;
+    expect(row.programId ?? null).toBeNull();
+  });
+});
+
+describe('8.12 — program overview', () => {
+  function controllerWith(passes: any[], audit: any[]) {
+    const { client } = supabaseStub({
+      Program: [{ id: 'p1', tenantId: 't1' }],
+      Pass: passes,
+      AuditLog: audit,
+    });
+    return new ProgramAnalyticsController({ client } as any);
+  }
+
+  it('counts active passes and buckets events by day', async () => {
+    const controller = controllerWith(
+      [
+        {
+          id: 'x',
+          tenantId: 't1',
+          programId: 'p1',
+          deletedAt: null,
+          installedAt: '2026-09-20T00:00:00Z',
+        },
+        {
+          id: 'y',
+          tenantId: 't1',
+          programId: 'p1',
+          deletedAt: null,
+          installedAt: null,
+        },
+      ],
+      [
+        {
+          tenantId: 't1',
+          programId: 'p1',
+          action: 'pass_created',
+          createdAt: '2026-09-20T09:00:00Z',
+        },
+        {
+          tenantId: 't1',
+          programId: 'p1',
+          action: 'pass_installed',
+          createdAt: '2026-09-20T10:00:00Z',
+        },
+        {
+          tenantId: 't1',
+          programId: 'p1',
+          action: 'pass_deleted',
+          createdAt: '2026-09-21T10:00:00Z',
+        },
+      ],
+    );
+
+    const result: any = await controller.overview(
+      'p1',
+      { tenantId: 't1' } as any,
+      undefined,
+      undefined,
+      'day',
+    );
+
+    expect(result.overview.active).toBe(2);
+    expect(result.overview.installed).toBe(1);
+    expect(result.overview.created).toBe(1);
+    expect(result.overview.deleted).toBe(1);
+    const day20 = result.overview.series.find(
+      (b: any) => b.bucket === '2026-09-20',
+    );
+    expect(day20).toEqual({
+      bucket: '2026-09-20',
+      created: 1,
+      installed: 1,
+      deleted: 0,
+    });
+  });
+
+  it('reports apple as zero rather than omitting it', async () => {
+    const controller = controllerWith([], []);
+    const result: any = await controller.overview(
+      'p1',
+      { tenantId: 't1' } as any,
+      undefined,
+      undefined,
+      'day',
+    );
+    expect(result.overview.devices).toEqual({ google: 0, apple: 0, other: 0 });
+  });
+
+  it("404s for another tenant's program", async () => {
+    const { client } = supabaseStub({
+      Program: [{ id: 'p1', tenantId: 'other' }],
+    });
+    const controller = new ProgramAnalyticsController({ client } as any);
+    await expect(
+      controller.overview(
+        'p1',
+        { tenantId: 't1' } as any,
+        undefined,
+        undefined,
+        'day',
+      ),
     ).rejects.toThrow();
   });
 });

@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
 import { WhatsappService } from '../notification/whatsapp.service';
 import { WebhookService } from '../developers/webhook.service';
+import { AuditService } from '../audit/audit.service';
 import { resolveImageUrl } from './passes.controller';
 
 export interface IssuePassResult {
@@ -35,6 +36,8 @@ export class PassIssuanceService {
     private readonly walletService: WalletService,
     private readonly whatsappService: WhatsappService,
     private readonly webhookService: WebhookService,
+    /** Analytics only — optional so a caller can construct this without it. */
+    @Optional() private readonly auditService?: AuditService,
   ) {}
 
   /** The program's lowest tier — never a hardcoded 'Bronze' that may not exist. */
@@ -186,10 +189,27 @@ export class PassIssuanceService {
       if (!passError && insertedPass) {
         passRecordId = insertedPass.id;
         this.webhookService
-          .dispatch(tenantId, 'member.enrolled', {
-            passId: passRecordId,
+          .dispatch(
+            tenantId,
+            'member.enrolled',
+            {
+              passId: passRecordId,
+              memberId: member.id,
+              phone: member.phone,
+            },
+            program?.id ?? null,
+          )
+          .catch(() => {});
+
+        // Analytics only — a failed write must never fail issuance.
+        this.auditService
+          ?.record({
+            tenantId,
             memberId: member.id,
-            phone: member.phone,
+            passId: passRecordId,
+            programId: program?.id ?? null,
+            actor: 'system',
+            action: 'pass_created',
           })
           .catch(() => {});
       }
