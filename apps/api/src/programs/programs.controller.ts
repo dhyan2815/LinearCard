@@ -609,7 +609,8 @@ export class ProgramsController {
    */
   @Post(':id/sync-locations')
   async syncLocations(@Param('id') id: string, @Req() req: TenantRequest) {
-    if (!this.walletService) this.bad('Google Wallet is disabled in this environment');
+    if (!this.walletService)
+      this.bad('Google Wallet is disabled in this environment');
     const program = await this.load(id, req.tenantId!);
 
     // Find all templates for this program to gather possible class suffixes
@@ -620,17 +621,17 @@ export class ProgramsController {
       .eq('tenantId', req.tenantId);
 
     const tenantWallet = await this.walletService.forTenant(req.tenantId!);
-    
+
     // Collect all possible suffixes to check (most specific first)
     const suffixesToCheck = new Set<string>();
-    
+
     // 1. Explicit classSuffix from templates
-    for (const t of (templates || [])) {
+    for (const t of templates || []) {
       if (t.classSuffix) {
         suffixesToCheck.add(t.classSuffix);
       }
     }
-    
+
     // 2. Dynamically generated standard program classSuffix
     const { data: tenantData } = await this.supabaseService.client
       .from('Tenant')
@@ -638,13 +639,15 @@ export class ProgramsController {
       .eq('id', req.tenantId)
       .single();
     if (tenantData?.slug && program.enrollmentSlug) {
-      suffixesToCheck.add(buildClassSuffix(tenantData.slug, program.enrollmentSlug));
+      suffixesToCheck.add(
+        buildClassSuffix(tenantData.slug, program.enrollmentSlug),
+      );
     }
-    
+
     // 3. Fallback to tenant's default classSuffix
-    for (const t of (templates || [])) {
-      const tenantClassSuffix = Array.isArray(t.tenant) 
-        ? (t.tenant as any)[0]?.classSuffix 
+    for (const t of templates || []) {
+      const tenantClassSuffix = Array.isArray(t.tenant)
+        ? (t.tenant as any)[0]?.classSuffix
         : (t.tenant as any)?.classSuffix;
       if (tenantClassSuffix) {
         suffixesToCheck.add(tenantClassSuffix);
@@ -663,7 +666,11 @@ export class ProgramsController {
     }
 
     if (!walletClass) {
-      return { success: false, error: 'No live wallet class found for this program on Google. Publish a template first.' };
+      return {
+        success: false,
+        error:
+          'No live wallet class found for this program on Google. Publish a template first.',
+      };
     }
 
     // Map Google's merchantLocations { latitude, longitude } back to our local schema
@@ -682,7 +689,10 @@ export class ProgramsController {
 
     if (updateError) {
       throw new HttpException(
-        { success: false, error: 'Failed to save synced locations to database' },
+        {
+          success: false,
+          error: 'Failed to save synced locations to database',
+        },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
