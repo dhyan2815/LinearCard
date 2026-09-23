@@ -26,9 +26,9 @@ const COLOR_PALETTE = [
 ];
 
 const ARCHETYPES = [
-  { value: 'loyalty',      label: 'Loyalty', icon: Gift },
-  { value: 'membership',   label: 'Membership', icon: ShieldCheck },
-  { value: 'id_card',      label: 'ID Card', icon: IdCard },
+  { value: 'loyalty', label: 'Loyalty', icon: Gift },
+  { value: 'membership', label: 'Membership', icon: ShieldCheck },
+  { value: 'id_card', label: 'ID Card', icon: IdCard },
   { value: 'access_badge', label: 'Access Badge', icon: Ticket },
 ] as const;
 
@@ -132,40 +132,10 @@ export function TemplateWorkspace({
     updateDesignData({ ...designData, rows: newRows });
   };
 
-  // Phase 3.2 — the editor works on the program's real `Tier` rows and saves
-  // them through PATCH /programs/:id/tiers. The old `tierThresholds` JSONB it
-  // used to write was never read by the scan pipeline (DB-9), so editing a
-  // tier here changed nothing about what the next scan computed.
   const isTicketProgram = currentProgram?.kind === 'ticket';
 
   const storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }> =
     designData.storeLocations || [];
-
-  const addLocation = () => {
-    if (storeLocations.length >= 10) return;
-    updateDesignData({
-      ...designData,
-      storeLocations: [...storeLocations, { latitude: '', longitude: '', label: '' }],
-    });
-  };
-
-  const updateLocation = (
-    index: number,
-    fieldOrUpdates: 'latitude' | 'longitude' | 'label' | Record<string, string>,
-    value?: string,
-  ) => {
-    const next = [...storeLocations];
-    if (typeof fieldOrUpdates === 'string') {
-      next[index] = { ...next[index], [fieldOrUpdates]: value };
-    } else {
-      next[index] = { ...next[index], ...fieldOrUpdates };
-    }
-    updateDesignData({ ...designData, storeLocations: next });
-  };
-
-  const removeLocation = (index: number) => {
-    updateDesignData({ ...designData, storeLocations: storeLocations.filter((_, i) => i !== index) });
-  };
 
   // Saves the current design and returns the template id, so callers that
   // need a persisted template (publish, preview-on-device) don't each
@@ -360,9 +330,9 @@ export function TemplateWorkspace({
               <code className="text-sm bg-canvas px-3 py-2 rounded-lg border border-border-subtle text-ink-dark truncate flex-1">
                 {currentTenant && currentProgram ? `${origin}/enroll/${currentTenant.classSuffix}/${currentProgram.enrollmentSlug}` : `${origin}/enroll/${designData.classSuffix}`}
               </code>
-              <Button 
-                type="button" 
-                variant="secondary" 
+              <Button
+                type="button"
+                variant="secondary"
                 className="shrink-0 h-9"
                 onClick={() => {
                   const link = currentTenant && currentProgram ? `${origin}/enroll/${currentTenant.classSuffix}/${currentProgram.enrollmentSlug}` : `${origin}/enroll/${designData.classSuffix}`;
@@ -390,7 +360,7 @@ export function TemplateWorkspace({
               </span>
             )}
           </Label>
-          <Input type="text" value={designData.cardTitle} onChange={(e) => updateDesignData({...designData, cardTitle: e.target.value})} className="mt-2" required/>
+          <Input type="text" value={designData.cardTitle} onChange={(e) => updateDesignData({ ...designData, cardTitle: e.target.value })} className="mt-2" required />
         </div>
 
         <div className="space-y-2">
@@ -411,11 +381,10 @@ export function TemplateWorkspace({
                     });
                     setTemplateStatus('draft');
                   }}
-                  className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-lg text-[11px] font-medium border transition-all ${
-                    designData.archetype === arch.value
+                  className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-lg text-[11px] font-medium border transition-all ${designData.archetype === arch.value
                       ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
                       : 'bg-surface-card border-border-subtle text-ink-secondary hover:border-border-strong'
-                  }`}>
+                    }`}>
                   <Icon className="w-4 h-4" strokeWidth={1.75} />
                   {arch.label}
                 </button>
@@ -435,7 +404,7 @@ export function TemplateWorkspace({
                   <ImageOff className="w-4 h-4 text-ink-muted" strokeWidth={1.75} />
                 )}
               </div>
-              <Input type="text" value={designData.logoUrl} onChange={(e) => updateDesignData({...designData, logoUrl: e.target.value})} placeholder="https://..." className="font-mono text-sm"/>
+              <Input type="text" value={designData.logoUrl} onChange={(e) => updateDesignData({ ...designData, logoUrl: e.target.value })} placeholder="https://..." className="font-mono text-sm" />
             </div>
           </div>
           <div className="space-y-2">
@@ -448,7 +417,7 @@ export function TemplateWorkspace({
                   <ImageOff className="w-4 h-4 text-ink-muted" strokeWidth={1.75} />
                 )}
               </div>
-              <Input type="text" value={designData.heroImageUrl} onChange={(e) => updateDesignData({...designData, heroImageUrl: e.target.value})} placeholder="https://..." className="font-mono text-sm"/>
+              <Input type="text" value={designData.heroImageUrl} onChange={(e) => updateDesignData({ ...designData, heroImageUrl: e.target.value })} placeholder="https://..." className="font-mono text-sm" />
             </div>
           </div>
         </div>
@@ -459,9 +428,9 @@ export function TemplateWorkspace({
             {COLOR_PALETTE.map((c) => (
               <button
                 key={c.hex} type="button" title={`${c.name} — ${c.hex}`}
-                onClick={() => updateDesignData({...designData, hexBackgroundColor: c.hex})}
+                onClick={() => updateDesignData({ ...designData, hexBackgroundColor: c.hex })}
                 className={`w-8 h-8 rounded-full border-2 transition-all ${designData.hexBackgroundColor === c.hex ? 'border-white dark:border-zinc-300 scale-110 shadow-sm' : 'border-transparent opacity-60 hover:scale-105 hover:opacity-100'}`}
-                style={{backgroundColor: c.hex}}
+                style={{ backgroundColor: c.hex }}
               />
             ))}
             <div
@@ -471,7 +440,7 @@ export function TemplateWorkspace({
               <input
                 type="color"
                 value={designData.hexBackgroundColor}
-                onChange={(e) => updateDesignData({...designData, hexBackgroundColor: e.target.value})}
+                onChange={(e) => updateDesignData({ ...designData, hexBackgroundColor: e.target.value })}
                 className="absolute -inset-2 w-12 h-12 cursor-pointer opacity-0 z-10"
               />
               <div
@@ -535,127 +504,38 @@ export function TemplateWorkspace({
           )}
         </div>
 
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-ink-dark">
-              Store Locations ({storeLocations.length}/10 locations)
-            </h3>
-            <button
-              type="button"
-              onClick={addLocation}
-              disabled={storeLocations.length >= 10}
-              className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors disabled:opacity-50"
-            >
-              + Add Location
-            </button>
-          </div>
-          <p className="text-xs text-ink-muted mb-3">
-            Up to 10 outlet pins for Google Wallet's proximity notifications
-            (~150m radius). The notification text is Google's own and cannot
-            be customised. Delivery requires the customer to have "Allow all
-            the time" location access and the Nearby Passes toggle enabled —
-            neither LinearCard nor the merchant can grant this on their behalf.
-          </p>
-          {storeLocations.length > 0 && (
-            <div className="space-y-3">
-              {storeLocations.map((loc, idx) => (
-                <StoreLocationEntry
-                  key={idx}
-                  index={idx}
-                  location={loc}
-                  onUpdate={updateLocation}
-                  onRemove={removeLocation}
-                />
+        {!isTicketProgram && (
+          <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
+            <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Loyalty Economics</h3>
+            <p className="text-xs text-ink-muted mb-3">
+              Applied on every scan. Earn rate is points per ₹1 spent; redeem
+              rate is the ₹ discount each point buys; the cap limits how much of
+              an order points may cover.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                { field: 'earnRate', label: 'Earn rate (pts per ₹1)', step: 0.01, min: 0, max: 10 },
+                { field: 'redeemRate', label: 'Redeem rate (₹ per pt)', step: 0.01, min: 0.01, max: 1000 },
+                { field: 'redeemCapPercent', label: 'Redeem cap (% of order)', step: 1, min: 0, max: 100 },
+              ] as const).map(({ field, label, step, min, max }) => (
+                <div key={field} className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-ink-secondary">{label}</Label>
+                  <Input
+                    type="number"
+                    step={step}
+                    min={min}
+                    max={max}
+                    value={designData[field]}
+                    onChange={(e) => updateDesignData({ ...designData, [field]: Number(e.target.value) })}
+                  />
+                </div>
               ))}
             </div>
-          )}
-
-          {/* Phase 4.1 — verify against Google rather than against hope. */}
-          <div className="mt-3 pt-3 border-t border-border-subtle">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-ink-muted">
-                Check what Google actually holds for this class.
-              </span>
-              <button
-                type="button"
-                onClick={handleInspectClass}
-                disabled={!savedTemplateId || liveClassLoading}
-                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors disabled:opacity-50 shrink-0"
-              >
-                {liveClassLoading ? 'Checking…' : 'Verify on Google'}
-              </button>
-            </div>
-
-            {liveClass && (
-              <div className="mt-2 space-y-1 text-xs font-mono">
-                {!liveClass.exists ? (
-                  <p className="text-amber-600 dark:text-amber-400">
-                    No class on Google yet — publish this template first.
-                  </p>
-                ) : (
-                  <>
-                    <p
-                      className={
-                        liveClass.geofenceCount === liveClass.expectedGeofenceCount
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-red-600 dark:text-red-400'
-                      }
-                    >
-                      Geofences live on Google: {liveClass.geofenceCount}
-                      {liveClass.geofenceCount === liveClass.expectedGeofenceCount
-                        ? ' ✓'
-                        : ` ✗ (${liveClass.expectedGeofenceCount} saved here)`}
-                    </p>
-                    <p
-                      className={
-                        liveClass.callbackIsLocalhost
-                          ? 'text-red-600 dark:text-red-400 break-all'
-                          : 'text-ink-muted break-all'
-                      }
-                    >
-                      Callback: {liveClass.callbackUrl || 'none'}
-                      {liveClass.callbackIsLocalhost &&
-                        ' — points at a localhost machine, so live callbacks go nowhere. Republish from a public environment.'}
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
+            <p className="text-[11px] text-ink-muted mt-3">
+              A ₹1,000 order earns {Math.floor(1000 * (Number(designData.earnRate) || 0))} pts, and points may
+              cover at most ₹{Math.floor(1000 * ((Number(designData.redeemCapPercent) || 0) / 100))} of it.
+            </p>
           </div>
-        </div>
-
-        {!isTicketProgram && (
-        <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
-          <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Loyalty Economics</h3>
-          <p className="text-xs text-ink-muted mb-3">
-            Applied on every scan. Earn rate is points per ₹1 spent; redeem
-            rate is the ₹ discount each point buys; the cap limits how much of
-            an order points may cover.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {([
-              { field: 'earnRate', label: 'Earn rate (pts per ₹1)', step: 0.01, min: 0, max: 10 },
-              { field: 'redeemRate', label: 'Redeem rate (₹ per pt)', step: 0.01, min: 0.01, max: 1000 },
-              { field: 'redeemCapPercent', label: 'Redeem cap (% of order)', step: 1, min: 0, max: 100 },
-            ] as const).map(({ field, label, step, min, max }) => (
-              <div key={field} className="space-y-1.5">
-                <Label className="text-[11px] font-semibold text-ink-secondary">{label}</Label>
-                <Input
-                  type="number"
-                  step={step}
-                  min={min}
-                  max={max}
-                  value={designData[field]}
-                  onChange={(e) => updateDesignData({ ...designData, [field]: Number(e.target.value) })}
-                />
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-ink-muted mt-3">
-            A ₹1,000 order earns {Math.floor(1000 * (Number(designData.earnRate) || 0))} pts, and points may
-            cover at most ₹{Math.floor(1000 * ((Number(designData.redeemCapPercent) || 0) / 100))} of it.
-          </p>
-        </div>
         )}
 
         {isTicketProgram && (
