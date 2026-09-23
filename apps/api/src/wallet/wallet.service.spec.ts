@@ -1,4 +1,4 @@
-import { WalletService } from './wallet.service';
+import { WalletService, resolveCardTitle } from './wallet.service';
 
 // Phase 0.2: publishing a class refuses a localhost callback URL, and the
 // repo .env points at localhost. Give these tests a public one.
@@ -7,6 +7,26 @@ import { encryptSecret, decryptSecret } from '../env';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+
+describe('resolveCardTitle', () => {
+  it('combines tenant name and template title with a middle dot', () => {
+    expect(resolveCardTitle('Bistro Cafe', 'Gift Card')).toBe(
+      'Bistro Cafe · Gift Card',
+    );
+  });
+
+  it('falls back to the tenant name alone when there is no template title', () => {
+    expect(resolveCardTitle('Bistro Cafe', undefined)).toBe('Bistro Cafe');
+  });
+
+  it('falls back to the template title alone when there is no tenant name', () => {
+    expect(resolveCardTitle(undefined, 'Gift Card')).toBe('Gift Card');
+  });
+
+  it('returns undefined when neither is present', () => {
+    expect(resolveCardTitle(undefined, undefined)).toBeUndefined();
+  });
+});
 
 describe('WalletService.sendPromoMessageWithAudit', () => {
   let service: WalletService;
@@ -306,6 +326,16 @@ describe('resolveTenantPassDesign', () => {
     );
   });
 
+  it('combines tenant name and template title into cardTitle', async () => {
+    mockFrom(
+      { name: 'Bistro Cafe', brandHexColor: '#8B4513' },
+      { hexBackgroundColor: '#7C3AED', classSuffix: 'tpl_suffix', title: 'Gift Card' },
+    );
+
+    const design = await service.resolveTenantPassDesign('tenant-1');
+    expect(design.cardTitle).toBe('Bistro Cafe · Gift Card');
+  });
+
   it('prefers the published template colour over the tenant colour', async () => {
     mockFrom(
       { brandHexColor: '#8B4513', logoUrl: 'tenant-logo.png' },
@@ -347,6 +377,32 @@ describe('updateGenericObject — hexBackgroundColor patching', () => {
     jest
       .spyOn(service, 'getGoogleAuthClient')
       .mockResolvedValue(mockGoogleAuthClient as any);
+  });
+
+  it('includes cardTitle in the PATCH payload when supplied', async () => {
+    mockGoogleAuthClient.request
+      .mockResolvedValueOnce({ data: {} })
+      .mockResolvedValueOnce({ data: {} });
+
+    await service.updateGenericObject('issuer.pass-1', {
+      cardTitle: 'Bistro Cafe · Gift Card',
+    });
+
+    const patchCall = mockGoogleAuthClient.request.mock.calls[1][0];
+    expect(patchCall.data.cardTitle).toEqual({
+      defaultValue: { language: 'en-US', value: 'Bistro Cafe · Gift Card' },
+    });
+  });
+
+  it('omits cardTitle from the PATCH payload when not supplied', async () => {
+    mockGoogleAuthClient.request
+      .mockResolvedValueOnce({ data: {} })
+      .mockResolvedValueOnce({ data: {} });
+
+    await service.updateGenericObject('issuer.pass-1', { tier: 'Gold' });
+
+    const patchCall = mockGoogleAuthClient.request.mock.calls[1][0];
+    expect(patchCall.data.cardTitle).toBeUndefined();
   });
 
   it('includes hexBackgroundColor in the PATCH payload when supplied', async () => {

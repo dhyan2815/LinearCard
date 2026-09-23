@@ -159,7 +159,7 @@ export class PassesController {
         heroImageUrl: resolveImageUrl(
           body.heroImageUrl ?? passDesign.heroImageUrl,
         ),
-        rows: body.rows,
+        rows: body.rows ?? passDesign.fieldRows,
       });
 
       // 4. Record the newly generated pass in the database, linked to the member and tenant

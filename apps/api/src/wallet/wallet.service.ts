@@ -57,6 +57,22 @@ export const RAW_PROTECTED_KEYS = ['id', 'classId', 'callbackOptions'];
  * wholesale, because a half-merged `merchantLocations` or `cardRowTemplateInfos`
  * is never what the caller meant.
  */
+/**
+ * The brand line shown at the top of every Google Wallet pass and as the
+ * class `issuerName`. Combines the tenant's name with the program/template
+ * title so two presets under one tenant (e.g. "Bistro Cafe" running both a
+ * Coffee Loyalty and a Gift Card program) are distinguishable on the pass —
+ * previously this picked the tenant name ALONE whenever it was present,
+ * which is always, so the program name was silently dropped (WAL-10).
+ */
+export function resolveCardTitle(
+  tenantName?: string | null,
+  templateTitle?: string | null,
+): string | undefined {
+  if (tenantName && templateTitle) return `${tenantName} · ${templateTitle}`;
+  return tenantName || templateTitle || undefined;
+}
+
 export function deepMergeRaw(base: any, raw: any): any {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
   const out = { ...base };
@@ -447,7 +463,7 @@ export class WalletService {
         logoUrl: template.logoUrl || tenant?.logoUrl,
         heroImageUrl: template.heroImageUrl || tenant?.heroUrl,
         classSuffix: template.classSuffix || tenant?.classSuffix,
-        cardTitle: tenant?.name || template.title,
+        cardTitle: resolveCardTitle(tenant?.name, template.title),
         fieldRows: template.fieldRows || [],
       };
     }
@@ -872,6 +888,15 @@ export class WalletService {
           defaultValue: {
             language: 'en-US',
             value: updateData.tier,
+          },
+        };
+      }
+
+      if (updateData.cardTitle) {
+        patchPayload.cardTitle = {
+          defaultValue: {
+            language: 'en-US',
+            value: updateData.cardTitle,
           },
         };
       }

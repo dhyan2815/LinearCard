@@ -170,6 +170,10 @@ export class PassIssuanceService {
       hexBackgroundColor: passDesign.hexBackgroundColor,
       logoUrl: resolveImageUrl(passDesign.logoUrl),
       heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),
+      // The template's Dynamic Field Architecture — without this the object
+      // falls back to WalletService's hardcoded balance/tier_info skeleton,
+      // ignoring whatever fields the designer actually configured.
+      rows: passData.rows ?? passDesign.fieldRows,
     });
 
     let passRecordId: string | null = null;

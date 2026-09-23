@@ -12,7 +12,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import { WalletService } from '../wallet/wallet.service';
+import { WalletService, resolveCardTitle } from '../wallet/wallet.service';
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { TemplatesService } from './templates.service';
 
@@ -473,7 +473,7 @@ export class TemplatesController {
       // Key the preview class per-program so unpublished templates on the same
       // tenant never share (and clobber) each other's Wallet class.
       const previewSuffix = `${template.programId}_preview`;
-      const cardTitle = template.tenant?.name || template.title;
+      const cardTitle = resolveCardTitle(template.tenant?.name, template.title);
       const hexBackgroundColor =
         template.hexBackgroundColor || template.tenant?.brandHexColor;
       const logoUrl = template.logoUrl || template.tenant?.logoUrl;

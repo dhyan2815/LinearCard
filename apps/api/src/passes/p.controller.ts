@@ -60,6 +60,7 @@ export class PController {
         logoUrl: resolveImageUrl(passDesign.logoUrl),
         heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),
         passId: objectSuffixOverride,
+        rows: passDesign.fieldRows,
       });
 
       if (passResult.success && passResult.googleWalletUrl) {

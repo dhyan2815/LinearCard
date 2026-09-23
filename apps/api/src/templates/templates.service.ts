@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import { WalletService } from '../wallet/wallet.service';
+import { WalletService, resolveCardTitle } from '../wallet/wallet.service';
 
 /** How many passes are pushed to Google Wallet concurrently. */
 const RESYNC_BATCH_SIZE = 10;
@@ -35,7 +35,7 @@ export class TemplatesService {
 
     const { data: template, error } = await this.supabaseService.client
       .from('PassTemplate')
-      .select('*')
+      .select('*, tenant:Tenant(name)')
       .eq('id', templateId)
       .eq('tenantId', tenantId)
       .single();
@@ -46,12 +46,18 @@ export class TemplatesService {
       );
     }
 
-    const { data: passes, error: passesError } =
-      await this.supabaseService.client
-        .from('Pass')
-        .select('id, fullPassId')
-        .eq('tenantId', tenantId)
-        .is('deletedAt', null);
+    // Scoped to this template's own program (WAL-11) — without this, resyncing
+    // one program's template pushed its colors/logo/fields onto every pass in
+    // the tenant, including passes for completely different programs.
+    let passesQuery = this.supabaseService.client
+      .from('Pass')
+      .select('id, fullPassId')
+      .eq('tenantId', tenantId)
+      .is('deletedAt', null);
+    passesQuery = template.programId
+      ? passesQuery.eq('programId', template.programId)
+      : passesQuery.is('programId', null);
+    const { data: passes, error: passesError } = await passesQuery;
     if (passesError) throw passesError;
 
     const tenantWallet = await this.walletService.forTenant(tenantId);
@@ -74,6 +80,7 @@ export class TemplatesService {
           // Live values (balance, tier, member name) are preserved inside
           // updateGenericObject; only presentation is overwritten.
           tenantWallet.updateGenericObject(p.fullPassId, {
+            cardTitle: resolveCardTitle(template.tenant?.name, template.title),
             hexBackgroundColor: template.hexBackgroundColor,
             logoUrl: bust(template.logoUrl),
             heroImageUrl: bust(template.heroImageUrl),
@@ -143,7 +150,7 @@ export class TemplatesService {
     const envKey = tenantWallet.getWalletEnvPrefix() || 'prod';
     const classData: any = await tenantWallet.createGenericClass({
       classSuffix: template.classSuffix || template.tenant?.classSuffix,
-      cardTitle: template.tenant?.name || template.title,
+      cardTitle: resolveCardTitle(template.tenant?.name, template.title),
       hexBackgroundColor:
         template.hexBackgroundColor || template.tenant?.brandHexColor,
       rows: rowsWithKeys,
