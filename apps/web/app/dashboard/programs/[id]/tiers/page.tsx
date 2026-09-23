@@ -139,10 +139,26 @@ export default function ProgramTiersPage() {
                   />
                 </div>
               </div>
-              <p className="text-[11px] text-ink-muted mt-3">
-                A ₹1,000 order earns {Math.floor(1000 * (Number(tierRules.earnRate) || 0))} pts, and points may
-                cover at most ₹{Math.floor(1000 * ((Number(tierRules.redeemCapPercent) || 0) / 100))} of it.
-              </p>
+              <div className="mt-3 rounded-lg border border-border-subtle bg-surface-subtle p-3 space-y-1.5">
+                <p className="text-[11px] font-semibold text-ink-secondary">Example: ₹1,000 order</p>
+                {(() => {
+                  const earnRate = Number(tierRules.earnRate) || 0;
+                  const redeemRate = Number(tierRules.redeemRate) || 0;
+                  const capPercent = Number(tierRules.redeemCapPercent) || 0;
+                  const orderValue = 1000;
+                  const ptsEarned = Math.floor(orderValue * earnRate);
+                  const maxDiscount = Math.floor(orderValue * (capPercent / 100));
+                  const ptsNeededForCap = redeemRate > 0 ? Math.ceil(maxDiscount / redeemRate) : 0;
+                  return (
+                    <ul className="text-[11px] text-ink-muted space-y-1">
+                      <li>Earn rate: customer earns <span className="font-semibold text-ink-dark">{ptsEarned} pts</span> ({earnRate} pts/₹1 × ₹1,000)</li>
+                      <li>Redeem rate: each point is worth <span className="font-semibold text-ink-dark">₹{redeemRate}</span> off</li>
+                      <li>Redeem cap: at most <span className="font-semibold text-ink-dark">₹{maxDiscount}</span> of this order can be covered by points ({capPercent}% of ₹1,000)</li>
+                      <li>So redeeming here needs at least <span className="font-semibold text-ink-dark">{ptsNeededForCap} pts</span> to hit the ₹{maxDiscount} cap</li>
+                    </ul>
+                  );
+                })()}
+              </div>
             </div>
           </div>
 

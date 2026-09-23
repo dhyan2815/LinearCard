@@ -53,7 +53,11 @@ export class NotificationsController {
         query = query.eq('member.passes.programId', programId);
       }
 
-      const { data: logs, error, count } = await query
+      const {
+        data: logs,
+        error,
+        count,
+      } = await query
         .order('sentAt', { ascending: false })
         .range(offset, offset + limit - 1);
 

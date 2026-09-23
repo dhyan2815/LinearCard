@@ -323,11 +323,29 @@ export class PassesController {
 
       const member = pass.Member;
 
-      const { data: programRow } = pass.programId
+      let activeProgramId = pass.programId;
+      if (!activeProgramId && pass.Tenant?.PassTemplate) {
+        // Fallback: find the programId from the most recently published template
+        const templates = Array.isArray(pass.Tenant.PassTemplate)
+          ? pass.Tenant.PassTemplate
+          : [pass.Tenant.PassTemplate];
+        const published = templates
+          .filter((t: any) => t?.status === 'published')
+          .sort((a: any, b: any) =>
+            String(b?.updatedAt || '').localeCompare(
+              String(a?.updatedAt || ''),
+            ),
+          );
+        if (published.length > 0 && published[0].programId) {
+          activeProgramId = published[0].programId;
+        }
+      }
+
+      const { data: programRow } = activeProgramId
         ? await this.supabaseService.client
             .from('Program')
             .select('id, kind, earnRate, redeemRate, redeemCapPercent')
-            .eq('id', pass.programId)
+            .eq('id', activeProgramId)
             .maybeSingle()
         : { data: null };
 
@@ -345,7 +363,7 @@ export class PassesController {
         rules: rulesForPass(
           programRow,
           pass.Tenant?.PassTemplate,
-          pass.programId,
+          activeProgramId,
         ),
       });
     } catch (error: any) {

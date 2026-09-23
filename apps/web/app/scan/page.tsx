@@ -326,6 +326,7 @@ export default function ScanPage() {
                       if (result.length > 0) processPassId(result[0].rawValue);
                     }}
                     constraints={{ facingMode }}
+                    styles={{ video: { transform: 'scaleX(-1)' } }}
                   />
                   <button
                     type="button"

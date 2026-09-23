@@ -285,12 +285,19 @@ export class PaymentsService {
         .maybeSingle();
 
       if (adminExists) {
-        throw new HttpException('Phone number is reserved for admin use.', HttpStatus.FORBIDDEN);
+        throw new HttpException(
+          'Phone number is reserved for admin use.',
+          HttpStatus.FORBIDDEN,
+        );
       }
 
       const { data: created, error } = await this.supabaseService.client
         .from('Member')
-        .insert({ phone: payment.phone, name: payment.phone, tenantId: tenant.id })
+        .insert({
+          phone: payment.phone,
+          name: payment.phone,
+          tenantId: tenant.id,
+        })
         .select()
         .single();
       if (error || !created) {

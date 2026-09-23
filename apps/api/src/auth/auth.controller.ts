@@ -60,7 +60,7 @@ export class AuthController {
           .single();
         if (tenant) brandName = tenant.name;
       }
-      
+
       let programName: string | undefined;
       if (programId && tenantId) {
         const { data: program } = await this.supabaseService.client
@@ -83,7 +83,13 @@ export class AuthController {
         });
       if (insertError) throw new Error(`DB Error: ${insertError.message}`);
 
-      await this.whatsappService.sendOtp(phone, otp, brandName, programName, programId);
+      await this.whatsappService.sendOtp(
+        phone,
+        otp,
+        brandName,
+        programName,
+        programId,
+      );
       return { success: true };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
@@ -214,7 +220,10 @@ export class AuthController {
         .maybeSingle();
 
       if (adminExists) {
-        throw new HttpException('Phone number is reserved for admin use.', HttpStatus.FORBIDDEN);
+        throw new HttpException(
+          'Phone number is reserved for admin use.',
+          HttpStatus.FORBIDDEN,
+        );
       }
 
       // Member Duplication: We insert unconditionally to allow multiple members with the same phone number

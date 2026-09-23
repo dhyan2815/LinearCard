@@ -353,7 +353,10 @@ export class ProgramsController {
     }
 
     if (body.whatsappTemplates !== undefined) {
-      if (typeof body.whatsappTemplates !== 'object' || Array.isArray(body.whatsappTemplates)) {
+      if (
+        typeof body.whatsappTemplates !== 'object' ||
+        Array.isArray(body.whatsappTemplates)
+      ) {
         this.bad('whatsappTemplates must be an object');
       }
       payload.whatsappTemplates = body.whatsappTemplates;
@@ -371,6 +374,24 @@ export class ProgramsController {
         { success: false, error: error.message },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
+
+    // Keep templates in sync so legacy passes without a programId fall back to the updated rules
+    const templateUpdates: any = {};
+    if (payload.earnRate !== undefined)
+      templateUpdates.earnRate = payload.earnRate;
+    if (payload.redeemRate !== undefined)
+      templateUpdates.redeemRate = payload.redeemRate;
+    if (payload.redeemCapPercent !== undefined)
+      templateUpdates.redeemCapPercent = payload.redeemCapPercent;
+
+    if (Object.keys(templateUpdates).length > 0) {
+      await this.supabaseService.client
+        .from('PassTemplate')
+        .update(templateUpdates)
+        .eq('programId', id)
+        .eq('tenantId', req.tenantId);
+    }
+
     return { success: true, program: data };
   }
 

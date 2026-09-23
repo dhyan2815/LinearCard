@@ -1112,7 +1112,9 @@ describe('createGoogleWalletPass - tier/balance conditionally', () => {
       {} as any,
       {} as any,
     );
-    mockGoogleAuthClient = { request: jest.fn().mockResolvedValue({ data: {} }) };
+    mockGoogleAuthClient = {
+      request: jest.fn().mockResolvedValue({ data: {} }),
+    };
     jest
       .spyOn(service, 'getGoogleAuthClient')
       .mockResolvedValue(mockGoogleAuthClient as any);

@@ -31,14 +31,17 @@ export class WhatsappService {
       .select('whatsappTemplates')
       .eq('id', programId)
       .maybeSingle();
-    
+
     if (data?.whatsappTemplates && data.whatsappTemplates[templateKey]) {
       return data.whatsappTemplates[templateKey];
     }
     return defaultMessage;
   }
-  
-  private fillTemplate(template: string, vars: Record<string, string | undefined>): string {
+
+  private fillTemplate(
+    template: string,
+    vars: Record<string, string | undefined>,
+  ): string {
     return template.replace(/{{(\w+)}}/g, (_, key) => vars[key] || '');
   }
 
@@ -149,14 +152,27 @@ export class WhatsappService {
     );
   }
 
-  public async sendOtp(phone: string, otp: string, brandName?: string, programName?: string, programId?: string) {
+  public async sendOtp(
+    phone: string,
+    otp: string,
+    brandName?: string,
+    programName?: string,
+    programId?: string,
+  ) {
     const brand = brandName || 'LinearCard';
     const identifier = programName ? `${brand} ${programName}` : brand;
     this.logger.log(`[DEV OTP] Target: ${phone} | Code: ${otp}`);
-    
+
     const defaultTemplate = `🔐 Your {{tenant}} login code is: *{{code}}*\n\nThis code expires in 5 minutes. Do not share it with anyone.`;
-    const template = await this.resolveTemplate('otp', defaultTemplate, programId);
-    const message = this.fillTemplate(template, { tenant: identifier, code: otp });
+    const template = await this.resolveTemplate(
+      'otp',
+      defaultTemplate,
+      programId,
+    );
+    const message = this.fillTemplate(template, {
+      tenant: identifier,
+      code: otp,
+    });
 
     return this.executeWithSoftTimeout(
       () => this.provider.sendText(phone, message),
@@ -175,8 +191,17 @@ export class WhatsappService {
   ) {
     const itemName = programName ? programName.toLowerCase() : 'pass';
     const defaultTemplate = `Welcome to the {{programName}}! We are thrilled to have you onboard.\n\nTap to add it to Google Wallet:\n{{walletUrl}}\n\n_Powered by LinearCard_`;
-    const template = await this.resolveTemplate('welcome', defaultTemplate, programId);
-    const message = this.fillTemplate(template, { memberName, tenant: brandName, programName: itemName, walletUrl });
+    const template = await this.resolveTemplate(
+      'welcome',
+      defaultTemplate,
+      programId,
+    );
+    const message = this.fillTemplate(template, {
+      memberName,
+      tenant: brandName,
+      programName: itemName,
+      walletUrl,
+    });
 
     return this.executeWithSoftTimeout(
       () => this.provider.sendText(phone, message),
@@ -194,8 +219,16 @@ export class WhatsappService {
   ) {
     const itemName = programName ? programName.toLowerCase() : 'pass';
     const defaultTemplate = `✅ *Transaction Confirmed*\n\nYour *{{tenant}}* balance has been updated.\n\nNew Balance: *{{balance}}*\n\n_Your {{programName}} will refresh automatically._`;
-    const template = await this.resolveTemplate('receipt', defaultTemplate, programId);
-    const message = this.fillTemplate(template, { tenant: brandName, balance: newBalance, programName: itemName });
+    const template = await this.resolveTemplate(
+      'receipt',
+      defaultTemplate,
+      programId,
+    );
+    const message = this.fillTemplate(template, {
+      tenant: brandName,
+      balance: newBalance,
+      programName: itemName,
+    });
 
     return this.executeWithSoftTimeout(
       () => this.provider.sendText(phone, message),
@@ -210,12 +243,26 @@ export class WhatsappService {
     walletUrl: string,
     memberName: string,
     brandName: string,
-    opts: { tenantId: string; memberId?: string; programName?: string; programId?: string },
+    opts: {
+      tenantId: string;
+      memberId?: string;
+      programName?: string;
+      programId?: string;
+    },
   ): Promise<void> {
     const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
     const defaultTemplate = `Welcome to the {{programName}}! We are thrilled to have you onboard.\n\nTap to add it to Google Wallet:\n{{walletUrl}}\n\n_Powered by LinearCard_`;
-    const template = await this.resolveTemplate('welcome', defaultTemplate, opts.programId);
-    const message = this.fillTemplate(template, { memberName, tenant: brandName, programName: itemName, walletUrl });
+    const template = await this.resolveTemplate(
+      'welcome',
+      defaultTemplate,
+      opts.programId,
+    );
+    const message = this.fillTemplate(template, {
+      memberName,
+      tenant: brandName,
+      programName: itemName,
+      walletUrl,
+    });
 
     return this.sendTextWithLog(phone, message, { ...opts, type: 'pass_link' });
   }
@@ -224,12 +271,25 @@ export class WhatsappService {
     phone: string,
     newBalance: string,
     brandName: string,
-    opts: { tenantId: string; memberId?: string; programName?: string; programId?: string },
+    opts: {
+      tenantId: string;
+      memberId?: string;
+      programName?: string;
+      programId?: string;
+    },
   ): Promise<void> {
     const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
     const defaultTemplate = `🛒 *Transaction Confirmed*\n\nYour *{{tenant}}* balance has been updated.\n\nNew Balance: *{{balance}}*\n\n_Your {{programName}} will refresh automatically._`;
-    const template = await this.resolveTemplate('receipt', defaultTemplate, opts.programId);
-    const message = this.fillTemplate(template, { tenant: brandName, balance: newBalance, programName: itemName });
+    const template = await this.resolveTemplate(
+      'receipt',
+      defaultTemplate,
+      opts.programId,
+    );
+    const message = this.fillTemplate(template, {
+      tenant: brandName,
+      balance: newBalance,
+      programName: itemName,
+    });
 
     return this.sendTextWithLog(phone, message, { ...opts, type: 'receipt' });
   }
@@ -237,27 +297,58 @@ export class WhatsappService {
   public async sendWalletSaveConfirmationWithLog(
     phone: string,
     brandName: string,
-    opts: { tenantId: string; memberId?: string; programName?: string; programId?: string },
+    opts: {
+      tenantId: string;
+      memberId?: string;
+      programName?: string;
+      programId?: string;
+    },
   ): Promise<void> {
     const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
     const defaultTemplate = `🎉 Success! Your *{{tenant}}* {{programName}} has been securely saved to your Google Wallet. You can now access it anytime from your phone.`;
-    const template = await this.resolveTemplate('walletSave', defaultTemplate, opts.programId);
-    const message = this.fillTemplate(template, { tenant: brandName, programName: itemName });
+    const template = await this.resolveTemplate(
+      'walletSave',
+      defaultTemplate,
+      opts.programId,
+    );
+    const message = this.fillTemplate(template, {
+      tenant: brandName,
+      programName: itemName,
+    });
 
-    return this.sendTextWithLog(phone, message, { ...opts, type: 'wallet_save_confirmation' });
+    return this.sendTextWithLog(phone, message, {
+      ...opts,
+      type: 'wallet_save_confirmation',
+    });
   }
 
   public async sendTierUpgradeMessage(
     phone: string,
     tierName: string,
     brandName: string,
-    opts: { tenantId: string; memberId?: string; programName?: string; programId?: string },
+    opts: {
+      tenantId: string;
+      memberId?: string;
+      programName?: string;
+      programId?: string;
+    },
   ): Promise<void> {
     const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
     const defaultTemplate = `🏆 Congratulations! You've been upgraded to *{{tierName}}* tier on your *{{tenant}}* {{programName}}. Enjoy your new perks!`;
-    const template = await this.resolveTemplate('tierUpgrade', defaultTemplate, opts.programId);
-    const message = this.fillTemplate(template, { tierName, tenant: brandName, programName: itemName });
+    const template = await this.resolveTemplate(
+      'tierUpgrade',
+      defaultTemplate,
+      opts.programId,
+    );
+    const message = this.fillTemplate(template, {
+      tierName,
+      tenant: brandName,
+      programName: itemName,
+    });
 
-    return this.sendTextWithLog(phone, message, { ...opts, type: 'tier_upgrade' });
+    return this.sendTextWithLog(phone, message, {
+      ...opts,
+      type: 'tier_upgrade',
+    });
   }
 }

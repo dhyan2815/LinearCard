@@ -932,8 +932,7 @@ export class WalletService {
         (formattedBalance !== undefined || updateData.tier)
       ) {
         const currentTier =
-          updateData.tier ||
-          genericObject.subheader?.defaultValue?.value;
+          updateData.tier || genericObject.subheader?.defaultValue?.value;
 
         let displayBalance = formattedBalance;
         if (displayBalance === undefined) {
@@ -1118,10 +1117,18 @@ export class WalletService {
       });
     } else {
       if (balance !== undefined) {
-        textModulesData.push({ id: 'balance', header: 'Points / Status', body: balance });
+        textModulesData.push({
+          id: 'balance',
+          header: 'Points / Status',
+          body: balance,
+        });
       }
       if (tier !== undefined) {
-        textModulesData.push({ id: 'tier_info', header: 'Tier Level', body: tier });
+        textModulesData.push({
+          id: 'tier_info',
+          header: 'Tier Level',
+          body: tier,
+        });
       }
     }
 
@@ -1163,7 +1170,7 @@ export class WalletService {
       if (balance !== undefined) parts.push(balance);
       genericObjectPayload.barcode.alternateText = parts.join(' • ');
     } else {
-      // For tier-less passes, explicitly set a space so Google Wallet 
+      // For tier-less passes, explicitly set a space so Google Wallet
       // doesn't fall back to displaying the raw barcode URL/value.
       genericObjectPayload.barcode.alternateText = ' ';
     }
@@ -1632,7 +1639,12 @@ export class WalletService {
             pass.phone,
             `${transaction.newBalance} Pts`,
             tenantName,
-            { tenantId: pass.tenantId, memberId: pass.memberId, programName, programId: pass.programId },
+            {
+              tenantId: pass.tenantId,
+              memberId: pass.memberId,
+              programName,
+              programId: pass.programId,
+            },
           );
         } catch (err: any) {
           this.logger.warn(
@@ -1724,7 +1736,12 @@ export class WalletService {
           pass.phone,
           `${transaction.newBalance} Pts`,
           tenantName,
-          { tenantId: pass.tenantId, memberId: pass.memberId, programName, programId: pass.programId },
+          {
+            tenantId: pass.tenantId,
+            memberId: pass.memberId,
+            programName,
+            programId: pass.programId,
+          },
         );
       } catch (err: any) {
         this.logger.warn(
@@ -1741,7 +1758,12 @@ export class WalletService {
             pass.phone,
             nextTier,
             tenantName,
-            { tenantId: pass.tenantId, memberId: pass.memberId, programName, programId: pass.programId },
+            {
+              tenantId: pass.tenantId,
+              memberId: pass.memberId,
+              programName,
+              programId: pass.programId,
+            },
           );
         } catch (err: any) {
           this.logger.warn(
@@ -1890,11 +1912,26 @@ export class WalletService {
     // Per-program economics (WAL-4 + Phase 3.1). The Program row owns these
     // now; a program created before the migration (or a pass with no
     // program) falls back to its templates, then to the defaults.
-    const { data: programRow } = pass.programId
+    let activeProgramId = pass.programId;
+    if (!activeProgramId && pass.Tenant?.PassTemplate) {
+      const templates = Array.isArray(pass.Tenant.PassTemplate)
+        ? pass.Tenant.PassTemplate
+        : [pass.Tenant.PassTemplate];
+      const published = templates
+        .filter((t: any) => t?.status === 'published')
+        .sort((a: any, b: any) =>
+          String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')),
+        );
+      if (published.length > 0 && published[0].programId) {
+        activeProgramId = published[0].programId;
+      }
+    }
+
+    const { data: programRow } = activeProgramId
       ? await this.supabaseService.client
           .from('Program')
           .select('id, kind, earnRate, redeemRate, redeemCapPercent')
-          .eq('id', pass.programId)
+          .eq('id', activeProgramId)
           .maybeSingle()
       : { data: null };
 
@@ -1910,7 +1947,7 @@ export class WalletService {
     const rules: LoyaltyRules = rulesForPass(
       programRow,
       pass.Tenant?.PassTemplate,
-      pass.programId,
+      activeProgramId,
     );
 
     const currentBalance = Number(pass.balance) || 0;
