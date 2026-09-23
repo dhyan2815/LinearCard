@@ -21,8 +21,18 @@ async function verifyClassLocations(classIdSuffix: string) {
 
   const walletobjects = google.walletobjects({ version: 'v1', auth });
   
-  // 2. Construct the full ID using your issuer ID[cite: 5]
-  const fullClassId = `${process.env.ISSUER_ID}.${classIdSuffix}`;
+  // Canonical source: WalletService.getWalletEnvPrefix / resolveClassId
+  // Duplicated here to avoid importing the Nest DI container.
+  const explicit = process.env.WALLET_ENV_PREFIX?.trim();
+  const walletEnvPrefix = explicit
+    ? (explicit === 'none' ? '' : explicit)
+    : (process.env.VERCEL_ENV === 'production' ? '' :
+       process.env.VERCEL_ENV === 'preview' ? 'preview' : 'dev');
+  const resolvedSuffix = walletEnvPrefix
+    ? `${walletEnvPrefix}_${classIdSuffix}`
+    : classIdSuffix;
+  const fullClassId = `${process.env.ISSUER_ID}.${resolvedSuffix}`;
+  console.log(`Resolved class id: ${fullClassId}`);
 
   try {
     // 3. Fetch the live class payload directly from Google's servers
@@ -47,7 +57,7 @@ async function verifyClassLocations(classIdSuffix: string) {
 if (require.main === module) {
   const classIdSuffix = process.argv[2];
   if (!classIdSuffix) {
-    console.error('Please provide a class suffix as an argument (e.g. ts-node script.ts my_suffix)');
+    console.error('Please provide a bare class suffix (no dev_ prefix) as an argument (e.g. ts-node script.ts bistro_cafe_coffee_loyalty_silver)');
     process.exit(1);
   }
   
