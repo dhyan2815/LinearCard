@@ -228,7 +228,7 @@ export class PassIssuanceService {
           member.phone,
           this.shortPassUrl(passRecordId),
           passData.memberName || member.name || member.phone,
-          tenant?.name || 'LinearCard',
+          passDesign.cardTitle || tenant?.name || 'LinearCard',
           { tenantId, memberId: member.id },
         )
         .catch((err) =>

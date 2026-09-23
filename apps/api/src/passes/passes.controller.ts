@@ -202,7 +202,7 @@ export class PassesController {
               body.phone,
               shortUrl,
               body.memberName || 'Member',
-              body.cardTitle || 'LinearCard',
+              body.cardTitle || passDesign.cardTitle || 'LinearCard',
               { tenantId: targetTenantId, memberId: member.id },
             )
             .catch((e) => console.error('WAHA delivery error:', e)); // Log delivery errors without failing the overall req
