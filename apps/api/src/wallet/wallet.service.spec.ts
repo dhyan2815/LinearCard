@@ -1099,3 +1099,48 @@ describe('processOrderTransaction — tier propagation', () => {
     expect(syncSpy.mock.calls[0][0].programId).toBe('program-coffee');
   });
 });
+
+describe('createGoogleWalletPass - tier/balance conditionally', () => {
+  let service: WalletService;
+  let mockGoogleAuthClient: { request: jest.Mock };
+
+  beforeEach(() => {
+    service = new WalletService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+    mockGoogleAuthClient = { request: jest.fn().mockResolvedValue({ data: {} }) };
+    jest
+      .spyOn(service, 'getGoogleAuthClient')
+      .mockResolvedValue(mockGoogleAuthClient as any);
+    const { privateKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+
+    jest.spyOn(service as any, 'getCredentialsOrThrow').mockReturnValue({
+      issuerId: 'issuer',
+      clientEmail: 'test@example.com',
+      privateKey,
+    });
+  });
+
+  it('omits subheader and barcode.alternateText when tier and balance are undefined', async () => {
+    await service.createGoogleWalletPass({
+      passId: 'pass-1',
+      memberName: 'John Doe',
+      cardTitle: 'Ticket',
+      classSuffix: 'ticket_class',
+      tier: undefined,
+      balance: undefined,
+    });
+
+    const payload = mockGoogleAuthClient.request.mock.calls[0][0].data;
+    expect(payload.subheader).toBeUndefined();
+    expect(payload.barcode.alternateText).toBe(' ');
+  });
+});

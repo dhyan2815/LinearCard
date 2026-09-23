@@ -131,4 +131,19 @@ describe('PassIssuanceService.issueForMember — dynamic field rows', () => {
 
     expect(createGoogleWalletPassCalls[0].rows).toBe(customRows);
   });
+
+  it('omits tier and balance for tier-less programs', async () => {
+    await service.issueForMember({
+      tenantId: 'tenant-1',
+      member: { id: 'member-1', phone: '+911234567890' },
+      program: { id: 'prog-1' },
+      tenant: { name: 'Bistro Cafe' },
+      sendPassLink: false,
+    });
+
+    const callArgs = createGoogleWalletPassCalls[0];
+    expect(callArgs.tier).toBeUndefined();
+    expect(callArgs.balance).toBeUndefined();
+    expect(callArgs.barcodeAltText).toBeUndefined();
+  });
 });

@@ -118,8 +118,9 @@ export class PassIssuanceService {
     */
 
     const entryTier = await this.resolveEntryTier(program?.id);
-    const startingTier = passData.tier || entryTier?.name || 'Bronze';
-    const startingBalance = passData.balance || '0 Pts';
+    const hasTierConcept = passData.tier !== undefined || entryTier !== null;
+    const startingTier = hasTierConcept ? (passData.tier || entryTier?.name || undefined) : undefined;
+    const startingBalance = hasTierConcept ? (passData.balance || '0 Pts') : undefined;
 
     const passDesign = await this.walletService.resolveTenantPassDesign(
       tenantId,
@@ -165,7 +166,7 @@ export class PassIssuanceService {
       programId: passDesign.programId,
       tier: startingTier,
       balance: startingBalance,
-      barcodeAltText: `${startingTier} Tier • ${startingBalance}`,
+      barcodeAltText: hasTierConcept ? `${startingTier} Tier • ${startingBalance}` : undefined,
       cardTitle: passDesign.cardTitle || tenant?.name,
       classSuffix: passDesign.classSuffix || tenant?.classSuffix,
       hexBackgroundColor: passDesign.hexBackgroundColor,
@@ -190,7 +191,7 @@ export class PassIssuanceService {
             tierId: entryTier?.id ?? null,
             fullPassId: passResult.fullPassId,
             balance: 0,
-            tier: startingTier,
+            tier: startingTier ?? null,
           })
           .select()
           .single();

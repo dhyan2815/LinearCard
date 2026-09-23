@@ -892,18 +892,21 @@ export class WalletService {
           });
         });
       } else if (formattedBalance !== undefined || updateData.tier) {
-        patchPayload.textModulesData = [
-          {
+        patchPayload.textModulesData = [];
+        if (formattedBalance !== undefined) {
+          patchPayload.textModulesData.push({
             id: 'balance',
             header: 'Points / Status',
-            body: formattedBalance || '0 Pts',
-          },
-          {
+            body: formattedBalance,
+          });
+        }
+        if (updateData.tier) {
+          patchPayload.textModulesData.push({
             id: 'tier_info',
             header: 'Tier Level',
-            body: updateData.tier || 'Standard',
-          },
-        ];
+            body: updateData.tier,
+          });
+        }
       }
 
       if (updateData.tier) {
@@ -930,8 +933,7 @@ export class WalletService {
       ) {
         const currentTier =
           updateData.tier ||
-          genericObject.subheader?.defaultValue?.value ||
-          'Member';
+          genericObject.subheader?.defaultValue?.value;
 
         let displayBalance = formattedBalance;
         if (displayBalance === undefined) {
@@ -941,13 +943,22 @@ export class WalletService {
             );
             if (balMod) displayBalance = balMod.body;
           }
-          if (displayBalance === undefined) displayBalance = '0 Pts';
         }
 
-        patchPayload.barcode = {
-          ...genericObject.barcode,
-          alternateText: `${currentTier} • ${displayBalance}`,
-        };
+        if (currentTier !== undefined || displayBalance !== undefined) {
+          const parts = [];
+          if (currentTier) parts.push(currentTier);
+          if (displayBalance) parts.push(displayBalance);
+          patchPayload.barcode = {
+            ...genericObject.barcode,
+            alternateText: parts.join(' • '),
+          };
+        } else {
+          patchPayload.barcode = {
+            ...genericObject.barcode,
+            alternateText: ' ',
+          };
+        }
       }
 
       if (updateData.hexBackgroundColor) {
@@ -1028,7 +1039,7 @@ export class WalletService {
       memberName,
       cardTitle,
       balance,
-      tier = 'Member',
+      tier,
       hexBackgroundColor = DEFAULT_PASS_HEX,
       classSuffix,
       logoUrl = '',
@@ -1044,9 +1055,6 @@ export class WalletService {
     const missing = [
       !memberName && 'memberName',
       !cardTitle && 'cardTitle',
-      balance === undefined || balance === null || balance === ''
-        ? 'balance'
-        : null,
       !classSuffix && 'classSuffix',
     ].filter(Boolean);
     if (missing.length) {
@@ -1109,10 +1117,12 @@ export class WalletService {
         });
       });
     } else {
-      textModulesData.push(
-        { id: 'balance', header: 'Points / Status', body: balance },
-        { id: 'tier_info', header: 'Tier Level', body: tier || 'Standard' },
-      );
+      if (balance !== undefined) {
+        textModulesData.push({ id: 'balance', header: 'Points / Status', body: balance });
+      }
+      if (tier !== undefined) {
+        textModulesData.push({ id: 'tier_info', header: 'Tier Level', body: tier });
+      }
     }
 
     const genericObjectPayload = {
@@ -1122,12 +1132,6 @@ export class WalletService {
         defaultValue: {
           language: 'en-US',
           value: cardTitle || 'LinearCard',
-        },
-      },
-      subheader: {
-        defaultValue: {
-          language: 'en-US',
-          value: tier || 'Member',
         },
       },
       header: {
@@ -1140,10 +1144,29 @@ export class WalletService {
       barcode: {
         type: 'QR_CODE',
         value: barcodeValue,
-        alternateText: `${tier || 'Member'} • ${balance || '0 Pts'}`,
       },
       hexBackgroundColor: hexBackgroundColor || DEFAULT_PASS_HEX,
     } as any;
+
+    if (tier) {
+      genericObjectPayload.subheader = {
+        defaultValue: {
+          language: 'en-US',
+          value: tier,
+        },
+      };
+    }
+
+    if (tier || balance !== undefined) {
+      const parts = [];
+      if (tier) parts.push(tier);
+      if (balance !== undefined) parts.push(balance);
+      genericObjectPayload.barcode.alternateText = parts.join(' • ');
+    } else {
+      // For tier-less passes, explicitly set a space so Google Wallet 
+      // doesn't fall back to displaying the raw barcode URL/value.
+      genericObjectPayload.barcode.alternateText = ' ';
+    }
 
     // Google Wallet ignores hexBackgroundColor if no logo is provided.
     // To match the frontend preview card's behavior, we generate a fallback initials logo.
