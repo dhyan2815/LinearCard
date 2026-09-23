@@ -11,6 +11,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { StoreLocationEntry } from './StoreLocationEntry';
+import { useDashboard } from './DashboardContext';
 
 const COLOR_PALETTE = [
   { name: 'Midnight Black', hex: '#0F172A' },
@@ -67,6 +68,7 @@ export const TemplateWorkspace = React.forwardRef(({
   currentProgram,
   passCount = 0
 }: any, ref: React.Ref<any>) => {
+  const { refreshPrograms } = useDashboard();
   const [fieldsExpanded, setFieldsExpanded] = React.useState(true);
   // Phase 4.1 — the live class as Google actually holds it, not as we assume.
   const [liveClass, setLiveClass] = React.useState<any>(null);
@@ -148,27 +150,16 @@ export const TemplateWorkspace = React.forwardRef(({
       archetype: designData.archetype,
       fieldRows: designData.rows,
       storeLocations,
-      earnRate: designData.earnRate,
-      redeemRate: designData.redeemRate,
-      redeemCapPercent: designData.redeemCapPercent,
       hexBackgroundColor: designData.hexBackgroundColor,
       logoUrl: designData.logoUrl || null,
       heroImageUrl: designData.heroImageUrl || null,
     };
 
-    // A saved design on a loyalty program also persists its economics
-    // onto the Program row, which is what the scan pipeline reads.
     const saveProgramConfig = async () => {
       if (!currentProgram?.id) return;
-      const programBody: any = { storeLocations };
-      if (currentProgram.kind === 'loyalty') {
-        programBody.earnRate = designData.earnRate;
-        programBody.redeemRate = designData.redeemRate;
-        programBody.redeemCapPercent = designData.redeemCapPercent;
-      }
       await apiClient(`/programs/${currentProgram.id}`, {
         method: 'PATCH',
-        body: JSON.stringify(programBody),
+        body: JSON.stringify({ storeLocations }),
       });
     };
 
@@ -213,6 +204,10 @@ export const TemplateWorkspace = React.forwardRef(({
       const publishData = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
       if (!publishData.success) throw new Error(publishData.error || 'Failed to publish');
       setTemplateStatus('published');
+      // Publishing a template can flip the parent Program to 'published'
+      // too (see templates.service.ts) — refetch so the gallery/nav badge
+      // updates without a full page reload.
+      refreshPrograms();
       // Phase 4.1 — Google can accept the publish and still drop the
       // geofences; that must not look like a clean success.
       if (publishData.warning) toast.warning(publishData.warning);
@@ -419,40 +414,6 @@ export const TemplateWorkspace = React.forwardRef(({
           </div>
           )}
         </div>
-
-        {!isTicketProgram && (
-          <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
-            <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Loyalty Economics</h3>
-            <p className="text-xs text-ink-muted mb-3">
-              Applied on every scan. Earn rate is points per ₹1 spent; redeem
-              rate is the ₹ discount each point buys; the cap limits how much of
-              an order points may cover.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {([
-                { field: 'earnRate', label: 'Earn rate (pts per ₹1)', step: 0.01, min: 0, max: 10 },
-                { field: 'redeemRate', label: 'Redeem rate (₹ per pt)', step: 0.01, min: 0.01, max: 1000 },
-                { field: 'redeemCapPercent', label: 'Redeem cap (% of order)', step: 1, min: 0, max: 100 },
-              ] as const).map(({ field, label, step, min, max }) => (
-                <div key={field} className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold text-ink-secondary">{label}</Label>
-                  <Input
-                    type="number"
-                    step={step}
-                    min={min}
-                    max={max}
-                    value={designData[field]}
-                    onChange={(e) => updateDesignData({ ...designData, [field]: Number(e.target.value) })}
-                  />
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] text-ink-muted mt-3">
-              A ₹1,000 order earns {Math.floor(1000 * (Number(designData.earnRate) || 0))} pts, and points may
-              cover at most ₹{Math.floor(1000 * ((Number(designData.redeemCapPercent) || 0) / 100))} of it.
-            </p>
-          </div>
-        )}
 
         {isTicketProgram && (
           <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">

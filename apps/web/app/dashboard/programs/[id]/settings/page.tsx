@@ -34,9 +34,6 @@ export default function ProgramSettingsPage() {
         setForm({
           name: p.name ?? '',
           enrollmentSlug: p.enrollmentSlug ?? '',
-          earnRate: p.earnRate ?? '',
-          redeemRate: p.redeemRate ?? '',
-          redeemCapPercent: p.redeemCapPercent ?? '',
           retentionDays: p.retentionDays ?? '',
           welcomeMessage: p.welcomeMessage ?? '',
         });
@@ -47,10 +44,6 @@ export default function ProgramSettingsPage() {
   const set = (key: string, value: any) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  // Loyalty economics only exist on a loyalty program; the API rejects them
-  // on a ticket program, so the fields are not offered there either.
-  const isLoyalty = program?.kind === 'loyalty';
-
   const save = async () => {
     if (saving) return;
     setSaving(true);
@@ -60,10 +53,6 @@ export default function ProgramSettingsPage() {
       welcomeMessage: form.welcomeMessage,
       retentionDays: form.retentionDays === '' ? null : Number(form.retentionDays),
     };
-    if (isLoyalty) {
-      for (const field of ['earnRate', 'redeemRate', 'redeemCapPercent'])
-        if (form[field] !== '') body[field] = Number(form[field]);
-    }
 
     const patch = async () => {
       const data = await apiClient(`/programs/${id}`, {
@@ -107,7 +96,7 @@ export default function ProgramSettingsPage() {
     <PageShell>
       <PageHeader
         title="Settings"
-        description="Name, enrollment link, economics and retention for this program."
+        description="Name, enrollment link, and retention for this program."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
@@ -127,40 +116,6 @@ export default function ProgramSettingsPage() {
             onChange={(e) => set('enrollmentSlug', e.target.value)}
           />
         </div>
-
-        {isLoyalty && (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="earnRate">Earn rate (points per unit)</Label>
-              <Input
-                id="earnRate"
-                type="number"
-                step="0.01"
-                value={form.earnRate ?? ''}
-                onChange={(e) => set('earnRate', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="redeemRate">Redeem rate (value per point)</Label>
-              <Input
-                id="redeemRate"
-                type="number"
-                step="0.01"
-                value={form.redeemRate ?? ''}
-                onChange={(e) => set('redeemRate', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="redeemCapPercent">Redemption cap (%)</Label>
-              <Input
-                id="redeemCapPercent"
-                type="number"
-                value={form.redeemCapPercent ?? ''}
-                onChange={(e) => set('redeemCapPercent', e.target.value)}
-              />
-            </div>
-          </>
-        )}
 
         <div className="space-y-2">
           <Label htmlFor="retentionDays">Retention (days)</Label>

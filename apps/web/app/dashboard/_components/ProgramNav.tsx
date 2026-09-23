@@ -13,6 +13,7 @@ import {
   Webhook,
   Settings2,
   Copy,
+  MapPin,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
@@ -24,6 +25,7 @@ const TABS = [
   { slug: 'overview', label: 'Overview', icon: LayoutDashboard },
   { slug: 'design', label: 'Design', icon: Palette },
   { slug: 'tiers', label: 'Tiers', icon: Award },
+  { slug: 'locations', label: 'Locations', icon: MapPin },
   { slug: 'members', label: 'Members', icon: Users },
   { slug: 'campaigns', label: 'Campaigns', icon: Megaphone },
   { slug: 'events', label: 'Member Events', icon: ListChecks },
