@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -11,7 +12,10 @@ import {
   Zap,
   Webhook,
   Settings2,
+  Copy,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { toast } from 'sonner';
 import { useDashboard } from './DashboardContext';
 
 const ICON = 'w-4 h-4 shrink-0';
@@ -35,8 +39,17 @@ const TABS = [
  */
 export function ProgramSidebar({ programId }: { programId: string }) {
   const pathname = usePathname();
-  const { programs } = useDashboard();
+  const { programs, currentTenant } = useDashboard();
   const program = programs.find((p) => p.id === programId);
+  const [origin, setOrigin] = useState('');
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  const enrollLink = origin && currentTenant && program
+    ? `${origin}/enroll/${currentTenant.classSuffix}/${program.enrollmentSlug}`
+    : '';
 
   return (
     <aside className="w-56 shrink-0 h-full flex flex-col border-r border-border-subtle bg-canvas overflow-y-auto">
@@ -48,6 +61,31 @@ export function ProgramSidebar({ programId }: { programId: string }) {
           {program?.status === 'published' ? 'Live' : 'Draft'}
           {program?.enrollmentSlug ? ` · /${program.enrollmentSlug}` : ''}
         </p>
+
+        {enrollLink && (
+          <div className="mt-3 pt-3 border-t border-border-subtle">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-blue mb-1.5">
+              Enrollment Link
+            </p>
+            <div className="flex items-center justify-center mb-2">
+              <div className="p-1.5 bg-white rounded-md shadow-sm">
+                <QRCodeSVG value={enrollLink} size={72} level="Q" includeMargin={false} />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(enrollLink);
+                toast.success('Enrollment link copied to clipboard!');
+              }}
+              className="w-full flex items-center gap-1.5 text-[11px] px-2 py-1.5 rounded-md border border-border-subtle text-ink-secondary hover:bg-surface-hover hover:text-ink-dark transition-colors"
+              title={enrollLink}
+            >
+              <Copy className="w-3 h-3 shrink-0" strokeWidth={1.75} />
+              <span className="truncate">Copy Link</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <nav className="flex flex-col gap-0.5 p-2">
