@@ -175,7 +175,7 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     logoUrl:
       'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1000&auto=format&fit=crop&q=80',
     heroUrl:
-      'https://images.unsplash.com/photo-1522204523234-8729aa6e3d5f?w=1000&auto=format&fit=crop&q=80',
+      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTzN-jFx_6Gr2VzxPYFkXT-BS-Lnvkz5BoFk9dDA51Dj2HDTUMK0lHdx7Y&s=10',
   },
   {
     id: 'modern_membership',
