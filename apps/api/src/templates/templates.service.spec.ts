@@ -47,9 +47,10 @@ describe('TemplatesService.publish — cardTitle', () => {
         getWalletEnvPrefix: () => 'dev',
         createGenericClass: async (data: any) => {
           createGenericClassCalls.push(data);
-          return { id: 'issuer.dev_class', existing: false, updated: false };
+          return { id: 'issuer.dev_class', existing: false, updated: true };
         },
       }),
+      storeLocationsForProgram: async () => [],
     };
     service = new TemplatesService(mockSupabaseService, mockWalletService);
   });
@@ -104,7 +105,10 @@ describe('TemplatesService.resyncPasses — program scoping', () => {
               },
               is: (col: string, val: any) => {
                 passQueryFilters[col] = val;
-                return Promise.resolve({
+                return query;
+              },
+              then: (resolve: any) => {
+                resolve({
                   data: [{ id: 'pass-1', fullPassId: 'issuer.pass-1' }],
                   error: null,
                 });
