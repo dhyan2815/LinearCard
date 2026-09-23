@@ -352,7 +352,7 @@ export class PassesController {
       return res.status(200).json({
         valid: true,
         memberName: member?.name || 'Unknown Member',
-        balance: pass.balance.toString(),
+        balance: (pass.balance ?? 0).toString(),
         tier: pass.tier,
         fullPassId: pass.fullPassId,
         phone: member?.phone,
@@ -494,7 +494,7 @@ export class PassesController {
       Promise.all([
         tenantWallet
           .updateGenericObject(pass.fullPassId, {
-            balance: balance.toString(),
+            balance: (balance ?? 0).toString(),
             tier: finalTier,
             pushNotification,
           })
@@ -521,7 +521,7 @@ export class PassesController {
           ? this.whatsappService
               .sendRedemptionReceiptWithLog(
                 pass.Member?.phone || phone,
-                balance.toString(),
+                (balance ?? 0).toString(),
                 pass.Tenant?.name || brandName || 'LinearCard',
                 {
                   tenantId: pass.tenantId,
@@ -876,7 +876,7 @@ export class PassesController {
           this.whatsappService
             .sendRedemptionReceiptWithLog(
               fullPass.Member.phone,
-              result.newBalance.toString() + ' Pts',
+              (result.newBalance ?? 0).toString() + ' Pts',
               fullPass.Tenant?.name || 'LinearCard',
               {
                 tenantId: fullPass.tenantId,
@@ -971,7 +971,7 @@ export class PassesController {
         this.whatsappService
           .sendRedemptionReceiptWithLog(
             fullPass.Member.phone,
-            result.newBalance.toString(),
+            (result.newBalance ?? 0).toString(),
             fullPass.Tenant?.name || 'LinearCard',
             {
               tenantId: fullPass.tenantId,

@@ -434,7 +434,13 @@ export class MembersController {
   @Post(':id/adjust-balance')
   async adjustBalance(@Param('id') memberId: string, @Body() body: any) {
     try {
-      const { amount, reason, passId, adminId } = body;
+      const {
+        newBalance: newBalanceRaw,
+        newTier,
+        note,
+        passId,
+        adminId,
+      } = body;
       const { data: pass, error: passError } = await this.supabaseService.client
         .from('Pass')
         .select('*')
@@ -443,10 +449,17 @@ export class MembersController {
       if (passError || !pass)
         return { success: false, error: 'Pass not found' };
 
-      const newBalance = (pass.balance || 0) + Number(amount);
+      const newBalance = Number(newBalanceRaw);
+      if (!Number.isFinite(newBalance) || newBalance < 0)
+        return {
+          success: false,
+          error: 'newBalance must be a non-negative number',
+        };
 
       let finalTier = pass.tier;
-      if (pass.programId) {
+      if (newTier) {
+        finalTier = newTier;
+      } else if (pass.programId) {
         const { data: tiers } = await this.supabaseService.client
           .from('Tier')
           .select('*')
@@ -474,14 +487,14 @@ export class MembersController {
         passId,
         actor: adminId || 'unknown-admin',
         action: 'balance_adjusted',
-        details: { amount, reason, previousBalance: pass.balance, newBalance },
+        details: { note, previousBalance: pass.balance, newBalance },
       });
 
       this.walletService
         .updateGenericObject(pass.fullPassId, {
           balance: String(newBalance),
           tier: finalTier,
-          pushNotification: `Balance updated: ${newBalance} Pts. (${reason})`,
+          pushNotification: `Balance updated: ${newBalance} Pts.${note ? ` (${note})` : ''}`,
         })
         .then(() =>
           this.notifyService.logNotification({
