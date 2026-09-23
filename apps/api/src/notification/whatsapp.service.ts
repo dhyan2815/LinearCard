@@ -123,14 +123,15 @@ export class WhatsappService {
     );
   }
 
-  public async sendOtp(phone: string, otp: string, brandName?: string) {
+  public async sendOtp(phone: string, otp: string, brandName?: string, programName?: string) {
     const brand = brandName || 'LinearCard';
+    const identifier = programName ? `${brand} ${programName}` : brand;
     this.logger.log(`[DEV OTP] Target: ${phone} | Code: ${otp}`);
     return this.executeWithSoftTimeout(
       () =>
         this.provider.sendText(
           phone,
-          `🔐 Your ${brand} verification code is: *${otp}*\n\nThis code expires in 5 minutes. Do not share it with anyone.`,
+          `🔐 Your ${identifier} verification code is: *${otp}*\n\nThis code expires in 5 minutes. Do not share it with anyone.`,
         ),
       8000,
       `sendOtp to ${phone}`,

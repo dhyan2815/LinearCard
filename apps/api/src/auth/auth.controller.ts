@@ -35,7 +35,7 @@ export class AuthController {
   @Post('send-otp')
   async sendOtp(@Body() body: SendOtpRequest) {
     try {
-      const { tenantId } = body;
+      const { tenantId, programId } = body;
       let { phone } = body;
       if (!phone)
         throw new HttpException('phone required', HttpStatus.BAD_REQUEST);
@@ -60,6 +60,17 @@ export class AuthController {
           .single();
         if (tenant) brandName = tenant.name;
       }
+      
+      let programName: string | undefined;
+      if (programId && tenantId) {
+        const { data: program } = await this.supabaseService.client
+          .from('Program')
+          .select('name')
+          .eq('id', programId)
+          .eq('tenantId', tenantId)
+          .single();
+        if (program) programName = program.name;
+      }
 
       const { error: insertError } = await this.supabaseService.client
         .from('OtpSession')
@@ -72,7 +83,7 @@ export class AuthController {
         });
       if (insertError) throw new Error(`DB Error: ${insertError.message}`);
 
-      await this.whatsappService.sendOtp(phone, otp, brandName);
+      await this.whatsappService.sendOtp(phone, otp, brandName, programName);
       return { success: true };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;

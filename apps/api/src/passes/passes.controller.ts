@@ -214,7 +214,11 @@ export class PassesController {
               shortUrl,
               body.memberName || 'Member',
               body.cardTitle || passDesign.cardTitle || 'LinearCard',
-              { tenantId: targetTenantId, memberId: member.id, programName: programNameForMessage },
+              {
+                tenantId: targetTenantId,
+                memberId: member.id,
+                programName: programNameForMessage,
+              },
             )
             .catch((e) => console.error('WAHA delivery error:', e)); // Log delivery errors without failing the overall req
         }
@@ -487,7 +491,11 @@ export class PassesController {
                 pass.Member?.phone || phone,
                 balance.toString(),
                 pass.Tenant?.name || brandName || 'LinearCard',
-                { tenantId: pass.tenantId, memberId: pass.memberId, programName: pass.Program?.name },
+                {
+                  tenantId: pass.tenantId,
+                  memberId: pass.memberId,
+                  programName: pass.Program?.name,
+                },
               )
               .catch((err) =>
                 console.error('WhatsApp receipt failed (non-fatal):', err),
@@ -838,7 +846,11 @@ export class PassesController {
               fullPass.Member.phone,
               result.newBalance.toString() + ' Pts',
               fullPass.Tenant?.name || 'LinearCard',
-              { tenantId: fullPass.tenantId, memberId: fullPass.memberId, programName: fullPass.Program?.name },
+              {
+                tenantId: fullPass.tenantId,
+                memberId: fullPass.memberId,
+                programName: fullPass.Program?.name,
+              },
             )
             .catch((err) =>
               console.error('WhatsApp receipt failed (non-fatal):', err),
@@ -929,7 +941,11 @@ export class PassesController {
             fullPass.Member.phone,
             result.newBalance.toString(),
             fullPass.Tenant?.name || 'LinearCard',
-            { tenantId: fullPass.tenantId, memberId: fullPass.memberId, programName: fullPass.Program?.name },
+            {
+              tenantId: fullPass.tenantId,
+              memberId: fullPass.memberId,
+              programName: fullPass.Program?.name,
+            },
           )
           .catch((err) =>
             console.error('WhatsApp webhook receipt failed (non-fatal):', err),
@@ -1097,7 +1113,11 @@ export class PassesController {
           .sendWalletSaveConfirmationWithLog(
             pass.Member.phone,
             pass.Tenant?.name || 'LinearCard',
-            { tenantId: pass.tenantId, memberId: pass.memberId, programName: pass.Program?.name },
+            {
+              tenantId: pass.tenantId,
+              memberId: pass.memberId,
+              programName: pass.Program?.name,
+            },
           )
           .catch((err) =>
             console.error(

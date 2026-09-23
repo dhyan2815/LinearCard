@@ -8,6 +8,7 @@ export interface User {
 export interface SendOtpRequest {
   phone: string;
   tenantId?: string;
+  programId?: string;
 }
 
 export interface VerifyOtpRequest {
