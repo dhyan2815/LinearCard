@@ -414,14 +414,16 @@ export class AuthController {
    */
   @Post('admin/signup')
   async adminSignup(
-    @Body() body: { signupToken?: string; brandName?: string },
+    @Body()
+    body: { signupToken?: string; brandName?: string; adminName?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { signupToken, brandName } = body || {};
+    const { signupToken, brandName, adminName } = body || {};
     const name = (brandName || '').trim();
-    if (!signupToken || !name)
+    const adminDisplayName = (adminName || '').trim();
+    if (!signupToken || !name || !adminDisplayName)
       throw new HttpException(
-        'signupToken and brandName are required',
+        'signupToken, brandName, and adminName are required',
         HttpStatus.BAD_REQUEST,
       );
 
@@ -457,6 +459,10 @@ export class AuthController {
         classSuffix,
         brandHexColor: DEFAULT_PASS_HEX,
         publishStatus: 'demo',
+        logoUrl:
+          'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=1000&auto=format&fit=crop&q=80',
+        heroUrl:
+          'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1000&auto=format&fit=crop&q=80',
       })
       .select()
       .single();
@@ -468,7 +474,12 @@ export class AuthController {
 
     const { data: admin, error: adminErr } = await this.supabaseService.client
       .from('Admin')
-      .insert({ phone, tenantId: tenant.id, role: 'admin' })
+      .insert({
+        phone,
+        tenantId: tenant.id,
+        role: 'admin',
+        name: adminDisplayName,
+      })
       .select()
       .single();
     if (adminErr || !admin)

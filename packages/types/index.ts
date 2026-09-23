@@ -41,6 +41,15 @@ export interface Tenant {
   webhookUrl?: string;
 }
 
+export interface Admin {
+  id: string;
+  phone: string;
+  name: string;
+  tenantId: string;
+  role: string;
+  createdAt?: string;
+}
+
 export interface Pass {
   id: string;
   fullPassId: string;
@@ -95,18 +104,18 @@ export interface Program {
   updatedAt?: string;
 }
 
-/** Phase 8 — program Overview tab. */
+/** Phase 8 — program Overview tab (Upgraded to Business Metrics). */
 export interface ProgramOverview {
-  active: number;
-  created: number;
-  installed: number;
-  deleted: number;
-  devices: { google: number; apple: number; other: number };
+  totalRevenue: number;
+  totalOrders: number;
+  pointsAwarded: number;
+  pointsRedeemed: number;
   series: Array<{
     bucket: string;
-    created: number;
-    installed: number;
-    deleted: number;
+    revenue: number;
+    orders: number;
+    pointsAwarded: number;
+    pointsRedeemed: number;
   }>;
   /** Event recording began here; the chart labels this rather than implying zero. */
   historyStartsAt: string | null;

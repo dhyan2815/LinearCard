@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [currentScreen, setCurrentScreen] = useState<'admin_phone' | 'admin_otp' | 'brand_name'>('admin_phone');
   const [signupToken, setSignupToken] = useState('');
   const [brandName, setBrandName] = useState('');
+  const [adminName, setAdminName] = useState('');
   const [countryCode, setCountryCode] = useState('+91');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [onboardingPhone, setOnboardingPhone] = useState('');
@@ -219,12 +220,12 @@ export default function LoginPage() {
 
              <form onSubmit={async (e) => {
                e.preventDefault();
-               if (!brandName.trim()) return;
+               if (!brandName.trim() || !adminName.trim()) return;
                setIsMockLoading(true);
                try {
                  const data = await apiClient('/auth/admin/signup', {
                    method: 'POST',
-                   body: JSON.stringify({ signupToken, brandName: brandName.trim() })
+                   body: JSON.stringify({ signupToken, brandName: brandName.trim(), adminName: adminName.trim() })
                  });
                  if (!data.success) throw new Error(data.error || 'Signup failed');
                  await new Promise(resolve => setTimeout(resolve, 100));
@@ -235,17 +236,26 @@ export default function LoginPage() {
                  setIsMockLoading(false);
                }
              }} className="space-y-6">
-               <div className="space-y-2">
-                 <Label htmlFor="brandName">Brand name</Label>
-                 <Input id="brandName" value={brandName} onChange={(e) => {
-                   setBrandName(e.target.value);
-                   setOtpError('');
-                 }} placeholder="Blue Tokai Coffee" autoFocus required />
+               <div className="space-y-4">
+                 <div className="space-y-2">
+                   <Label htmlFor="brandName">Business Name</Label>
+                   <Input id="brandName" value={brandName} onChange={(e) => {
+                     setBrandName(e.target.value);
+                     setOtpError('');
+                   }} placeholder="Eg, Bistro Cafe" autoFocus required />
+                 </div>
+                 <div className="space-y-2">
+                   <Label htmlFor="adminName">Your Name</Label>
+                   <Input id="adminName" value={adminName} onChange={(e) => {
+                     setAdminName(e.target.value);
+                     setOtpError('');
+                   }} placeholder="Eg, Alex" required />
+                 </div>
                  {otpError && (
                    <p className="text-red-500 text-sm font-medium animate-in fade-in slide-in-from-top-1">{otpError}</p>
                  )}
                </div>
-               <Button type="submit" disabled={!brandName.trim() || isMockLoading} className="w-full">
+               <Button type="submit" disabled={!brandName.trim() || !adminName.trim() || isMockLoading} className="w-full">
                  {isMockLoading ? <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> Creating account...</span> : 'Create account'}
                </Button>
              </form>
