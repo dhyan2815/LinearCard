@@ -32,12 +32,13 @@ async function verifyClassLocations(classIdSuffix: string) {
 
     const payload = response.data;
     
-    // 4. Log the merchantLocations to verify latitude and longitude arrays
+    // 4. Log the full payload
     console.log(`Class ID: ${payload.id}`);
-    console.log(`Locations Captured: ${payload.merchantLocations?.length || 0}`);``
-    console.log(JSON.stringify(payload.merchantLocations, null, 2));
+    console.log(`Locations Captured: ${payload.merchantLocations?.length || 0}`);
+    console.log('\n--- Full Payload ---');
+    console.log(JSON.stringify(payload, null, 2));
 
-    return payload.merchantLocations;
+    return payload;
   } catch (error) {
     console.error('Failed to fetch payload from Google Wallet:', error);
   }

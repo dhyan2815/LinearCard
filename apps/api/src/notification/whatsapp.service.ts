@@ -64,7 +64,6 @@ export class WhatsappService {
     return result as T;
   }
 
-
   /**
    * Send-and-log, used by every message type below and by campaigns. Logging
    * both outcomes is the whole reason callers don't talk to the provider
@@ -81,34 +80,38 @@ export class WhatsappService {
       header?: string;
     },
   ): Promise<void> {
-    return this.executeWithSoftTimeout(async () => {
-      try {
-        await this.provider.sendText(phone, text);
-        await this.notifyService.logNotification({
-          tenantId: opts.tenantId,
-          memberId: opts.memberId,
-          type: opts.type,
-          channel: 'whatsapp',
-          status: 'sent',
-          campaignId: opts.campaignId,
-          header: opts.header,
-          body: text,
-        });
-      } catch (err: any) {
-        await this.notifyService.logNotification({
-          tenantId: opts.tenantId,
-          memberId: opts.memberId,
-          type: opts.type,
-          channel: 'whatsapp',
-          status: 'failed',
-          errorReason: describeError(err),
-          campaignId: opts.campaignId,
-          header: opts.header,
-          body: text,
-        });
-        throw err;
-      }
-    }, 8000, `sendTextWithLog to ${phone}`);
+    return this.executeWithSoftTimeout(
+      async () => {
+        try {
+          await this.provider.sendText(phone, text);
+          await this.notifyService.logNotification({
+            tenantId: opts.tenantId,
+            memberId: opts.memberId,
+            type: opts.type,
+            channel: 'whatsapp',
+            status: 'sent',
+            campaignId: opts.campaignId,
+            header: opts.header,
+            body: text,
+          });
+        } catch (err: any) {
+          await this.notifyService.logNotification({
+            tenantId: opts.tenantId,
+            memberId: opts.memberId,
+            type: opts.type,
+            channel: 'whatsapp',
+            status: 'failed',
+            errorReason: describeError(err),
+            campaignId: opts.campaignId,
+            header: opts.header,
+            body: text,
+          });
+          throw err;
+        }
+      },
+      8000,
+      `sendTextWithLog to ${phone}`,
+    );
   }
 
   /** Unlogged send. Campaigns and one-offs that log themselves use this. */
