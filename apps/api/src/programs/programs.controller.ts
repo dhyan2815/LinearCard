@@ -602,4 +602,91 @@ export class ProgramsController {
 
     return { success: true, tiers: data || [] };
   }
+
+  /**
+   * Sync store locations from the live Google Wallet class (via any template)
+   * into the Program's local storeLocations array.
+   */
+  @Post(':id/sync-locations')
+  async syncLocations(@Param('id') id: string, @Req() req: TenantRequest) {
+    if (!this.walletService) this.bad('Google Wallet is disabled in this environment');
+    const program = await this.load(id, req.tenantId!);
+
+    // Find all templates for this program to gather possible class suffixes
+    const { data: templates } = await this.supabaseService.client
+      .from('PassTemplate')
+      .select('classSuffix, tenant:Tenant(classSuffix)')
+      .eq('programId', id)
+      .eq('tenantId', req.tenantId);
+
+    const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+    
+    // Collect all possible suffixes to check (most specific first)
+    const suffixesToCheck = new Set<string>();
+    
+    // 1. Explicit classSuffix from templates
+    for (const t of (templates || [])) {
+      if (t.classSuffix) {
+        suffixesToCheck.add(t.classSuffix);
+      }
+    }
+    
+    // 2. Dynamically generated standard program classSuffix
+    const { data: tenantData } = await this.supabaseService.client
+      .from('Tenant')
+      .select('slug')
+      .eq('id', req.tenantId)
+      .single();
+    if (tenantData?.slug && program.enrollmentSlug) {
+      suffixesToCheck.add(buildClassSuffix(tenantData.slug, program.enrollmentSlug));
+    }
+    
+    // 3. Fallback to tenant's default classSuffix
+    for (const t of (templates || [])) {
+      const tenantClassSuffix = Array.isArray(t.tenant) 
+        ? (t.tenant as any)[0]?.classSuffix 
+        : (t.tenant as any)?.classSuffix;
+      if (tenantClassSuffix) {
+        suffixesToCheck.add(tenantClassSuffix);
+      }
+    }
+
+    let walletClass = null;
+
+    // Try each suffix until we find one that is actually live on Google Wallet
+    for (const suffix of suffixesToCheck) {
+      const cls = await tenantWallet.getGenericClass(suffix);
+      if (cls) {
+        walletClass = cls;
+        break;
+      }
+    }
+
+    if (!walletClass) {
+      return { success: false, error: 'No live wallet class found for this program on Google. Publish a template first.' };
+    }
+
+    // Map Google's merchantLocations { latitude, longitude } back to our local schema
+    const liveLocations = walletClass.merchantLocations ?? [];
+    const storeLocations = liveLocations.map((loc: any) => ({
+      latitude: String(loc.latitude),
+      longitude: String(loc.longitude),
+      label: '', // Google does not store our labels
+    }));
+
+    // Update the database
+    const { error: updateError } = await this.supabaseService.client
+      .from('Program')
+      .update({ storeLocations })
+      .eq('id', id);
+
+    if (updateError) {
+      throw new HttpException(
+        { success: false, error: 'Failed to save synced locations to database' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    return { success: true, storeLocations };
+  }
 }

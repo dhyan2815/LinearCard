@@ -223,6 +223,15 @@ export class TemplatesService {
         template.id,
         tenantWallet,
       );
+
+      // Publishing any one tier's design is enough to take the whole
+      // program live — the DRAFT badge on the gallery/nav tracks this.
+      await this.supabaseService.client
+        .from('Program')
+        .update({ status: 'published', updatedAt: new Date().toISOString() })
+        .eq('id', template.programId)
+        .eq('tenantId', tenantId)
+        .eq('status', 'draft');
     }
 
     return { classData, template: updated, warning };
