@@ -255,10 +255,15 @@ export class TemplatesService {
 
       try {
         await tenantWallet.createGenericClass({
-          classSuffix: sibling.classSuffix || (sibling.tenant as any)?.classSuffix,
-          cardTitle: resolveCardTitle((sibling.tenant as any)?.name, sibling.title),
+          classSuffix:
+            sibling.classSuffix || (sibling.tenant as any)?.classSuffix,
+          cardTitle: resolveCardTitle(
+            (sibling.tenant as any)?.name,
+            sibling.title,
+          ),
           hexBackgroundColor:
-            sibling.hexBackgroundColor || (sibling.tenant as any)?.brandHexColor,
+            sibling.hexBackgroundColor ||
+            (sibling.tenant as any)?.brandHexColor,
           logoUrl: TemplatesService.resolveImageUrl(
             sibling.logoUrl || (sibling.tenant as any)?.logoUrl,
           ),

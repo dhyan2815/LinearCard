@@ -642,7 +642,7 @@ describe('resolveCallbackUrl', () => {
       {} as any, // configService
       {} as any, // notifyService
       {} as any, // whatsappService
-      {} as any  // auditService
+      {} as any, // auditService
     );
   });
 
@@ -655,9 +655,9 @@ describe('resolveCallbackUrl', () => {
     process.env.PUBLIC_CALLBACK_URL = 'https://some-tunnel.ngrok.io';
     process.env.NEXT_PUBLIC_API_URL = 'https://linearcard-api.vercel.app';
     delete process.env.WALLET_WEBHOOK_SECRET;
-    
+
     expect(service.resolveCallbackUrl()).toBe(
-      'https://linearcard-api.vercel.app/passes/webhooks/google-wallet'
+      'https://linearcard-api.vercel.app/passes/webhooks/google-wallet',
     );
   });
 
@@ -666,9 +666,9 @@ describe('resolveCallbackUrl', () => {
     process.env.PUBLIC_CALLBACK_URL = 'https://some-tunnel.ngrok.io';
     process.env.NEXT_PUBLIC_API_URL = 'http://localhost:3001';
     delete process.env.WALLET_WEBHOOK_SECRET;
-    
+
     expect(service.resolveCallbackUrl()).toBe(
-      'https://some-tunnel.ngrok.io/passes/webhooks/google-wallet'
+      'https://some-tunnel.ngrok.io/passes/webhooks/google-wallet',
     );
   });
 });
