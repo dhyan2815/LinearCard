@@ -437,9 +437,9 @@ export function MemberDetailView({ backHref }: { backHref: string }) {
         </SectionCard>
       )}
 
-      {/* Admin activity */}
+      {/* Member events */}
       {adminActions.length > 0 && (
-        <SectionCard icon={History} title="Activity" count={adminActions.length}>
+        <SectionCard icon={History} title="Member Events" count={adminActions.length}>
           <div className="space-y-1">
             {adminActions.map((entry) => {
               const prev = entry.previousValue;

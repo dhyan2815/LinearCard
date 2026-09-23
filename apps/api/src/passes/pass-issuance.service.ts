@@ -231,7 +231,7 @@ export class PassIssuanceService {
           this.shortPassUrl(passRecordId),
           passData.memberName || member.name || member.phone,
           passDesign.cardTitle || tenant?.name || 'LinearCard',
-          { tenantId, memberId: member.id, programName: program?.name },
+          { tenantId, memberId: member.id, programName: program?.name, programId: program?.id },
         )
         .catch((err) =>
           this.logger.warn(`WhatsApp pass link failed (non-fatal): ${err}`),

@@ -100,6 +100,8 @@ export interface Program {
   venueName?: string | null;
   /** Phase 8 — WhatsApp message sent on enrollment. Empty means none. */
   welcomeMessage?: string | null;
+  /** Phase 8 - Customizable WhatsApp Templates */
+  whatsappTemplates?: Record<string, string>;
   retentionDays?: number | null;
   storeLocations?: any[];
   createdAt?: string;

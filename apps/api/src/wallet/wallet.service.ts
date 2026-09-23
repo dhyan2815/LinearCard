@@ -1632,7 +1632,7 @@ export class WalletService {
             pass.phone,
             `${transaction.newBalance} Pts`,
             tenantName,
-            { tenantId: pass.tenantId, memberId: pass.memberId, programName },
+            { tenantId: pass.tenantId, memberId: pass.memberId, programName, programId: pass.programId },
           );
         } catch (err: any) {
           this.logger.warn(
@@ -1724,7 +1724,7 @@ export class WalletService {
           pass.phone,
           `${transaction.newBalance} Pts`,
           tenantName,
-          { tenantId: pass.tenantId, memberId: pass.memberId, programName },
+          { tenantId: pass.tenantId, memberId: pass.memberId, programName, programId: pass.programId },
         );
       } catch (err: any) {
         this.logger.warn(
@@ -1741,7 +1741,7 @@ export class WalletService {
             pass.phone,
             nextTier,
             tenantName,
-            { tenantId: pass.tenantId, memberId: pass.memberId, programName },
+            { tenantId: pass.tenantId, memberId: pass.memberId, programName, programId: pass.programId },
           );
         } catch (err: any) {
           this.logger.warn(

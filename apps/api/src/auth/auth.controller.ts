@@ -83,7 +83,7 @@ export class AuthController {
         });
       if (insertError) throw new Error(`DB Error: ${insertError.message}`);
 
-      await this.whatsappService.sendOtp(phone, otp, brandName, programName);
+      await this.whatsappService.sendOtp(phone, otp, brandName, programName, programId);
       return { success: true };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
@@ -205,21 +205,29 @@ export class AuthController {
       if (tenantError || !tenant)
         throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
 
-      // AUTH-1/DB-3: upsert on (tenantId, phone). Inserting unconditionally
-      // gave a returning customer a duplicate member, a duplicate pass and a
-      // fresh 0 balance, orphaning their real one.
+      // Admin Exclusivity Validation: Admin phone numbers cannot be duplicated as Members
+      const { data: adminExists } = await this.supabaseService.client
+        .from('Admin')
+        .select('id')
+        .eq('tenantId', targetTenantId)
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (adminExists) {
+        throw new HttpException('Phone number is reserved for admin use.', HttpStatus.FORBIDDEN);
+      }
+
+      // Member Duplication: We insert unconditionally to allow multiple members with the same phone number
+
       const { data: member, error: memberError } =
         await this.supabaseService.client
           .from('Member')
-          .upsert(
-            {
-              phone,
-              name: passData.memberName || phone,
-              tenantId: targetTenantId,
-              consentedAt: new Date().toISOString(),
-            },
-            { onConflict: 'tenantId,phone' },
-          )
+          .insert({
+            phone,
+            name: passData.memberName || phone,
+            tenantId: targetTenantId,
+            consentedAt: new Date().toISOString(),
+          })
           .select()
           .single();
       if (memberError || !member)

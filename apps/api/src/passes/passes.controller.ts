@@ -88,10 +88,23 @@ export class PassesController {
         .select('*')
         .eq('phone', phone)
         .eq('tenantId', targetTenantId)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       // If the member does not exist in the database, create a new record for them
       if (!member) {
+        // Admin Exclusivity Validation
+        const { data: adminExists } = await this.supabaseService.client
+          .from('Admin')
+          .select('id')
+          .eq('tenantId', targetTenantId)
+          .eq('phone', phone)
+          .maybeSingle();
+
+        if (adminExists) {
+          throw new Error('Phone number is reserved for admin use.');
+        }
+
         const { data: newMember } = await this.supabaseService.client
           .from('Member')
           .insert({
@@ -218,6 +231,7 @@ export class PassesController {
                 tenantId: targetTenantId,
                 memberId: member.id,
                 programName: programNameForMessage,
+                programId: body.programId,
               },
             )
             .catch((e) => console.error('WAHA delivery error:', e)); // Log delivery errors without failing the overall req

@@ -22,16 +22,19 @@ import { useDashboard } from './DashboardContext';
 const ICON = 'w-4 h-4 shrink-0';
 
 const TABS = [
-  { slug: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { slug: 'design', label: 'Design', icon: Palette },
-  { slug: 'tiers', label: 'Tiers', icon: Award },
-  { slug: 'locations', label: 'Locations', icon: MapPin },
-  { slug: 'members', label: 'Members', icon: Users },
-  { slug: 'campaigns', label: 'Campaigns', icon: Megaphone },
-  { slug: 'events', label: 'Member Events', icon: ListChecks },
-  { slug: 'activity', label: 'Activity', icon: Zap },
-  { slug: 'webhooks', label: 'Webhooks', icon: Webhook },
-  { slug: 'settings', label: 'Settings', icon: Settings2 },
+  // ── Daily operations ──────────────────────────────
+  { slug: 'overview',   label: 'Overview',   icon: LayoutDashboard },
+  { slug: 'members',    label: 'Members',    icon: Users           },
+  { slug: 'activity',   label: 'Activity',   icon: Zap             },
+  { slug: 'campaigns',  label: 'Campaigns',  icon: Megaphone       },
+  // ── Programme setup ───────────────────────────────
+  { slug: 'design',     label: 'Design',     icon: Palette         },
+  { slug: 'tiers',      label: 'Tiers',      icon: Award           },
+  { slug: 'locations',  label: 'Locations',  icon: MapPin          },
+  { slug: 'messages',   label: 'Messages',   icon: ListChecks      },
+  // ── Developer / admin ─────────────────────────────
+  { slug: 'webhooks',   label: 'Webhooks',   icon: Webhook         },
+  { slug: 'settings',   label: 'Settings',   icon: Settings2       },
 ] as const;
 
 /**

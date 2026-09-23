@@ -33,6 +33,7 @@ interface ProgramBody {
   welcomeMessage?: string | null;
   retentionDays?: number | null;
   storeLocations?: any[];
+  whatsappTemplates?: Record<string, string>;
 }
 
 interface TierBody {
@@ -102,7 +103,7 @@ export class ProgramsController {
   async list(@Req() req: TenantRequest) {
     const { data, error } = await this.supabaseService.client
       .from('Program')
-      .select('*, tiers:Tier(id), templates:PassTemplate(id)')
+      .select('*, tiers:Tier(id), templates:PassTemplate(id, updatedAt)')
       .eq('tenantId', req.tenantId)
       .order('createdAt', { ascending: true });
     if (error)
@@ -349,6 +350,13 @@ export class ProgramsController {
           this.bad(`Invalid longitude: ${loc.longitude}`);
       }
       payload.storeLocations = body.storeLocations;
+    }
+
+    if (body.whatsappTemplates !== undefined) {
+      if (typeof body.whatsappTemplates !== 'object' || Array.isArray(body.whatsappTemplates)) {
+        this.bad('whatsappTemplates must be an object');
+      }
+      payload.whatsappTemplates = body.whatsappTemplates;
     }
 
     const { data, error } = await this.supabaseService.client
