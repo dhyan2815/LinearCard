@@ -162,6 +162,7 @@ export class PassIssuanceService {
     const passResult = await tenantWallet.createGoogleWalletPass({
       ...passData,
       passId: explicitPassId,
+      programId: passDesign.programId,
       tier: startingTier,
       balance: startingBalance,
       barcodeAltText: `${startingTier} Tier • ${startingBalance}`,

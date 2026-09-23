@@ -288,7 +288,9 @@ describe('PassesController.postgeneratepass — rows default to passDesign.field
           select: () => ({
             eq: () => ({
               eq: () => ({
-                single: async () => ({ data: { id: 'member-1', phone: '+911234567890' } }),
+                single: async () => ({
+                  data: { id: 'member-1', phone: '+911234567890' },
+                }),
               }),
             }),
           }),
@@ -296,13 +298,19 @@ describe('PassesController.postgeneratepass — rows default to passDesign.field
       }
       if (table === 'Tenant') {
         return {
-          select: () => ({ eq: () => ({ single: async () => ({ data: { publishStatus: 'production' } }) }) }),
+          select: () => ({
+            eq: () => ({
+              single: async () => ({ data: { publishStatus: 'production' } }),
+            }),
+          }),
         };
       }
       if (table === 'Pass') {
         return {
           insert: () => ({
-            select: () => ({ single: async () => ({ data: { id: 'pass-1' }, error: null }) }),
+            select: () => ({
+              single: async () => ({ data: { id: 'pass-1' }, error: null }),
+            }),
           }),
         };
       }
@@ -319,7 +327,11 @@ describe('PassesController.postgeneratepass — rows default to passDesign.field
       forTenant: async () => ({
         createGoogleWalletPass: async (data: any) => {
           createGoogleWalletPassCalls.push(data);
-          return { success: true, fullPassId: 'issuer.pass-1', googleWalletUrl: 'https://pay.google.com/gp/v/save/t' };
+          return {
+            success: true,
+            fullPassId: 'issuer.pass-1',
+            googleWalletUrl: 'https://pay.google.com/gp/v/save/t',
+          };
         },
       }),
     };
@@ -329,7 +341,10 @@ describe('PassesController.postgeneratepass — rows default to passDesign.field
       providers: [
         { provide: SupabaseService, useValue: { client: { from: fromMock } } },
         { provide: OtpService, useValue: {} },
-        { provide: WhatsappService, useValue: { sendPassLinkWithLog: jest.fn() } },
+        {
+          provide: WhatsappService,
+          useValue: { sendPassLinkWithLog: jest.fn() },
+        },
         { provide: WalletService, useValue: walletServiceMock },
         { provide: NotifyService, useValue: { logNotification: jest.fn() } },
         { provide: TenantGuard, useValue: {} },
@@ -349,16 +364,25 @@ describe('PassesController.postgeneratepass — rows default to passDesign.field
 
   it('uses passDesign.fieldRows when body.rows is not supplied', async () => {
     await setup();
-    const req: any = { body: { tenantId: 't1', phone: '+911234567890', memberName: 'Aniket' } };
+    const req: any = {
+      body: { tenantId: 't1', phone: '+911234567890', memberName: 'Aniket' },
+    };
     await controller.postgeneratepass(req, mockRes());
     expect(createGoogleWalletPassCalls[0].rows).toBe(giftCardFieldRows);
   });
 
   it('still prefers an explicit body.rows over passDesign.fieldRows', async () => {
     await setup();
-    const customRows = [{ id: 'row1', columns: [{ key: 'custom', header: 'Custom', body: 'x' }] }];
+    const customRows = [
+      { id: 'row1', columns: [{ key: 'custom', header: 'Custom', body: 'x' }] },
+    ];
     const req: any = {
-      body: { tenantId: 't1', phone: '+911234567890', memberName: 'Aniket', rows: customRows },
+      body: {
+        tenantId: 't1',
+        phone: '+911234567890',
+        memberName: 'Aniket',
+        rows: customRows,
+      },
     };
     await controller.postgeneratepass(req, mockRes());
     expect(createGoogleWalletPassCalls[0].rows).toBe(customRows);

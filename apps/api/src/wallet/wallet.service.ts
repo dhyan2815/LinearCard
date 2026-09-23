@@ -256,6 +256,7 @@ export interface GoogleWalletPassOptions {
   logoUrl?: string;
   heroImageUrl?: string;
   rows?: any[];
+  programId?: string;
   /** Part 4 escape hatch — deep-merged last. See `applyRaw`. */
   rawObject?: Record<string, any>;
 }
@@ -563,6 +564,24 @@ export class WalletService {
         .order('updatedAt', { ascending: false })
         .limit(1)
         .maybeSingle();
+      return data?.storeLocations ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Geofences for a program. The Program row is the canonical source of truth
+   * for locations (shared by all tiers in that program).
+   */
+  public async storeLocationsForProgram(programId?: string): Promise<any[]> {
+    if (!programId) return [];
+    try {
+      const { data } = await this.supabaseService.client
+        .from('Program')
+        .select('storeLocations')
+        .eq('id', programId)
+        .single();
       return data?.storeLocations ?? [];
     } catch {
       return [];
@@ -1178,7 +1197,7 @@ export class WalletService {
           logoUrl,
           heroImageUrl,
           rows,
-          storeLocations: await this.storeLocationsForSuffix(classSuffix),
+          storeLocations: await this.storeLocationsForProgram(options.programId),
         });
         await client.request({
           url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject',

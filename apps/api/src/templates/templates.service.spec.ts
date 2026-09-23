@@ -29,7 +29,13 @@ describe('TemplatesService.publish — cardTitle', () => {
                   }),
                 }),
               }),
-              update: () => ({ eq: () => ({ eq: () => ({ select: () => ({ single: async () => ({ data: null }) }) }) }) }),
+              update: () => ({
+                eq: () => ({
+                  eq: () => ({
+                    select: () => ({ single: async () => ({ data: null }) }),
+                  }),
+                }),
+              }),
             };
           }
           throw new Error(`Unexpected table ${table}`);
@@ -50,7 +56,9 @@ describe('TemplatesService.publish — cardTitle', () => {
 
   it('combines tenant name and template title when publishing a class', async () => {
     await service.publish('tpl-1', 'tenant-1');
-    expect(createGenericClassCalls[0].cardTitle).toBe('Bistro Cafe · Gift Card');
+    expect(createGenericClassCalls[0].cardTitle).toBe(
+      'Bistro Cafe · Gift Card',
+    );
   });
 });
 
@@ -96,7 +104,10 @@ describe('TemplatesService.resyncPasses — program scoping', () => {
               },
               is: (col: string, val: any) => {
                 passQueryFilters[col] = val;
-                return Promise.resolve({ data: [{ id: 'pass-1', fullPassId: 'issuer.pass-1' }], error: null });
+                return Promise.resolve({
+                  data: [{ id: 'pass-1', fullPassId: 'issuer.pass-1' }],
+                  error: null,
+                });
               },
             };
             return query;
@@ -123,6 +134,8 @@ describe('TemplatesService.resyncPasses — program scoping', () => {
 
   it('includes the combined cardTitle in each pushed update', async () => {
     await service.resyncPasses('tenant-1', 'tpl-1');
-    expect(updateGenericObjectCalls[0].data.cardTitle).toBe('Bistro Cafe · Gift Card');
+    expect(updateGenericObjectCalls[0].data.cardTitle).toBe(
+      'Bistro Cafe · Gift Card',
+    );
   });
 });

@@ -32,6 +32,7 @@ interface ProgramBody {
   venueName?: string | null;
   welcomeMessage?: string | null;
   retentionDays?: number | null;
+  storeLocations?: any[];
 }
 
 interface TierBody {
@@ -328,6 +329,26 @@ export class ProgramsController {
           this.bad('retentionDays must be a positive number of days');
         payload.retentionDays = Math.floor(days);
       }
+    }
+
+    if (body.storeLocations !== undefined) {
+      if (!Array.isArray(body.storeLocations)) {
+        this.bad('storeLocations must be an array');
+      }
+      if (body.storeLocations.length > 10) {
+        this.bad('storeLocations must contain at most 10 entries');
+      }
+      for (const loc of body.storeLocations) {
+        if (!loc.latitude || !loc.longitude)
+          this.bad('Each store location must have latitude and longitude');
+        const lat = parseFloat(loc.latitude);
+        const lng = parseFloat(loc.longitude);
+        if (isNaN(lat) || lat < -90 || lat > 90)
+          this.bad(`Invalid latitude: ${loc.latitude}`);
+        if (isNaN(lng) || lng < -180 || lng > 180)
+          this.bad(`Invalid longitude: ${loc.longitude}`);
+      }
+      payload.storeLocations = body.storeLocations;
     }
 
     const { data, error } = await this.supabaseService.client

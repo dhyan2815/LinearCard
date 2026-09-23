@@ -354,7 +354,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
                 key: col.key || `${row.id}_${idx}`,
               })),
             })),
-            storeLocations: t.storeLocations || [],
+            storeLocations: programs.find(p => p.id === selectedProgramId)?.storeLocations || t.storeLocations || [],
             earnRate: t.earnRate ?? 0.1,
             redeemRate: t.redeemRate ?? 1,
             redeemCapPercent: t.redeemCapPercent ?? 50

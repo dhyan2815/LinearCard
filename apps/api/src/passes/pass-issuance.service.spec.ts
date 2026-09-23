@@ -25,7 +25,11 @@ describe('PassIssuanceService.issueForMember — dynamic field rows', () => {
             return {
               select: () => ({
                 eq: () => ({
-                  order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+                  order: () => ({
+                    limit: () => ({
+                      maybeSingle: async () => ({ data: null }),
+                    }),
+                  }),
                 }),
               }),
             };
@@ -37,18 +41,34 @@ describe('PassIssuanceService.issueForMember — dynamic field rows', () => {
                   eq: () => ({
                     is: () => ({
                       eq: () => ({
-                        order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+                        order: () => ({
+                          limit: () => ({
+                            maybeSingle: async () => ({ data: null }),
+                          }),
+                        }),
                       }),
-                      order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }),
+                      order: () => ({
+                        limit: () => ({
+                          maybeSingle: async () => ({ data: null }),
+                        }),
+                      }),
                     }),
                   }),
                 }),
               }),
-              insert: () => ({ select: () => ({ single: async () => ({ data: { id: 'pass-1' }, error: null }) }) }),
+              insert: () => ({
+                select: () => ({
+                  single: async () => ({ data: { id: 'pass-1' }, error: null }),
+                }),
+              }),
             };
           }
           if (table === 'Program') {
-            return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }) };
+            return {
+              select: () => ({
+                eq: () => ({ maybeSingle: async () => ({ data: null }) }),
+              }),
+            };
           }
           throw new Error(`Unexpected table ${table}`);
         }),
@@ -62,10 +82,17 @@ describe('PassIssuanceService.issueForMember — dynamic field rows', () => {
         fieldRows: giftCardFieldRows,
       }),
       forTenant: async () => ({
-        buildSaveLink: () => ({ token: 't', googleWalletUrl: 'https://pay.google.com/gp/v/save/t' }),
+        buildSaveLink: () => ({
+          token: 't',
+          googleWalletUrl: 'https://pay.google.com/gp/v/save/t',
+        }),
         createGoogleWalletPass: async (data: any) => {
           createGoogleWalletPassCalls.push(data);
-          return { success: true, fullPassId: 'issuer.pass-1', googleWalletUrl: 'https://pay.google.com/gp/v/save/t' };
+          return {
+            success: true,
+            fullPassId: 'issuer.pass-1',
+            googleWalletUrl: 'https://pay.google.com/gp/v/save/t',
+          };
         },
       }),
     };
@@ -90,7 +117,9 @@ describe('PassIssuanceService.issueForMember — dynamic field rows', () => {
   });
 
   it('lets an explicit passData.rows override the template design', async () => {
-    const customRows = [{ id: 'row1', columns: [{ key: 'custom', header: 'Custom', body: 'x' }] }];
+    const customRows = [
+      { id: 'row1', columns: [{ key: 'custom', header: 'Custom', body: 'x' }] },
+    ];
     await service.issueForMember({
       tenantId: 'tenant-1',
       member: { id: 'member-1', phone: '+911234567890' },

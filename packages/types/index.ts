@@ -100,6 +100,7 @@ export interface Program {
   /** Phase 8 — WhatsApp message sent on enrollment. Empty means none. */
   welcomeMessage?: string | null;
   retentionDays?: number | null;
+  storeLocations?: any[];
   createdAt?: string;
   updatedAt?: string;
 }

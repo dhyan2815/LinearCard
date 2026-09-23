@@ -522,6 +522,8 @@ describe('TemplatesController.previewPass — cardTitle', () => {
 
   it('combines tenant name and template title for the preview class', async () => {
     await controller.previewPass('tpl-1', { tenantId: 'tenant-1' } as any);
-    expect(createGenericClassCalls[0].cardTitle).toBe('Bistro Cafe · Gift Card');
+    expect(createGenericClassCalls[0].cardTitle).toBe(
+      'Bistro Cafe · Gift Card',
+    );
   });
 });

@@ -496,6 +496,7 @@ export class TemplatesController {
 
       const result = await tenantWallet.createGoogleWalletPass({
         passId: `preview_${id}_${Date.now()}`,
+        programId: template.programId || undefined,
         memberName: 'Preview',
         cardTitle,
         balance: '500 Pts',

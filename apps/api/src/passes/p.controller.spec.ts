@@ -4,7 +4,9 @@ describe('PController.redirectPass — dynamic field rows', () => {
   let controller: PController;
   let createGoogleWalletPassCalls: any[];
 
-  const fieldRows = [{ id: 'row1', columns: [{ key: 'balance', header: 'Balance', body: '0' }] }];
+  const fieldRows = [
+    { id: 'row1', columns: [{ key: 'balance', header: 'Balance', body: '0' }] },
+  ];
 
   beforeEach(() => {
     createGoogleWalletPassCalls = [];
@@ -40,11 +42,17 @@ describe('PController.redirectPass — dynamic field rows', () => {
       forTenant: async () => ({
         createGoogleWalletPass: async (data: any) => {
           createGoogleWalletPassCalls.push(data);
-          return { success: true, googleWalletUrl: 'https://pay.google.com/gp/v/save/t' };
+          return {
+            success: true,
+            googleWalletUrl: 'https://pay.google.com/gp/v/save/t',
+          };
         },
       }),
     };
-    controller = new PController(mockSupabaseService as any, mockWalletService as any);
+    controller = new PController(
+      mockSupabaseService as any,
+      mockWalletService as any,
+    );
   });
 
   it('forwards the template design fieldRows when re-minting a save link', async () => {

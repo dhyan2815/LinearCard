@@ -147,6 +147,7 @@ export class PassesController {
       // 4. Create the Google Wallet Pass using the explicit Pass ID
       const result = await tenantWallet.createGoogleWalletPass({
         passId: explicitPassId,
+        programId: passDesign.programId,
         memberName: body.memberName,
         cardTitle: body.cardTitle ?? passDesign.cardTitle,
         balance: body.balance ?? body.issueBalance,

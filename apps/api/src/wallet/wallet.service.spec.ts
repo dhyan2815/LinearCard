@@ -329,7 +329,11 @@ describe('resolveTenantPassDesign', () => {
   it('combines tenant name and template title into cardTitle', async () => {
     mockFrom(
       { name: 'Bistro Cafe', brandHexColor: '#8B4513' },
-      { hexBackgroundColor: '#7C3AED', classSuffix: 'tpl_suffix', title: 'Gift Card' },
+      {
+        hexBackgroundColor: '#7C3AED',
+        classSuffix: 'tpl_suffix',
+        title: 'Gift Card',
+      },
     );
 
     const design = await service.resolveTenantPassDesign('tenant-1');

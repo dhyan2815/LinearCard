@@ -187,14 +187,16 @@ export function TemplateWorkspace({
     // A saved design on a loyalty program also persists its economics
     // onto the Program row, which is what the scan pipeline reads.
     const saveProgramConfig = async () => {
-      if (!currentProgram?.id || currentProgram.kind !== 'loyalty') return;
+      if (!currentProgram?.id) return;
+      const programBody: any = { storeLocations };
+      if (currentProgram.kind === 'loyalty') {
+        programBody.earnRate = designData.earnRate;
+        programBody.redeemRate = designData.redeemRate;
+        programBody.redeemCapPercent = designData.redeemCapPercent;
+      }
       await apiClient(`/programs/${currentProgram.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          earnRate: designData.earnRate,
-          redeemRate: designData.redeemRate,
-          redeemCapPercent: designData.redeemCapPercent,
-        }),
+        body: JSON.stringify(programBody),
       });
     };
 
