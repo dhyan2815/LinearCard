@@ -63,34 +63,9 @@ export function ProgramSidebar({ programId }: { programId: string }) {
           {program?.status === 'published' ? 'Live' : 'Draft'}
           {program?.enrollmentSlug ? ` · /${program.enrollmentSlug}` : ''}
         </p>
-
-        {enrollLink && (
-          <div className="mt-3 pt-3 border-t border-border-subtle">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-blue mb-1.5">
-              Enrollment Link
-            </p>
-            <div className="flex items-center justify-center mb-2">
-              <div className="p-1.5 bg-white rounded-md shadow-sm">
-                <QRCodeSVG value={enrollLink} size={72} level="Q" includeMargin={false} />
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(enrollLink);
-                toast.success('Enrollment link copied to clipboard!');
-              }}
-              className="w-full flex items-center gap-1.5 text-[11px] px-2 py-1.5 rounded-md border border-border-subtle text-ink-secondary hover:bg-surface-hover hover:text-ink-dark transition-colors"
-              title={enrollLink}
-            >
-              <Copy className="w-3 h-3 shrink-0" strokeWidth={1.75} />
-              <span className="truncate">Copy Link</span>
-            </button>
-          </div>
-        )}
       </div>
 
-      <nav className="flex flex-col gap-0.5 p-2">
+      <nav className="flex flex-col gap-0.5 p-2 flex-1">
         {TABS.map(({ slug, label, icon: Icon }) => {
           const href = `/dashboard/programs/${programId}/${slug}`;
           const isActive = pathname?.startsWith(href);
@@ -112,6 +87,31 @@ export function ProgramSidebar({ programId }: { programId: string }) {
           );
         })}
       </nav>
+
+      {enrollLink && (
+        <div className="p-3 border-t border-border-subtle mt-auto">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-blue mb-1.5">
+            Enrollment Link
+          </p>
+          <div className="flex items-center justify-center mb-2">
+            <div className="p-1.5 bg-white rounded-md shadow-sm">
+              <QRCodeSVG value={enrollLink} size={72} level="Q" includeMargin={false} />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(enrollLink);
+              toast.success('Enrollment link copied to clipboard!');
+            }}
+            className="w-full flex items-center gap-1.5 text-[11px] px-2 py-1.5 rounded-md border border-border-subtle text-ink-secondary hover:bg-surface-hover hover:text-ink-dark transition-colors"
+            title={enrollLink}
+          >
+            <Copy className="w-3 h-3 shrink-0" strokeWidth={1.75} />
+            <span className="truncate">Copy Link</span>
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
