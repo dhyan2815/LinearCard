@@ -470,7 +470,9 @@ export class TemplatesController {
         })),
       }));
 
-      const previewSuffix = `${template.classSuffix || template.tenant?.classSuffix || 'linearcard'}_preview`;
+      // Key the preview class per-program so unpublished templates on the same
+      // tenant never share (and clobber) each other's Wallet class.
+      const previewSuffix = `${template.programId}_preview`;
       const cardTitle = template.tenant?.name || template.title;
       const hexBackgroundColor =
         template.hexBackgroundColor || template.tenant?.brandHexColor;
