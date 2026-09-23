@@ -54,7 +54,7 @@ const ARCHETYPE_PRESETS: Record<string, any[]> = {
   ]
 };
 
-export function TemplateWorkspace({
+export const TemplateWorkspace = React.forwardRef(({
   designData,
   setDesignData,
   origin,
@@ -66,13 +66,15 @@ export function TemplateWorkspace({
   selectedTenantId,
   currentProgram,
   passCount = 0
-}: any) {
+}: any, ref: React.Ref<any>) => {
   const [fieldsExpanded, setFieldsExpanded] = React.useState(true);
-  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = React.useState(false);
   // Phase 4.1 — the live class as Google actually holds it, not as we assume.
   const [liveClass, setLiveClass] = React.useState<any>(null);
   const [liveClassLoading, setLiveClassLoading] = React.useState(false);
+
+  React.useImperativeHandle(ref, () => ({
+    saveTemplate
+  }));
 
   // Any design edit invalidates whatever is currently published (or makes an
   // unsaved template as-yet-unpublished), so every mutation routes through
@@ -223,25 +225,7 @@ export function TemplateWorkspace({
     });
   };
 
-  // Phase 1.1 — saves the current design, then mints a throwaway pass against
-  // the template's `_preview` class so the admin can scan it onto their own
-  // phone. Saving first is what makes the QR show the edit they just made.
-  const handlePreviewOnDevice = async () => {
-    setPreviewLoading(true);
-    const previewPromise = async () => {
-      const tplId = await saveTemplate();
-      const data = await apiClient(`/templates/${tplId}/preview-pass`, { method: 'POST' });
-      if (!data.success) throw new Error(data.error || 'Failed to build preview pass');
-      setPreviewUrl(data.googleWalletUrl);
-      return data;
-    };
 
-    toast.promise(previewPromise().finally(() => setPreviewLoading(false)), {
-      loading: 'Building preview pass...',
-      success: 'Scan the QR to add it to your Wallet.',
-      error: (err: any) => err.message || 'Preview failed',
-    });
-  };
 
   // Phase 4.1 — verification harness. Asks Google what the class really
   // contains, so "the geofences didn't publish" and "Google didn't fire" stop
@@ -279,76 +263,8 @@ export function TemplateWorkspace({
     });
   };
 
-  const previewModal = previewUrl ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-surface-card border border-border-subtle rounded-2xl p-6 shadow-xl text-center">
-        <div className="flex items-start justify-between mb-4">
-          <div className="text-left">
-            <h3 className="text-sm font-semibold text-ink-dark">Preview on device</h3>
-            <p className="text-xs text-ink-muted mt-1">
-              Scan with the phone you want the pass on. This is a throwaway
-              pass — it never counts in your stats.
-            </p>
-          </div>
-          <button type="button" onClick={() => setPreviewUrl(null)} className="text-ink-muted hover:text-ink-dark shrink-0" aria-label="Close preview">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="inline-block p-3 bg-white rounded-xl">
-          <QRCodeSVG value={previewUrl} size={256} level="Q" includeMargin={true} />
-        </div>
-        <div className="mt-4 flex gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            className="flex-1"
-            onClick={() => {
-              navigator.clipboard.writeText(previewUrl);
-              toast.success('Preview link copied');
-            }}
-          >
-            Copy link
-          </Button>
-          <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
-            <Button type="button" className="w-full">Open</Button>
-          </a>
-        </div>
-      </div>
-    </div>
-  ) : null;
-
   return (
     <div className="flex flex-col gap-8 w-full max-w-3xl">
-      {previewModal}
-
-
-      {origin && (
-        <div className="bg-surface-card border border-brand-blue/30 p-5 rounded-xl flex items-center justify-between gap-4 shadow-sm">
-          <div className="flex-1 min-w-0">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-brand-blue mb-1">Consumer Enrollment Link</Label>
-            <div className="flex items-center gap-2 mt-1 min-w-0">
-              <code className="text-sm bg-canvas px-3 py-2 rounded-lg border border-border-subtle text-ink-dark truncate flex-1">
-                {currentTenant && currentProgram ? `${origin}/enroll/${currentTenant.classSuffix}/${currentProgram.enrollmentSlug}` : `${origin}/enroll/${designData.classSuffix}`}
-              </code>
-              <Button
-                type="button"
-                variant="secondary"
-                className="shrink-0 h-9"
-                onClick={() => {
-                  const link = currentTenant && currentProgram ? `${origin}/enroll/${currentTenant.classSuffix}/${currentProgram.enrollmentSlug}` : `${origin}/enroll/${designData.classSuffix}`;
-                  navigator.clipboard.writeText(link);
-                  toast.success('Enrollment link copied to clipboard!');
-                }}
-              >
-                Copy Link
-              </Button>
-            </div>
-          </div>
-          <div className="p-2 bg-white rounded-lg shrink-0 shadow-sm flex items-center justify-center">
-            <QRCodeSVG value={currentTenant && currentProgram ? `${origin}/enroll/${currentTenant.classSuffix}/${currentProgram.enrollmentSlug}` : `${origin}/enroll/${designData.classSuffix}`} size={90} level="Q" includeMargin={true} />
-          </div>
-        </div>
-      )}
 
       <div className="space-y-6">
         <div>
@@ -551,8 +467,8 @@ export function TemplateWorkspace({
 
       </div>
 
-      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-4 bg-linear-to-t from-canvas via-canvas/95 to-transparent">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle pt-4 gap-4">
+      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-4 bg-linear-to-t from-canvas via-canvas/95 to-transparent z-10">
+        <div className="flex flex-row items-center justify-between border-border-subtle pt-4 gap-4 overflow-x-auto pb-1 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <div className="shrink-0">
             {templateStatus !== 'unsaved' && (
               <Badge tone={templateStatus === 'published' ? 'success' : 'warning'}>
@@ -560,21 +476,18 @@ export function TemplateWorkspace({
               </Badge>
             )}
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-row items-center gap-3 shrink-0">
             {templateStatus === 'published' && savedTemplateId && (
-              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="w-full sm:w-auto">
+              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="shrink-0 whitespace-nowrap">
                 Sync Existing Passes {passCount > 0 ? `(${passCount})` : ''}
               </Button>
             )}
             {templateStatus !== 'published' && (
-              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="w-full sm:w-auto">
+              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="shrink-0 whitespace-nowrap">
                 Save Draft
               </Button>
             )}
-            <Button type="button" variant="secondary" disabled={previewLoading} onClick={handlePreviewOnDevice} className="w-full sm:w-auto">
-              Preview on device
-            </Button>
-            <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="w-full sm:w-auto">
+            <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="shrink-0 whitespace-nowrap">
               Publish Template
             </Button>
           </div>
@@ -582,4 +495,4 @@ export function TemplateWorkspace({
       </div>
     </div>
   );
-}
+});
