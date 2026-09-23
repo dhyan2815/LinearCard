@@ -479,7 +479,7 @@ export const TemplateWorkspace = React.forwardRef(({
           <div className="flex flex-row items-center gap-3 shrink-0">
             {templateStatus === 'published' && savedTemplateId && (
               <Button type="button" variant="secondary" onClick={handleResyncPasses} className="shrink-0 whitespace-nowrap">
-                Sync Existing Passes {passCount > 0 ? `(${passCount})` : ''}
+                Sync Existing Passes
               </Button>
             )}
             {templateStatus !== 'published' && (

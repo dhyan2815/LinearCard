@@ -8,18 +8,18 @@ import { Badge } from '@/components/ui/Badge';
 import { useDashboard } from './_components/DashboardContext';
 
 /**
- * Phase 8 — the account landing page. Every program is a project with its own
+ * Phase 8 — the account landing page. Every program has its own
  * overview, members, design and enrollment link; this is the way in.
  */
-export default function ProjectGallery() {
+export default function ProgramGallery() {
   const { programs, programsLoaded, currentTenant } = useDashboard();
 
   if (!programsLoaded) {
     return (
       <PageShell>
         <PageHeader
-          title="Projects"
-          description="Each project is a program with its own members, tiers, design and enrollment link."
+          title="Programs"
+          description="Each program has its own members, tiers, design and enrollment link."
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[0, 1, 2].map((i) => (
@@ -39,8 +39,8 @@ export default function ProjectGallery() {
   return (
     <PageShell>
       <PageHeader
-        title="Projects"
-        description="Each project is a program with its own members, tiers, design and enrollment link."
+        title="Programs"
+        description="Each program has its own members, tiers, design and enrollment link."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -66,13 +66,13 @@ export default function ProjectGallery() {
           href="/dashboard/programs/new"
           className="rounded-xl border border-dashed border-border-subtle p-4 flex items-center justify-center gap-2 text-sm text-ink-secondary hover:text-ink-dark hover:bg-surface-hover transition-colors min-h-26"
         >
-          <Plus className="w-4 h-4" /> Create a new project
+          <Plus className="w-4 h-4" /> Create a new program
         </Link>
       </div>
 
       {programs.length === 0 && (
         <p className="text-sm text-ink-muted mt-4">
-          {currentTenant?.name} has no projects yet. Start from a template.
+          {currentTenant?.name} has no programs yet. Start from a template.
         </p>
       )}
     </PageShell>

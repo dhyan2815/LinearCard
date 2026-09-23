@@ -44,7 +44,7 @@ export function DashboardSidebar() {
   // activity, members) now lives on the program's own tab strip, so the
   // sidebar carries only account-level destinations.
   const tabs = [
-    { id: 'programs', path: '/dashboard', label: 'Projects', icon: <Layers className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
+    { id: 'programs', path: '/dashboard', label: 'Programs', icon: <Layers className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
     { id: 'developers', path: '/dashboard/developers', label: 'Developers', icon: <Terminal className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
     { id: 'settings', path: '/dashboard/settings', label: 'Settings', icon: <Settings2 className="w-4 h-4" strokeWidth={ICON_STROKE} /> },
   ] as const;
@@ -71,7 +71,7 @@ export function DashboardSidebar() {
 
       <div className="flex-1 py-4 flex flex-col gap-1 px-2 overflow-y-auto">
          {tabs.map((tab) => {
-           // '/dashboard' is a prefix of every dashboard route, so Projects
+           // '/dashboard' is a prefix of every dashboard route, so Programs
            // matches the gallery and the program routes explicitly instead.
            const isActive = tab.path === '/dashboard'
              ? pathname === '/dashboard' || pathname.startsWith('/dashboard/programs')

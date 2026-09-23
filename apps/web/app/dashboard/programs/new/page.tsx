@@ -29,7 +29,7 @@ function categoryOf(preset: Preset): string {
 }
 
 /**
- * Phase 8 — the template gallery. Creating a project always starts from a
+ * Phase 8 — the template gallery. Creating a program always starts from a
  * preset, so there is never an empty program with no design to publish.
  */
 export default function TemplateGallery() {
@@ -64,8 +64,8 @@ export default function TemplateGallery() {
     };
 
     toast.promise(create().finally(() => setBusy(false)), {
-      loading: 'Creating project...',
-      success: 'Project created. Finish the design to publish it.',
+      loading: 'Creating program...',
+      success: 'Program created. Finish the design to publish it.',
       error: (err: any) => err.message || 'Failed to create program',
     });
   };
@@ -78,7 +78,7 @@ export default function TemplateGallery() {
   return (
     <PageShell>
       <PageHeader
-        title="Create a project"
+        title="Create a program"
         description="Start from a template. Everything in it can be edited afterwards."
       />
 

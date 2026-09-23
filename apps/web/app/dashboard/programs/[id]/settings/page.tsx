@@ -97,8 +97,8 @@ export default function ProgramSettingsPage() {
     };
 
     toast.promise(del().finally(() => setDeleting(false)), {
-      loading: 'Deleting project and expiring its passes...',
-      success: 'Project deleted.',
+      loading: 'Deleting program and expiring its passes...',
+      success: 'Program deleted.',
       error: (err: any) => err.message || 'Failed to delete',
     });
   };
@@ -107,7 +107,7 @@ export default function ProgramSettingsPage() {
     <PageShell>
       <PageHeader
         title="Settings"
-        description="Name, enrollment link, economics and retention for this project."
+        description="Name, enrollment link, economics and retention for this program."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
