@@ -17,6 +17,55 @@ export class WhatsappService {
   constructor(private readonly notifyService: NotifyService) {}
 
   /**
+   * Helper to execute background tasks with a soft timeout.
+   * If the provider takes too long (e.g. WAHA queuing), we return early
+   * so the caller doesn't timeout the HTTP request.
+   */
+  private async executeWithSoftTimeout<T>(
+    promiseFactory: () => Promise<T>,
+    timeoutMs: number,
+    description: string,
+  ): Promise<T | void> {
+    let hasReturned = false;
+
+    const backgroundPromise = promiseFactory().then(
+      (res) => {
+        if (hasReturned) {
+          this.logger.debug(`[${description}] Completed in background.`);
+        }
+        return res;
+      },
+      (err) => {
+        if (hasReturned) {
+          this.logger.error(
+            `[${description}] Failed in background: ${err.message}`,
+          );
+        } else {
+          throw err;
+        }
+      },
+    );
+
+    const timeoutPromise = new Promise<string>((resolve) =>
+      setTimeout(() => resolve('TIMEOUT_SYMBOL'), timeoutMs),
+    );
+
+    const result = await Promise.race([backgroundPromise, timeoutPromise]);
+
+    if (result === 'TIMEOUT_SYMBOL') {
+      hasReturned = true;
+      this.logger.warn(
+        `[${description}] Exceeded ${timeoutMs}ms, proceeding in background...`,
+      );
+      return;
+    }
+
+    hasReturned = true;
+    return result as T;
+  }
+
+
+  /**
    * Send-and-log, used by every message type below and by campaigns. Logging
    * both outcomes is the whole reason callers don't talk to the provider
    * directly.
@@ -32,45 +81,56 @@ export class WhatsappService {
       header?: string;
     },
   ): Promise<void> {
-    try {
-      await this.provider.sendText(phone, text);
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: opts.type,
-        channel: 'whatsapp',
-        status: 'sent',
-        campaignId: opts.campaignId,
-        header: opts.header,
-        body: text,
-      });
-    } catch (err: any) {
-      await this.notifyService.logNotification({
-        tenantId: opts.tenantId,
-        memberId: opts.memberId,
-        type: opts.type,
-        channel: 'whatsapp',
-        status: 'failed',
-        errorReason: describeError(err),
-        campaignId: opts.campaignId,
-        header: opts.header,
-        body: text,
-      });
-      throw err;
-    }
+    return this.executeWithSoftTimeout(async () => {
+      try {
+        await this.provider.sendText(phone, text);
+        await this.notifyService.logNotification({
+          tenantId: opts.tenantId,
+          memberId: opts.memberId,
+          type: opts.type,
+          channel: 'whatsapp',
+          status: 'sent',
+          campaignId: opts.campaignId,
+          header: opts.header,
+          body: text,
+        });
+      } catch (err: any) {
+        await this.notifyService.logNotification({
+          tenantId: opts.tenantId,
+          memberId: opts.memberId,
+          type: opts.type,
+          channel: 'whatsapp',
+          status: 'failed',
+          errorReason: describeError(err),
+          campaignId: opts.campaignId,
+          header: opts.header,
+          body: text,
+        });
+        throw err;
+      }
+    }, 8000, `sendTextWithLog to ${phone}`);
   }
 
   /** Unlogged send. Campaigns and one-offs that log themselves use this. */
   public async sendText(phone: string, text: string): Promise<any> {
-    return this.provider.sendText(phone, text);
+    return this.executeWithSoftTimeout(
+      () => this.provider.sendText(phone, text),
+      8000,
+      `sendText to ${phone}`,
+    );
   }
 
   public async sendOtp(phone: string, otp: string, brandName?: string) {
     const brand = brandName || 'LinearCard';
     this.logger.log(`[DEV OTP] Target: ${phone} | Code: ${otp}`);
-    return this.provider.sendText(
-      phone,
-      `🔐 Your ${brand} verification code is: *${otp}*\n\nThis code expires in 5 minutes. Do not share it with anyone.`,
+    return this.executeWithSoftTimeout(
+      () =>
+        this.provider.sendText(
+          phone,
+          `🔐 Your ${brand} verification code is: *${otp}*\n\nThis code expires in 5 minutes. Do not share it with anyone.`,
+        ),
+      8000,
+      `sendOtp to ${phone}`,
     );
   }
 
@@ -80,9 +140,14 @@ export class WhatsappService {
     memberName: string,
     brandName: string,
   ) {
-    return this.provider.sendText(
-      phone,
-      `🎉 Welcome, ${memberName}!\n\nYour *${brandName}* card has been securely saved to your Google Wallet.\nYou can now access it anytime to check your balance or scan at the store.\n\n_*Powered by LinearCard*_`,
+    return this.executeWithSoftTimeout(
+      () =>
+        this.provider.sendText(
+          phone,
+          `🎉 Welcome, ${memberName}!\n\nYour *${brandName}* card has been securely saved to your Google Wallet.\nYou can now access it anytime to check your balance or scan at the store.\n\n_*Powered by LinearCard*_`,
+        ),
+      8000,
+      `sendPassLink to ${phone}`,
     );
   }
 
@@ -91,9 +156,14 @@ export class WhatsappService {
     newBalance: string,
     brandName: string,
   ) {
-    return this.provider.sendText(
-      phone,
-      `✅ *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your wallet pass will refresh automatically._`,
+    return this.executeWithSoftTimeout(
+      () =>
+        this.provider.sendText(
+          phone,
+          `✅ *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your wallet pass will refresh automatically._`,
+        ),
+      8000,
+      `sendRedemptionReceipt to ${phone}`,
     );
   }
 

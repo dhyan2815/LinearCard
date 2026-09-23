@@ -59,46 +59,107 @@ export class ProgramAnalyticsController {
       ? new Date(from)
       : new Date(toDate.getTime() - DEFAULT_WINDOW_DAYS * 86400_000);
 
-    const [{ data: passes }, { data: events }] = await Promise.all([
+    const [{ data: passes }, { data: allEvents }] = await Promise.all([
       this.supabaseService.client
         .from('Pass')
-        .select('id, deletedAt, installedAt')
+        .select('id, memberId')
         .eq('tenantId', req.tenantId)
         .eq('programId', id),
       this.supabaseService.client
         .from('AuditLog')
-        .select('action, createdAt')
+        .select('action, createdAt, details, programId, memberId')
         .eq('tenantId', req.tenantId)
-        .eq('programId', id)
         .gte('createdAt', fromDate.toISOString())
         .lte('createdAt', toDate.toISOString()),
     ]);
 
-    const live = (passes || []).filter((p: any) => !p.deletedAt);
+    const passIds = new Set((passes || []).map((p: any) => p.id));
+    const memberIds = new Set((passes || []).map((p: any) => p.memberId));
+
+    const events = (allEvents || []).filter((e: any) => {
+      if (e.programId === id) return true;
+      if (e.programId) return false; // Belongs to another program explicitly
+      // Legacy fallback for Phase 5 events where programId was not logged
+      if (e.details?.passId && passIds.has(e.details.passId)) return true;
+      if (e.memberId && memberIds.has(e.memberId)) return true;
+      return false;
+    });
+
     const buckets = new Map<
       string,
-      { bucket: string; created: number; installed: number; deleted: number }
+      {
+        bucket: string;
+        revenue: number;
+        orders: number;
+        pointsAwarded: number;
+        pointsRedeemed: number;
+      }
     >();
-    const totals = { created: 0, installed: 0, deleted: 0 };
+    const totals = {
+      revenue: 0,
+      orders: 0,
+      pointsAwarded: 0,
+      pointsRedeemed: 0,
+    };
 
     for (const e of events || []) {
       const key = this.bucketKey(e.createdAt, groupBy);
       const bucket = buckets.get(key) || {
         bucket: key,
-        created: 0,
-        installed: 0,
-        deleted: 0,
+        revenue: 0,
+        orders: 0,
+        pointsAwarded: 0,
+        pointsRedeemed: 0,
       };
-      if (e.action === 'pass_created') {
-        bucket.created++;
-        totals.created++;
-      } else if (e.action === 'pass_installed') {
-        bucket.installed++;
-        totals.installed++;
-      } else if (e.action === 'pass_deleted') {
-        bucket.deleted++;
-        totals.deleted++;
+
+      const details = e.details || {};
+
+      if (e.action === 'order_transaction') {
+        const amount = Number(details.orderAmount || 0);
+        bucket.revenue += amount;
+        totals.revenue += amount;
+
+        bucket.orders++;
+        totals.orders++;
+
+        const pointsChanged = Math.abs(Number(details.pointsChanged || 0));
+        if (
+          details.transactionType === 'award' ||
+          details.transactionType === 'earn'
+        ) {
+          bucket.pointsAwarded += pointsChanged;
+          totals.pointsAwarded += pointsChanged;
+        } else if (details.transactionType === 'redeem') {
+          bucket.pointsRedeemed += pointsChanged;
+          totals.pointsRedeemed += pointsChanged;
+        } else {
+          // Fallback if transactionType is missing
+          const rawPoints = Number(details.pointsChanged || 0);
+          if (rawPoints > 0) {
+            bucket.pointsAwarded += rawPoints;
+            totals.pointsAwarded += rawPoints;
+          } else if (rawPoints < 0) {
+            bucket.pointsRedeemed += Math.abs(rawPoints);
+            totals.pointsRedeemed += Math.abs(rawPoints);
+          }
+        }
+      } else if (
+        e.action === 'manual_balance_adjustment' ||
+        e.action === 'balance_adjusted'
+      ) {
+        // Fallback for manual adjustments
+        const pointsChanged = Number(
+          details.pointsChanged || details.adjustment || 0,
+        );
+        if (pointsChanged > 0) {
+          bucket.pointsAwarded += pointsChanged;
+          totals.pointsAwarded += pointsChanged;
+        } else if (pointsChanged < 0) {
+          bucket.pointsRedeemed += Math.abs(pointsChanged);
+          totals.pointsRedeemed += Math.abs(pointsChanged);
+        }
       }
+
       buckets.set(key, bucket);
     }
 
@@ -114,17 +175,10 @@ export class ProgramAnalyticsController {
     return {
       success: true,
       overview: {
-        active: live.length,
-        created: totals.created,
-        installed: totals.installed,
-        deleted: totals.deleted,
-        // Apple Wallet is not implemented; reported as 0 rather than omitted,
-        // so the UI can show the row and say why it is empty.
-        devices: {
-          google: live.filter((p: any) => p.installedAt).length,
-          apple: 0,
-          other: 0,
-        },
+        totalRevenue: totals.revenue,
+        totalOrders: totals.orders,
+        pointsAwarded: totals.pointsAwarded,
+        pointsRedeemed: totals.pointsRedeemed,
         series: [...buckets.values()].sort((a, b) =>
           a.bucket.localeCompare(b.bucket),
         ),

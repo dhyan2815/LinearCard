@@ -5,6 +5,49 @@ import type { ProgramOverview } from '@linearcard/types';
 import { apiClient } from '@/lib/api-client';
 import { PageShell } from '@/components/ui/PageShell';
 import { PageHeader } from '@/components/ui/PageHeader';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+
+function formatCurrency(value: number, currency = 'INR') {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-surface-card border border-border-subtle shadow-lg rounded-xl p-3 text-sm">
+        <p className="font-semibold text-ink-dark mb-2">
+          {new Date(label).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+        </p>
+        <div className="space-y-1">
+          {[...payload].reverse().map((entry: any, index: number) => (
+            <div key={index} className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                <span className="text-ink-muted">{entry.name}</span>
+              </div>
+              <span className="text-ink-dark font-medium">
+                {entry.name === 'Revenue' ? formatCurrency(entry.value) : entry.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 const RANGES = [
   { id: '7d', label: '7D', days: 7, groupBy: 'day' },
@@ -15,7 +58,7 @@ const RANGES = [
 
 const TILE = 'rounded-xl border border-border-subtle bg-surface-card p-4';
 
-function Tile({ label, value }: { label: string; value: number }) {
+function Tile({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className={TILE}>
       <p className="text-xs text-ink-muted">{label}</p>
@@ -40,19 +83,11 @@ export default function ProgramOverviewPage() {
       .catch(() => setOverview(null));
   }, [id, range]);
 
-  // A stacked bar needs a common scale; the tallest bucket sets it.
-  const peak = Math.max(
-    1,
-    ...(overview?.series || []).map(
-      (b) => b.created + b.installed + b.deleted,
-    ),
-  );
-
   return (
     <PageShell>
       <PageHeader
         title="Overview"
-        description="Pass activity in this program."
+        description="Business metrics and activity in this program."
         actions={
           <div className="flex items-center rounded-full border border-border-subtle p-1 text-sm">
             {RANGES.map((r) => (
@@ -74,50 +109,44 @@ export default function ProgramOverviewPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Tile label="Active passes" value={overview?.active ?? 0} />
-        <Tile label="Created" value={overview?.created ?? 0} />
-        <Tile label="Installed" value={overview?.installed ?? 0} />
-        <Tile label="Deleted" value={overview?.deleted ?? 0} />
+        <Tile label="Revenue Generated" value={overview ? formatCurrency(overview.totalRevenue) : '-'} />
+        <Tile label="Total Orders" value={overview?.totalOrders ?? '-'} />
+        <Tile label="Points Awarded" value={overview ? `${overview.pointsAwarded} Pts` : '-'} />
+        <Tile label="Points Redeemed" value={overview ? `${overview.pointsRedeemed} Pts` : '-'} />
       </div>
 
-      <div className={`${TILE} mt-4`}>
-        <p className="text-xs text-ink-muted mb-3">Installed by wallet</p>
-        <div className="flex gap-8 text-sm">
-          <div>
-            <p className="text-ink-dark font-medium">
-              {overview?.devices.google ?? 0}
-            </p>
-            <p className="text-xs text-ink-muted">Google Wallet</p>
-          </div>
-          <div>
-            <p className="text-ink-muted font-medium">—</p>
-            <p className="text-xs text-ink-muted">Apple · Not available yet</p>
-          </div>
-        </div>
-      </div>
-
-      <div className={`${TILE} mt-4`}>
-        <div className="flex items-end gap-1 h-40">
-          {(overview?.series || []).map((b) => (
-            <div
-              key={b.bucket}
-              title={`${b.bucket} · ${b.created} created, ${b.installed} installed, ${b.deleted} deleted`}
-              className="flex-1 flex flex-col justify-end gap-px min-w-[4px]"
-            >
-              <div
-                className="bg-red-500/60 rounded-t-sm"
-                style={{ height: `${(b.deleted / peak) * 100}%` }}
-              />
-              <div
-                className="bg-brand-blue"
-                style={{ height: `${(b.installed / peak) * 100}%` }}
-              />
-              <div
-                className="bg-brand-blue/40"
-                style={{ height: `${(b.created / peak) * 100}%` }}
-              />
+      <div className={`${TILE} mt-4 flex flex-col`}>
+        <div className="h-64 w-full text-xs">
+          {overview?.series?.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={overview.series}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-subtle, rgba(0,0,0,0.1))" />
+                <XAxis
+                  dataKey="bucket"
+                  tickFormatter={(v) =>
+                    new Date(v).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                    })
+                  }
+                  stroke="#888888"
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis stroke="#888888" tickLine={false} axisLine={false} />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
+                <Bar dataKey="pointsRedeemed" name="Points Redeemed" stackId="a" fill="#c084fc" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="pointsAwarded" name="Points Awarded" stackId="a" fill="#34d399" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-ink-muted">
+              No tracking data available for this time range.
             </div>
-          ))}
+          )}
         </div>
         <p className="text-xs text-ink-muted mt-3">
           {overview?.historyStartsAt

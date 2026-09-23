@@ -6,9 +6,79 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
-import { MessageCircle, Bell, Smartphone, Users, AlertTriangle } from 'lucide-react';
+import { MessageCircle, Bell, Smartphone, Users, AlertTriangle, ChevronDown, Sparkles } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import type { AudienceFilter, Campaign } from '@linearcard/types';
+
+// ---------------------------------------------------------------------------
+// Predefined campaign templates — generic enough for any business category:
+// restaurants, gyms, retail, travel, events, memberships, gift cards, etc.
+// ---------------------------------------------------------------------------
+interface CampaignTemplate {
+  id: string;
+  emoji: string;
+  name: string;
+  header: string; // Wallet Push notification header
+  message: string;
+  description: string; // shown in the dropdown as a hint
+}
+
+const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
+  {
+    id: 'welcome_reward',
+    emoji: '🎁',
+    name: 'Welcome Reward',
+    header: 'Welcome — Your Reward Awaits!',
+    message:
+      'Welcome aboard! As a thank-you for joining, a special reward has been added to your pass. Show it at your next visit to redeem.',
+    description: 'Greet new members with a reward — works for any business.',
+  },
+  {
+    id: 'points_expiry',
+    emoji: '⏳',
+    name: 'Points Expiry Reminder',
+    header: 'Your Points Are About to Expire',
+    message:
+      'Heads up! Your accumulated points will expire soon. Visit us before they\'re gone and make the most of your balance.',
+    description: 'Re-activate dormant balances before they expire.',
+  },
+  {
+    id: 'members_only_offer',
+    emoji: '⭐',
+    name: 'Exclusive Members-Only Offer',
+    header: 'Exclusive Offer — Members Only',
+    message:
+      'As a valued member, you unlock an exclusive offer just for you. Present your pass in-store or at the door to claim it.',
+    description: 'Reward loyalty — tier upgrades, memberships, access cards.',
+  },
+  {
+    id: 'win_back',
+    emoji: '💌',
+    name: 'We Miss You',
+    header: 'We Miss You — Come Back!',
+    message:
+      'It\'s been a while since your last visit! We\'d love to see you again. Your pass is active and ready — a special welcome-back bonus is waiting.',
+    description: 'Re-engage lapsed customers across any business type.',
+  },
+  {
+    id: 'flash_deal',
+    emoji: '⚡',
+    name: 'Flash Deal — Limited Time',
+    header: 'Flash Deal: Today Only!',
+    message:
+      'Today only! Scan your pass for an exclusive flash deal. Limited availability — don\'t miss out. Offer expires at midnight.',
+    description: 'Drive urgency for coupons, events, F&B, travel.',
+  },
+  {
+    id: 'milestone_reward',
+    emoji: '🏆',
+    name: 'Milestone Reward Unlocked',
+    header: 'You\'ve Unlocked a New Reward!',
+    message:
+      'Congratulations! You\'ve hit a new milestone and a reward has been added to your pass. Keep going — even bigger perks are just around the corner.',
+    description: 'Celebrate tier upgrades or points milestones.',
+  },
+];
 
 type Channel = 'whatsapp' | 'wallet_push';
 
@@ -29,6 +99,9 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
   const [header, setHeader] = useState('');
   const [message, setMessage] = useState('');
 
+  // Template picker
+  const [templateOpen, setTemplateOpen] = useState(false);
+
   // Audience (2.2)
   const [tiers, setTiers] = useState('');
   const [balanceMin, setBalanceMin] = useState('');
@@ -44,6 +117,14 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
   const [result, setResult] = useState<{ queued: number } | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const applyTemplate = (tpl: CampaignTemplate) => {
+    setName(tpl.name);
+    setMessage(tpl.message);
+    // Only pre-fill the header when on wallet_push; it's not used for WhatsApp.
+    if (channel === 'wallet_push') setHeader(tpl.header);
+    setTemplateOpen(false);
+  };
 
   const audienceFilter: AudienceFilter = {
     tiers: tiers.trim()
@@ -124,6 +205,46 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* ── Template picker ── */}
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => setTemplateOpen(o => !o)}
+              className="flex w-full items-center justify-between rounded-lg border border-dashed border-border-subtle bg-canvas px-3 py-2 text-sm text-ink-secondary hover:border-brand-blue hover:text-brand-blue transition-all"
+            >
+              <span className="flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                Use a template
+              </span>
+              <ChevronDown
+                className={`w-4 h-4 transition-transform duration-200 ${
+                  templateOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {templateOpen && (
+              <div className="mt-1 rounded-xl border border-border-subtle bg-surface-card shadow-lg overflow-hidden">
+                {CAMPAIGN_TEMPLATES.map((tpl, idx) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => applyTemplate(tpl)}
+                    className={`w-full text-left px-4 py-3 hover:bg-brand-blue/5 transition-colors flex items-start gap-3 ${
+                      idx !== 0 ? 'border-t border-border-subtle/60' : ''
+                    }`}
+                  >
+                    <span className="text-lg leading-none mt-0.5">{tpl.emoji}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-ink-dark">{tpl.name}</p>
+                      <p className="text-xs text-ink-muted mt-0.5 truncate">{tpl.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">

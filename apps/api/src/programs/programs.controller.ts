@@ -180,8 +180,8 @@ export class ProgramsController {
       status: 'draft',
       fieldRows: preset.fieldRows,
       hexBackgroundColor: preset.hexBackgroundColor,
-      logoUrl: tenant?.logoUrl ?? null,
-      heroImageUrl: tenant?.heroUrl ?? null,
+      logoUrl: preset.logoUrl ?? tenant?.logoUrl ?? null,
+      heroImageUrl: preset.heroUrl ?? tenant?.heroUrl ?? null,
       // Kept in sync with the program for templates that predate the move.
       earnRate: preset.loyalty?.earnRate ?? 0.1,
       redeemRate: preset.loyalty?.redeemRate ?? 1,

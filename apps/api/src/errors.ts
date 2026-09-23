@@ -21,6 +21,7 @@ export type ErrorCode =
   | 'WALLET_UNAVAILABLE'
   | 'WHATSAPP_NOT_CONFIGURED'
   | 'WHATSAPP_SEND_FAILED'
+  | 'WHATSAPP_NUMBER_INVALID'
   | 'TEMPLATE_INVALID';
 
 /** HTTP status each code maps to when it reaches a controller boundary. */
@@ -35,6 +36,7 @@ const STATUS: Record<ErrorCode, number> = {
   WALLET_UNAVAILABLE: HttpStatus.SERVICE_UNAVAILABLE,
   WHATSAPP_NOT_CONFIGURED: HttpStatus.SERVICE_UNAVAILABLE,
   WHATSAPP_SEND_FAILED: HttpStatus.BAD_GATEWAY,
+  WHATSAPP_NUMBER_INVALID: HttpStatus.BAD_REQUEST,
   TEMPLATE_INVALID: HttpStatus.BAD_REQUEST,
 };
 

@@ -1,15 +1,6 @@
 'use client';
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useDashboard } from '../_components/DashboardContext';
+import { LegacyProgramRedirect } from '../_components/LegacyProgramRedirect';
 
-/** Phase 8 — this view moved under its program. Kept so old links still land. */
-export default function LegacyMembersRedirect() {
-  const router = useRouter();
-  const { selectedProgramId, programs } = useDashboard();
-  useEffect(() => {
-    const id = selectedProgramId || programs[0]?.id;
-    router.replace(id ? `/dashboard/programs/${id}/members` : '/dashboard');
-  }, [selectedProgramId, programs, router]);
-  return null;
+export default function Page() {
+  return <LegacyProgramRedirect slug="members" />;
 }

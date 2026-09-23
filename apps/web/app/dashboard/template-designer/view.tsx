@@ -20,8 +20,6 @@ export default function TemplateDesignerPage() {
     currentTenant,
     selectedTenantId,
     currentProgram,
-    tiers,
-    setTiers,
     manageData,
     stats
   } = useDashboard();
@@ -58,8 +56,6 @@ export default function TemplateDesignerPage() {
                currentTenant={currentTenant}
                selectedTenantId={selectedTenantId}
                currentProgram={currentProgram}
-               tiers={tiers}
-               setTiers={setTiers}
                passCount={stats?.passCount || 0}
            />
          </div>

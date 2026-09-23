@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
@@ -64,12 +65,9 @@ export function TemplateWorkspace({
   currentTenant,
   selectedTenantId,
   currentProgram,
-  tiers = [],
-  setTiers,
   passCount = 0
 }: any) {
   const [fieldsExpanded, setFieldsExpanded] = React.useState(true);
-  const [tiersExpanded, setTiersExpanded] = React.useState(false);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
   // Phase 4.1 — the live class as Google actually holds it, not as we assume.
@@ -140,32 +138,6 @@ export function TemplateWorkspace({
   // tier here changed nothing about what the next scan computed.
   const isTicketProgram = currentProgram?.kind === 'ticket';
 
-  const setTierList = (next: any[]) => {
-    setTiers?.(next);
-    setTemplateStatus((prev: any) => (prev === 'published' ? 'draft' : prev));
-  };
-
-  const addTier = () => {
-    setTierList([...tiers, { name: '', minPoints: 0, templateId: null }]);
-  };
-
-  const updateTier = (
-    index: number,
-    field: 'name' | 'minPoints',
-    value: string,
-  ) => {
-    const next = [...tiers];
-    next[index] = {
-      ...next[index],
-      [field]: field === 'minPoints' ? Number(value) || 0 : value,
-    };
-    setTierList(next);
-  };
-
-  const removeTier = (index: number) => {
-    setTierList(tiers.filter((_: any, i: number) => i !== index));
-  };
-
   const storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }> =
     designData.storeLocations || [];
 
@@ -212,8 +184,8 @@ export function TemplateWorkspace({
       heroImageUrl: designData.heroImageUrl || null,
     };
 
-    // A saved design on a loyalty program also persists its tiers and its
-    // economics onto the Program row, which is what the scan pipeline reads.
+    // A saved design on a loyalty program also persists its economics
+    // onto the Program row, which is what the scan pipeline reads.
     const saveProgramConfig = async () => {
       if (!currentProgram?.id || currentProgram.kind !== 'loyalty') return;
       await apiClient(`/programs/${currentProgram.id}`, {
@@ -224,19 +196,6 @@ export function TemplateWorkspace({
           redeemCapPercent: designData.redeemCapPercent,
         }),
       });
-      const named = tiers.filter((t: any) => t.name?.trim());
-      const data = await apiClient(`/programs/${currentProgram.id}/tiers`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          tiers: named.map((t: any) => ({
-            name: t.name,
-            minPoints: Number(t.minPoints) || 0,
-            templateId: t.templateId ?? null,
-          })),
-        }),
-      });
-      if (!data.success) throw new Error(data.error || 'Error saving tiers');
-      setTiers?.(data.tiers);
     };
 
     if (savedTemplateId) {
@@ -397,14 +356,15 @@ export function TemplateWorkspace({
             <Label className="text-xs font-semibold uppercase tracking-wider text-brand-blue mb-1">Consumer Enrollment Link</Label>
             <div className="flex items-center gap-2 mt-1 min-w-0">
               <code className="text-sm bg-canvas px-3 py-2 rounded-lg border border-border-subtle text-ink-dark truncate flex-1">
-                {`${origin}/enroll/${designData.classSuffix}`}
+                {currentTenant && currentProgram ? `${origin}/enroll/${currentTenant.classSuffix}/${currentProgram.enrollmentSlug}` : `${origin}/enroll/${designData.classSuffix}`}
               </code>
               <Button 
                 type="button" 
                 variant="secondary" 
                 className="shrink-0 h-9"
                 onClick={() => {
-                  navigator.clipboard.writeText(`${origin}/enroll/${designData.classSuffix}`);
+                  const link = currentTenant && currentProgram ? `${origin}/enroll/${currentTenant.classSuffix}/${currentProgram.enrollmentSlug}` : `${origin}/enroll/${designData.classSuffix}`;
+                  navigator.clipboard.writeText(link);
                   toast.success('Enrollment link copied to clipboard!');
                 }}
               >
@@ -413,7 +373,7 @@ export function TemplateWorkspace({
             </div>
           </div>
           <div className="p-2 bg-white rounded-lg shrink-0 shadow-sm flex items-center justify-center">
-            <QRCodeSVG value={`${origin}/enroll/${designData.classSuffix}`} size={90} level="Q" includeMargin={true} />
+            <QRCodeSVG value={currentTenant && currentProgram ? `${origin}/enroll/${currentTenant.classSuffix}/${currentProgram.enrollmentSlug}` : `${origin}/enroll/${designData.classSuffix}`} size={90} level="Q" includeMargin={true} />
           </div>
         </div>
       )}
@@ -706,63 +666,7 @@ export function TemplateWorkspace({
           </div>
         )}
 
-        {!isTicketProgram && (
-        <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm">
-          <button type="button" onClick={() => setTiersExpanded(!tiersExpanded)} className="w-full flex items-center justify-between p-4">
-            <span className="flex items-center gap-2 text-xs font-semibold text-ink-dark">
-              <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${tiersExpanded ? 'rotate-180' : ''}`} strokeWidth={1.75} />
-              Tiers {tiers.length > 0 ? `(${tiers.length})` : ''}
-            </span>
-            {tiersExpanded && (
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); addTier(); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); addTier(); } }}
-                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors"
-              >
-                + Add Tier
-              </span>
-            )}
-          </button>
-          {tiersExpanded && (
-            <div className="px-4 pb-4">
-              <p className="text-xs text-ink-muted mb-3">
-                Members are auto-promoted to a tier once their points balance
-                reaches its minimum, on every scan transaction. Saved onto the
-                program, which is what the scanner reads.
-              </p>
-              {tiers.map((tier: any, idx: number) => (
-                <div key={idx} className="flex items-center gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={tier.name}
-                    onChange={(e) => updateTier(idx, 'name', e.target.value)}
-                    placeholder="Tier name (e.g. Gold)"
-                    className="text-sm flex-1 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    value={tier.minPoints}
-                    onChange={(e) => updateTier(idx, 'minPoints', e.target.value)}
-                    placeholder="Min points"
-                    className="text-sm w-32 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeTier(idx)}
-                    className="text-ink-muted hover:text-red-500 transition-colors"
-                    aria-label="Remove tier"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        )}
+
       </div>
 
       <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-4 bg-linear-to-t from-canvas via-canvas/95 to-transparent">

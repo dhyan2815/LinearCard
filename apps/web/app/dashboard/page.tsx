@@ -12,7 +12,29 @@ import { useDashboard } from './_components/DashboardContext';
  * overview, members, design and enrollment link; this is the way in.
  */
 export default function ProjectGallery() {
-  const { programs, currentTenant } = useDashboard();
+  const { programs, programsLoaded, currentTenant } = useDashboard();
+
+  if (!programsLoaded) {
+    return (
+      <PageShell>
+        <PageHeader
+          title="Projects"
+          description="Each project is a program with its own members, tiers, design and enrollment link."
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-border-subtle bg-surface-card p-4 min-h-26 animate-pulse"
+            >
+              <div className="h-4 w-1/2 rounded bg-surface-hover" />
+              <div className="h-3 w-1/4 rounded bg-surface-hover mt-3" />
+            </div>
+          ))}
+        </div>
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell>
@@ -42,7 +64,7 @@ export default function ProjectGallery() {
 
         <Link
           href="/dashboard/programs/new"
-          className="rounded-xl border border-dashed border-border-subtle p-4 flex items-center justify-center gap-2 text-sm text-ink-secondary hover:text-ink-dark hover:bg-surface-hover transition-colors min-h-[104px]"
+          className="rounded-xl border border-dashed border-border-subtle p-4 flex items-center justify-center gap-2 text-sm text-ink-secondary hover:text-ink-dark hover:bg-surface-hover transition-colors min-h-26"
         >
           <Plus className="w-4 h-4" /> Create a new project
         </Link>

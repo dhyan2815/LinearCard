@@ -635,18 +635,14 @@ export class WalletService {
       Array.isArray(templateData.storeLocations) &&
       templateData.storeLocations.length > 0
     ) {
-      const locations = templateData.storeLocations
+      classPayload.merchantLocations = templateData.storeLocations
         .slice(0, 10)
         .map(
           (l: { latitude: number | string; longitude: number | string }) => ({
-            kind: 'walletobjects#latLongPoint',
             latitude: Number(l.latitude),
             longitude: Number(l.longitude),
           }),
         );
-
-      classPayload.merchantLocations = locations;
-      classPayload.locations = locations; // Fallback for backwards compatibility if Google drops merchantLocations
     }
 
     // Throws on a localhost URL rather than poisoning a live class (ENV-4).

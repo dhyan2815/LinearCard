@@ -92,6 +92,8 @@ export class PassIssuanceService {
     // webhook), so the gate lives here rather than at each call site. Fails
     // OPEN on a missing/unknown status: 'demo' has to be set explicitly, so an
     // unreadable tenant row can never block a live tenant.
+    /*
+    // Temporarily disabled for PoC: Allow passes to be issued to any number regardless of test account status
     if ((tenant as any)?.publishStatus === 'demo') {
       let isTestAccount = member.isTestAccount;
       if (isTestAccount === undefined) {
@@ -113,6 +115,7 @@ export class PassIssuanceService {
         };
       }
     }
+    */
 
     const entryTier = await this.resolveEntryTier(program?.id);
     const startingTier = passData.tier || entryTier?.name || 'Bronze';

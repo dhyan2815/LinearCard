@@ -1,6 +1,8 @@
 'use client';
 import React from 'react';
-import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { ChevronRight } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { PageShell } from '@/components/ui/PageShell';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -9,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 
 export default function ProgramMembersPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [members, setMembers] = React.useState<any[]>([]);
   const [total, setTotal] = React.useState(0);
   const [offset, setOffset] = React.useState(0);
@@ -53,23 +56,41 @@ export default function ProgramMembersPage() {
             <th className="py-2 font-medium">Tier</th>
             <th className="py-2 font-medium">Balance</th>
             <th className="py-2 font-medium">Joined</th>
+            <th className="py-2 w-8" />
           </tr>
         </thead>
         <tbody>
           {members.map((m) => {
             const pass = (m.passes || [])[0] || {};
+            const href = `/dashboard/programs/${id}/members/${m.id}`;
             return (
-              <tr key={m.id} className="border-b border-border-subtle/60">
-                <td className="py-2 text-ink-dark">{m.name || '—'}</td>
-                <td className="py-2 text-ink-secondary">{m.phone}</td>
-                <td className="py-2 text-ink-secondary">{pass.tier || '—'}</td>
-                <td className="py-2 text-ink-secondary">
+              <tr
+                key={m.id}
+                onClick={() => router.push(href)}
+                className="border-b border-border-subtle/60 cursor-pointer hover:bg-surface-hover transition-colors"
+              >
+                <td className="py-2.5 text-ink-dark">
+                  {/* The link carries keyboard focus; the row click is the shortcut. */}
+                  <Link
+                    href={href}
+                    onClick={(e) => e.stopPropagation()}
+                    className="hover:text-brand-blue transition-colors"
+                  >
+                    {m.name || '—'}
+                  </Link>
+                </td>
+                <td className="py-2.5 text-ink-secondary">{m.phone}</td>
+                <td className="py-2.5 text-ink-secondary">{pass.tier || '—'}</td>
+                <td className="py-2.5 text-ink-secondary">
                   {pass.balance ?? '—'}
                 </td>
-                <td className="py-2 text-ink-muted">
+                <td className="py-2.5 text-ink-muted">
                   {m.createdAt
                     ? new Date(m.createdAt).toLocaleDateString()
                     : '—'}
+                </td>
+                <td className="py-2.5 text-right text-ink-muted">
+                  <ChevronRight className="w-4 h-4 inline" />
                 </td>
               </tr>
             );
@@ -83,6 +104,8 @@ export default function ProgramMembersPage() {
       )}
       <div className="flex items-center gap-2 mt-4">
         <Button
+          variant="outline"
+          size="sm"
           disabled={offset === 0}
           onClick={() => setOffset(Math.max(0, offset - limit))}
         >
@@ -94,6 +117,8 @@ export default function ProgramMembersPage() {
             : `${offset + 1}–${Math.min(offset + limit, total)} of ${total}`}
         </span>
         <Button
+          variant="outline"
+          size="sm"
           disabled={offset + limit >= total}
           onClick={() => setOffset(offset + limit)}
         >
