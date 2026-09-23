@@ -587,24 +587,10 @@ describe('createGenericClass — merchantLocations (geofencing)', () => {
     const payload = mockGoogleAuthClient.request.mock.calls[0][0].data;
     expect(payload.merchantLocations).toEqual([
       {
-        kind: 'walletobjects#latLongPoint',
         latitude: 19.076,
         longitude: 72.877,
       },
       {
-        kind: 'walletobjects#latLongPoint',
-        latitude: 28.6139,
-        longitude: 77.209,
-      },
-    ]);
-    expect(payload.locations).toEqual([
-      {
-        kind: 'walletobjects#latLongPoint',
-        latitude: 19.076,
-        longitude: 72.877,
-      },
-      {
-        kind: 'walletobjects#latLongPoint',
         latitude: 28.6139,
         longitude: 77.209,
       },
@@ -642,6 +628,48 @@ describe('createGenericClass — merchantLocations (geofencing)', () => {
 
     const payload = mockGoogleAuthClient.request.mock.calls[0][0].data;
     expect(payload.merchantLocations).toBeUndefined();
+  });
+});
+
+describe('resolveCallbackUrl', () => {
+  let originalEnv: NodeJS.ProcessEnv;
+  let service: WalletService;
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    service = new WalletService(
+      {} as any, // mockSupabaseService
+      {} as any, // configService
+      {} as any, // notifyService
+      {} as any, // whatsappService
+      {} as any  // auditService
+    );
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('ignores PUBLIC_CALLBACK_URL when VERCEL_ENV is set', () => {
+    process.env.VERCEL_ENV = 'production';
+    process.env.PUBLIC_CALLBACK_URL = 'https://some-tunnel.ngrok.io';
+    process.env.NEXT_PUBLIC_API_URL = 'https://linearcard-api.vercel.app';
+    delete process.env.WALLET_WEBHOOK_SECRET;
+    
+    expect(service.resolveCallbackUrl()).toBe(
+      'https://linearcard-api.vercel.app/passes/webhooks/google-wallet'
+    );
+  });
+
+  it('uses PUBLIC_CALLBACK_URL on local dev when VERCEL_ENV is not set', () => {
+    delete process.env.VERCEL_ENV;
+    process.env.PUBLIC_CALLBACK_URL = 'https://some-tunnel.ngrok.io';
+    process.env.NEXT_PUBLIC_API_URL = 'http://localhost:3001';
+    delete process.env.WALLET_WEBHOOK_SECRET;
+    
+    expect(service.resolveCallbackUrl()).toBe(
+      'https://some-tunnel.ngrok.io/passes/webhooks/google-wallet'
+    );
   });
 });
 

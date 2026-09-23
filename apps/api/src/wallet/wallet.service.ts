@@ -410,6 +410,7 @@ export class WalletService {
     classSuffix?: string;
     cardTitle?: string;
     fieldRows?: any[];
+    programId?: string;
   }> {
     const { data: tenant } = await this.supabaseService.client
       .from('Tenant')
@@ -466,6 +467,7 @@ export class WalletService {
         classSuffix: template.classSuffix || tenant?.classSuffix,
         cardTitle: resolveCardTitle(tenant?.name, template.title),
         fieldRows: template.fieldRows || [],
+        programId: template.programId || programId,
       };
     }
 
@@ -476,6 +478,7 @@ export class WalletService {
       classSuffix: tenant?.classSuffix,
       cardTitle: tenant?.name,
       fieldRows: [],
+      programId: programId,
     };
   }
 
@@ -519,8 +522,9 @@ export class WalletService {
    * public tunnel URL in `PUBLIC_CALLBACK_URL`.
    */
   public resolveCallbackUrl(): string {
+    const isDeployed = !!process.env.VERCEL_ENV;
     const base = (
-      process.env.PUBLIC_CALLBACK_URL ||
+      (!isDeployed && process.env.PUBLIC_CALLBACK_URL) ||
       process.env.NEXT_PUBLIC_API_URL ||
       (process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL
         ? `https://${process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL}`
@@ -1197,7 +1201,9 @@ export class WalletService {
           logoUrl,
           heroImageUrl,
           rows,
-          storeLocations: await this.storeLocationsForProgram(options.programId),
+          storeLocations: await this.storeLocationsForProgram(
+            options.programId,
+          ),
         });
         await client.request({
           url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject',
