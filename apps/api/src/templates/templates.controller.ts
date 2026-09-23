@@ -153,67 +153,7 @@ export class TemplatesController {
     }
   }
 
-  /**
-   * Validates a storeLocations payload (max 10 pins, lat/lng in range),
-   * throwing an HttpException with the same shape/message used across
-   * createTemplate and updateTemplate.
-   */
-  private validateStoreLocations(value: any): void {
-    if (!Array.isArray(value)) {
-      throw new HttpException(
-        {
-          success: false,
-          error: 'storeLocations must be an array',
-          message: 'storeLocations must be an array',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (value.length > 10) {
-      throw new HttpException(
-        {
-          success: false,
-          error: 'storeLocations must contain at most 10 entries',
-          message: 'storeLocations must contain at most 10 entries',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    for (const loc of value) {
-      if (!loc || typeof loc !== 'object') {
-        throw new HttpException(
-          {
-            success: false,
-            error: 'Each store location must be an object',
-            message: 'Each store location must be an object',
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      const lat = Number(loc.latitude);
-      const lng = Number(loc.longitude);
-      if (isNaN(lat) || lat < -90 || lat > 90) {
-        throw new HttpException(
-          {
-            success: false,
-            error: `Invalid latitude: ${loc.latitude}`,
-            message: `Invalid latitude: ${loc.latitude}`,
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      if (isNaN(lng) || lng < -180 || lng > 180) {
-        throw new HttpException(
-          {
-            success: false,
-            error: `Invalid longitude: ${loc.longitude}`,
-            message: `Invalid longitude: ${loc.longitude}`,
-          },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-    }
-  }
+
 
   // Tenant comes from the guard, never from `body.tenantId`.
   @Post()
@@ -260,10 +200,6 @@ export class TemplatesController {
       if (body.heroImageUrl !== undefined)
         upsertPayload.heroImageUrl = body.heroImageUrl;
 
-      if (body.storeLocations !== undefined) {
-        this.validateStoreLocations(body.storeLocations);
-        upsertPayload.storeLocations = body.storeLocations;
-      }
 
       this.applyLoyaltyRules(body, upsertPayload);
 
@@ -593,11 +529,6 @@ export class TemplatesController {
       if (body.logoUrl !== undefined) updatePayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         updatePayload.heroImageUrl = body.heroImageUrl;
-
-      if (body.storeLocations !== undefined) {
-        this.validateStoreLocations(body.storeLocations);
-        updatePayload.storeLocations = body.storeLocations;
-      }
 
       this.applyLoyaltyRules(body, updatePayload);
 

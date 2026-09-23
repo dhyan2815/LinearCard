@@ -77,7 +77,7 @@ export default function ProgramGallery() {
           <div key={p.id} className="relative group">
             <Link
               href={`/dashboard/programs/${p.id}/overview`}
-              className="block rounded-xl border border-border-subtle bg-surface-card p-4 hover:bg-surface-hover transition-colors min-h-full"
+              className="flex flex-col justify-between rounded-xl border border-border-subtle bg-surface-card p-4 hover:bg-surface-hover transition-colors min-h-27.5"
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="text-sm font-medium text-ink-dark pr-6">
@@ -87,7 +87,11 @@ export default function ProgramGallery() {
                   {p.status === 'published' ? 'Live' : 'Draft'}
                 </Badge>
               </div>
-              <p className="text-xs text-ink-muted mt-2 capitalize">{p.kind}</p>
+              <div className="flex items-center justify-between mt-4">
+                <p className="text-xs text-ink-muted capitalize">{p.kind}</p>
+                {/* Spacer to ensure the text doesn't flow under the absolute delete button */}
+                <div className="w-8" />
+              </div>
             </Link>
             
             <button

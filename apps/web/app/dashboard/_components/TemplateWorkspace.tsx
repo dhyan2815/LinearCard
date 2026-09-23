@@ -138,9 +138,6 @@ export const TemplateWorkspace = React.forwardRef(({
 
   const isTicketProgram = currentProgram?.kind === 'ticket';
 
-  const storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }> =
-    designData.storeLocations || [];
-
   // Saves the current design and returns the template id, so callers that
   // need a persisted template (publish, preview-on-device) don't each
   // re-implement the create-or-update dance.
@@ -149,19 +146,11 @@ export const TemplateWorkspace = React.forwardRef(({
       name: designData.cardTitle,
       archetype: designData.archetype,
       fieldRows: designData.rows,
-      storeLocations,
       hexBackgroundColor: designData.hexBackgroundColor,
       logoUrl: designData.logoUrl || null,
       heroImageUrl: designData.heroImageUrl || null,
     };
 
-    const saveProgramConfig = async () => {
-      if (!currentProgram?.id) return;
-      await apiClient(`/programs/${currentProgram.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ storeLocations }),
-      });
-    };
 
     if (savedTemplateId) {
       const data = await apiClient(`/templates/${savedTemplateId}`, {
@@ -169,7 +158,6 @@ export const TemplateWorkspace = React.forwardRef(({
         body: JSON.stringify(payload),
       });
       if (!data.success) throw new Error(data.error || 'Error saving draft');
-      await saveProgramConfig();
       setTemplateStatus('draft');
       return savedTemplateId;
     }
@@ -184,7 +172,6 @@ export const TemplateWorkspace = React.forwardRef(({
       }),
     });
     if (!data.success) throw new Error(data.error || 'Error saving draft');
-    await saveProgramConfig();
     setSavedTemplateId(data.template.id);
     setTemplateStatus('draft');
     return data.template.id;
@@ -257,6 +244,13 @@ export const TemplateWorkspace = React.forwardRef(({
       error: (err: any) => err.message || 'Resync failed'
     });
   };
+
+  const myTemplateInfo = currentProgram?.templates?.find((t: any) => t.id === savedTemplateId);
+  const isProgramNewer = myTemplateInfo?.updatedAt 
+    ? new Date(currentProgram?.updatedAt || 0) > new Date(myTemplateInfo.updatedAt) 
+    : false;
+
+  const isPublishDisabled = templateStatus === 'published' && !isProgramNewer;
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-3xl">
@@ -448,7 +442,7 @@ export const TemplateWorkspace = React.forwardRef(({
                 Save Draft
               </Button>
             )}
-            <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="shrink-0 whitespace-nowrap">
+            <Button type="button" disabled={isPublishDisabled} onClick={handlePublish} className="shrink-0 whitespace-nowrap">
               Publish Template
             </Button>
           </div>
