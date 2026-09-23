@@ -62,7 +62,7 @@ export class PassIssuanceService {
       isTestAccount?: boolean;
       marketingOptOutAt?: string | null;
     };
-    program?: { id: string } | null;
+    program?: { id: string; name?: string } | null;
     tenant?: { name?: string; classSuffix?: string } | null;
     /** Extra GenericObject fields (memberName, tier, balance, rows…). */
     passData?: Record<string, any>;
@@ -230,7 +230,7 @@ export class PassIssuanceService {
           this.shortPassUrl(passRecordId),
           passData.memberName || member.name || member.phone,
           passDesign.cardTitle || tenant?.name || 'LinearCard',
-          { tenantId, memberId: member.id },
+          { tenantId, memberId: member.id, programName: program?.name },
         )
         .catch((err) =>
           this.logger.warn(`WhatsApp pass link failed (non-fatal): ${err}`),

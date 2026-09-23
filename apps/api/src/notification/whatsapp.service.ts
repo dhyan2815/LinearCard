@@ -142,12 +142,14 @@ export class WhatsappService {
     walletUrl: string,
     memberName: string,
     brandName: string,
+    programName?: string,
   ) {
+    const itemName = programName ? programName.toLowerCase() : 'pass';
     return this.executeWithSoftTimeout(
       () =>
         this.provider.sendText(
           phone,
-          `🎉 Welcome, ${memberName}!\n\nYour *${brandName}* card has been securely saved to your Google Wallet.\nYou can now access it anytime to check your balance or scan at the store.\n\n_*Powered by LinearCard*_`,
+          `🎉 Welcome, ${memberName}!\n\nYour *${brandName}* ${itemName} has been securely saved to your Google Wallet.\nYou can now access it anytime from your phone.\n\n_*Powered by LinearCard*_`,
         ),
       8000,
       `sendPassLink to ${phone}`,
@@ -158,12 +160,14 @@ export class WhatsappService {
     phone: string,
     newBalance: string,
     brandName: string,
+    programName?: string,
   ) {
+    const itemName = programName ? programName.toLowerCase() : 'pass';
     return this.executeWithSoftTimeout(
       () =>
         this.provider.sendText(
           phone,
-          `✅ *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your wallet pass will refresh automatically._`,
+          `✅ *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your ${itemName} will refresh automatically._`,
         ),
       8000,
       `sendRedemptionReceipt to ${phone}`,
@@ -176,11 +180,12 @@ export class WhatsappService {
     walletUrl: string,
     memberName: string,
     brandName: string,
-    opts: { tenantId: string; memberId?: string },
+    opts: { tenantId: string; memberId?: string; programName?: string },
   ): Promise<void> {
+    const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
     return this.sendTextWithLog(
       phone,
-      `🎟️ Welcome, ${memberName}!\n\nYour *${brandName}* loyalty pass is ready.\n\nTap to add it to Google Wallet:\n${walletUrl}\n\n_Powered by LinearCard_`,
+      `🎟️ Welcome, ${memberName}!\n\nYour *${brandName}* ${itemName} is ready.\n\nTap to add it to Google Wallet:\n${walletUrl}\n\n_Powered by LinearCard_`,
       { ...opts, type: 'pass_link' },
     );
   }
@@ -189,11 +194,12 @@ export class WhatsappService {
     phone: string,
     newBalance: string,
     brandName: string,
-    opts: { tenantId: string; memberId?: string },
+    opts: { tenantId: string; memberId?: string; programName?: string },
   ): Promise<void> {
+    const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
     return this.sendTextWithLog(
       phone,
-      `🛒 *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your wallet pass will refresh automatically._`,
+      `🛒 *Transaction Confirmed*\n\nYour *${brandName}* balance has been updated.\n\nNew Balance: *${newBalance}*\n\n_Your ${itemName} will refresh automatically._`,
       { ...opts, type: 'receipt' },
     );
   }
@@ -201,11 +207,12 @@ export class WhatsappService {
   public async sendWalletSaveConfirmationWithLog(
     phone: string,
     brandName: string,
-    opts: { tenantId: string; memberId?: string },
+    opts: { tenantId: string; memberId?: string; programName?: string },
   ): Promise<void> {
+    const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
     return this.sendTextWithLog(
       phone,
-      `🎉 Success! Your ${brandName} card has been securely saved to your Google Wallet. You can now access it anytime to check your balance or scan at the store.`,
+      `🎉 Success! Your *${brandName}* ${itemName} has been securely saved to your Google Wallet. You can now access it anytime from your phone.`,
       { ...opts, type: 'wallet_save_confirmation' },
     );
   }
@@ -214,11 +221,12 @@ export class WhatsappService {
     phone: string,
     tierName: string,
     brandName: string,
-    opts: { tenantId: string; memberId?: string },
+    opts: { tenantId: string; memberId?: string; programName?: string },
   ): Promise<void> {
+    const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
     return this.sendTextWithLog(
       phone,
-      `🏆 Congratulations! You've been upgraded to *${tierName}* tier on your *${brandName}* card. Enjoy your new perks!`,
+      `🏆 Congratulations! You've been upgraded to *${tierName}* tier on your *${brandName}* ${itemName}. Enjoy your new perks!`,
       { ...opts, type: 'tier_upgrade' },
     );
   }

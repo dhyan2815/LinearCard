@@ -1567,6 +1567,16 @@ export class WalletService {
     const tiers = pass.tiers || [];
     const previousTier = pass.tier || 'Standard';
 
+    let programName: string | undefined;
+    if (pass.programId) {
+      const { data: prog } = await this.supabaseService.client
+        .from('Program')
+        .select('name')
+        .eq('id', pass.programId)
+        .maybeSingle();
+      if (prog) programName = prog.name;
+    }
+
     // Every Google Wallet call this method fans out to must use the pass's
     // OWN tenant credentials, not whatever instance happened to be injected.
     // Already-scoped instances (from forTenant) are reused as-is; the plain
@@ -1599,7 +1609,7 @@ export class WalletService {
             pass.phone,
             `${transaction.newBalance} Pts`,
             tenantName,
-            { tenantId: pass.tenantId, memberId: pass.memberId },
+            { tenantId: pass.tenantId, memberId: pass.memberId, programName },
           );
         } catch (err: any) {
           this.logger.warn(
@@ -1691,7 +1701,7 @@ export class WalletService {
           pass.phone,
           `${transaction.newBalance} Pts`,
           tenantName,
-          { tenantId: pass.tenantId, memberId: pass.memberId },
+          { tenantId: pass.tenantId, memberId: pass.memberId, programName },
         );
       } catch (err: any) {
         this.logger.warn(
@@ -1708,7 +1718,7 @@ export class WalletService {
             pass.phone,
             nextTier,
             tenantName,
-            { tenantId: pass.tenantId, memberId: pass.memberId },
+            { tenantId: pass.tenantId, memberId: pass.memberId, programName },
           );
         } catch (err: any) {
           this.logger.warn(

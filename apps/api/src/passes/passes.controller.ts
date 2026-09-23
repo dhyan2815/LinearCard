@@ -198,13 +198,23 @@ export class PassesController {
               : 'http://localhost:3000');
           const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
 
+          let programNameForMessage: string | undefined;
+          if (body.programId) {
+            const { data: p } = await this.supabaseService.client
+              .from('Program')
+              .select('name')
+              .eq('id', body.programId)
+              .maybeSingle();
+            if (p) programNameForMessage = p.name;
+          }
+
           this.whatsappService
             .sendPassLinkWithLog(
               body.phone,
               shortUrl,
               body.memberName || 'Member',
               body.cardTitle || passDesign.cardTitle || 'LinearCard',
-              { tenantId: targetTenantId, memberId: member.id },
+              { tenantId: targetTenantId, memberId: member.id, programName: programNameForMessage },
             )
             .catch((e) => console.error('WAHA delivery error:', e)); // Log delivery errors without failing the overall req
         }
@@ -377,7 +387,7 @@ export class PassesController {
         if (!data) {
           const { data: fuzzyPass } = await this.supabaseService.client
             .from('Pass')
-            .select('*, Member(*), Tenant(*)')
+            .select('*, Member(*), Tenant(*), Program(*)')
             .ilike('fullPassId', `%${passId}%`)
             .limit(1)
             .single();
@@ -477,7 +487,7 @@ export class PassesController {
                 pass.Member?.phone || phone,
                 balance.toString(),
                 pass.Tenant?.name || brandName || 'LinearCard',
-                { tenantId: pass.tenantId, memberId: pass.memberId },
+                { tenantId: pass.tenantId, memberId: pass.memberId, programName: pass.Program?.name },
               )
               .catch((err) =>
                 console.error('WhatsApp receipt failed (non-fatal):', err),
@@ -818,7 +828,7 @@ export class PassesController {
       if (result.transaction && result.transaction.passId) {
         const { data: fullPass } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member(*), Tenant(*)')
+          .select('*, Member(*), Tenant(*), Program(*)')
           .eq('id', result.transaction.passId)
           .single();
 
@@ -828,7 +838,7 @@ export class PassesController {
               fullPass.Member.phone,
               result.newBalance.toString() + ' Pts',
               fullPass.Tenant?.name || 'LinearCard',
-              { tenantId: fullPass.tenantId, memberId: fullPass.memberId },
+              { tenantId: fullPass.tenantId, memberId: fullPass.memberId, programName: fullPass.Program?.name },
             )
             .catch((err) =>
               console.error('WhatsApp receipt failed (non-fatal):', err),
@@ -909,7 +919,7 @@ export class PassesController {
       // We need to fetch full pass details to send the message properly.
       const { data: fullPass } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*), Program(*)')
         .eq('id', pass.id)
         .single();
 
@@ -919,7 +929,7 @@ export class PassesController {
             fullPass.Member.phone,
             result.newBalance.toString(),
             fullPass.Tenant?.name || 'LinearCard',
-            { tenantId: fullPass.tenantId, memberId: fullPass.memberId },
+            { tenantId: fullPass.tenantId, memberId: fullPass.memberId, programName: fullPass.Program?.name },
           )
           .catch((err) =>
             console.error('WhatsApp webhook receipt failed (non-fatal):', err),
@@ -986,7 +996,7 @@ export class PassesController {
       // Look up the pass by fullPassId (objectId in Google Wallet)
       const { data: pass } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*), Program(*)')
         .eq('fullPassId', objectId)
         .single();
 
@@ -1087,7 +1097,7 @@ export class PassesController {
           .sendWalletSaveConfirmationWithLog(
             pass.Member.phone,
             pass.Tenant?.name || 'LinearCard',
-            { tenantId: pass.tenantId, memberId: pass.memberId },
+            { tenantId: pass.tenantId, memberId: pass.memberId, programName: pass.Program?.name },
           )
           .catch((err) =>
             console.error(
