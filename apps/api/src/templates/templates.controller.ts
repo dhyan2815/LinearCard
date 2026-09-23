@@ -153,8 +153,6 @@ export class TemplatesController {
     }
   }
 
-
-
   // Tenant comes from the guard, never from `body.tenantId`.
   @Post()
   @UseGuards(TenantGuard)
@@ -199,7 +197,6 @@ export class TemplatesController {
       if (body.logoUrl !== undefined) upsertPayload.logoUrl = body.logoUrl;
       if (body.heroImageUrl !== undefined)
         upsertPayload.heroImageUrl = body.heroImageUrl;
-
 
       this.applyLoyaltyRules(body, upsertPayload);
 

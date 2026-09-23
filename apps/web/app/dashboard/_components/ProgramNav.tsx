@@ -10,7 +10,6 @@ import {
   Palette,
   Megaphone,
   Zap,
-  Webhook,
   Settings2,
   Copy,
   MapPin,
@@ -33,7 +32,6 @@ const TABS = [
   { slug: 'locations',  label: 'Locations',  icon: MapPin          },
   { slug: 'messages',   label: 'Messages',   icon: ListChecks      },
   // ── Developer / admin ─────────────────────────────
-  { slug: 'webhooks',   label: 'Webhooks',   icon: Webhook         },
   { slug: 'settings',   label: 'Settings',   icon: Settings2       },
 ] as const;
 
