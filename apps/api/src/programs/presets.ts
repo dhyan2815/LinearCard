@@ -143,7 +143,7 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     ],
     tiers: [],
     logoUrl:
-      'https://images.unsplash.com/photo-1540039155733-d7696d54af58?w=1000&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1000&auto=format&fit=crop&q=80',
     heroUrl:
       'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=1000&auto=format&fit=crop&q=80',
   },
@@ -197,9 +197,9 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     tiers: [],
     loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 0 },
     logoUrl:
-      'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1000&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1491336477066-31156b5e4f35?w=1000&auto=format&fit=crop&q=80',
     heroUrl:
-      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1000&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=1000&auto=format&fit=crop&q=80',
   },
   {
     id: 'tiered_membership',
@@ -230,9 +230,9 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     ],
     loyalty: { earnRate: 0.1, redeemRate: 1, redeemCapPercent: 50 },
     logoUrl:
-      'https://images.unsplash.com/photo-1551028150-64b9f398f678?w=1000&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1000&auto=format&fit=crop&q=80',
     heroUrl:
-      'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=1000&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=1000&auto=format&fit=crop&q=80',
   },
   {
     id: 'loyalty_offer',
@@ -277,6 +277,10 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     ],
     tiers: [],
     loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 0 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1554774853-719586f82d77?w=1000&auto=format&fit=crop&q=80',
   },
   {
     id: 'gift_card',
@@ -347,7 +351,7 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     logoUrl:
       'https://images.unsplash.com/photo-1559525839-b184a4d698c7?w=1000&auto=format&fit=crop&q=80',
     heroUrl:
-      'https://images.unsplash.com/photo-1495474472207-464a8d960975?w=1000&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=1000&auto=format&fit=crop&q=80',
   },
   {
     id: 'access_pass',
@@ -372,7 +376,7 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     ],
     tiers: [],
     logoUrl:
-      'https://images.unsplash.com/photo-1506869640319-fea1a2f1b402?w=1000&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1000&auto=format&fit=crop&q=80',
     heroUrl:
       'https://images.unsplash.com/photo-1531058020387-3be344556be6?w=1000&auto=format&fit=crop&q=80',
   },

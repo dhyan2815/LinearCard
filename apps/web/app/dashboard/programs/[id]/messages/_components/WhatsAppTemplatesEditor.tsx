@@ -12,15 +12,15 @@ import { MessageSquare, Save, RefreshCw } from 'lucide-react';
 
 const DEFAULT_TEMPLATES = {
   otp: 'Your {{tenant}} login code is {{code}}.',
-  welcome: 'Welcome to the {{programName}}! We are thrilled to have you onboard.',
+  welcome: 'Welcome to the {{programName}}! We are thrilled to have you onboard.\n\nTap to add it to Google Wallet:\n{{walletUrl}}\n\n_Powered by LinearCard_',
   receipt: 'Thank you for your purchase! You earned {{points}} points. Your new balance is {{balance}}.',
-  walletSave: 'Hi {{memberName}}, here is your digital pass for {{programName}}!',
+  walletSave: '🎉 Success! Your *{{tenant}}* {{programName}} has been securely saved to your Google Wallet. You can now access it anytime from your phone.',
   tierUpgrade: 'Congratulations! You have been upgraded to the {{tierName}} tier.',
 };
 
 const TEMPLATE_VARS: Record<string, string[]> = {
   otp: ['tenant', 'code'],
-  welcome: ['programName', 'tenant'],
+  welcome: ['programName', 'tenant', 'memberName', 'walletUrl'],
   receipt: ['points', 'balance', 'programName', 'tenant'],
   walletSave: ['memberName', 'programName', 'tenant'],
   tierUpgrade: ['tierName', 'programName', 'tenant'],

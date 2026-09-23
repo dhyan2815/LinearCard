@@ -26,6 +26,7 @@ function formatTimeAgo(dateString: string) {
 
 export function LiveActivityView({
   tenantId,
+  programId,
   manageData,
   setManageData,
   handleUpdatePass,
@@ -44,7 +45,15 @@ export function LiveActivityView({
   const loadLogs = React.useCallback((offset: number) => {
     if (!tenantId) return;
     setLogFetchError(null);
-    apiClient(`/notifications/log?tenantId=${tenantId}&limit=${LOG_PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`)
+    const queryParams = new URLSearchParams({
+      tenantId,
+      limit: String(LOG_PAGE_SIZE),
+      offset: String(offset),
+      _t: String(Date.now())
+    });
+    if (programId) queryParams.append('programId', programId);
+
+    apiClient(`/notifications/log?${queryParams.toString()}`)
       .then(d => {
         if (!d.success) {
           setLogFetchError(d.error || 'Unknown API error');
@@ -56,7 +65,7 @@ export function LiveActivityView({
       .catch(err => {
         setLogFetchError(err.message || String(err));
       });
-  }, [tenantId]);
+  }, [tenantId, programId]);
 
   useEffect(() => { loadLogs(0); }, [loadLogs, successMsg]);
 

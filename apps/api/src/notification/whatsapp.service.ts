@@ -174,9 +174,9 @@ export class WhatsappService {
     programId?: string,
   ) {
     const itemName = programName ? programName.toLowerCase() : 'pass';
-    const defaultTemplate = `🎉 Welcome, {{memberName}}!\n\nYour *{{tenant}}* {{programName}} has been securely saved to your Google Wallet.\nYou can now access it anytime from your phone.\n\n_*Powered by LinearCard*_`;
-    const template = await this.resolveTemplate('walletSave', defaultTemplate, programId);
-    const message = this.fillTemplate(template, { memberName, tenant: brandName, programName: itemName });
+    const defaultTemplate = `Welcome to the {{programName}}! We are thrilled to have you onboard.\n\nTap to add it to Google Wallet:\n{{walletUrl}}\n\n_Powered by LinearCard_`;
+    const template = await this.resolveTemplate('welcome', defaultTemplate, programId);
+    const message = this.fillTemplate(template, { memberName, tenant: brandName, programName: itemName, walletUrl });
 
     return this.executeWithSoftTimeout(
       () => this.provider.sendText(phone, message),
@@ -213,9 +213,9 @@ export class WhatsappService {
     opts: { tenantId: string; memberId?: string; programName?: string; programId?: string },
   ): Promise<void> {
     const itemName = opts.programName ? opts.programName.toLowerCase() : 'pass';
-    const defaultTemplate = `🎟️ Welcome, {{memberName}}!\n\nYour *{{tenant}}* {{programName}} is ready.\n\nTap to add it to Google Wallet:\n${walletUrl}\n\n_Powered by LinearCard_`;
-    const template = await this.resolveTemplate('walletSave', defaultTemplate, opts.programId);
-    const message = this.fillTemplate(template, { memberName, tenant: brandName, programName: itemName });
+    const defaultTemplate = `Welcome to the {{programName}}! We are thrilled to have you onboard.\n\nTap to add it to Google Wallet:\n{{walletUrl}}\n\n_Powered by LinearCard_`;
+    const template = await this.resolveTemplate('welcome', defaultTemplate, opts.programId);
+    const message = this.fillTemplate(template, { memberName, tenant: brandName, programName: itemName, walletUrl });
 
     return this.sendTextWithLog(phone, message, { ...opts, type: 'pass_link' });
   }

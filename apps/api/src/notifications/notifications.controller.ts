@@ -37,15 +37,23 @@ export class NotificationsController {
         parseInt((req.query['offset'] as string) || '0', 10) || 0,
         0,
       );
+      const programId = req.query['programId'] as string | undefined;
 
-      const {
-        data: logs,
-        error,
-        count,
-      } = await this.supabaseService.client
+      let query = this.supabaseService.client
         .from('NotificationLog')
-        .select('*, member:Member(name, phone)', { count: 'exact' })
-        .eq('tenantId', tenantId)
+        .select(
+          programId
+            ? '*, member:Member!inner(name, phone, passes:Pass!inner(programId))'
+            : '*, member:Member(name, phone)',
+          { count: 'exact' },
+        )
+        .eq('tenantId', tenantId);
+
+      if (programId) {
+        query = query.eq('member.passes.programId', programId);
+      }
+
+      const { data: logs, error, count } = await query
         .order('sentAt', { ascending: false })
         .range(offset, offset + limit - 1);
 

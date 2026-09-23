@@ -17,6 +17,8 @@ interface Preset {
   hexBackgroundColor: string;
   fieldRows: any[];
   tiers: Array<{ name: string; minPoints: number }>;
+  logoUrl?: string;
+  heroUrl?: string;
 }
 
 const CATEGORIES = ['All', 'Membership', 'Coupons', 'Event tickets'] as const;
@@ -114,6 +116,8 @@ export default function TemplateGallery() {
                 hexBackgroundColor={preset.hexBackgroundColor}
                 rows={preset.fieldRows}
                 archetype={preset.archetype}
+                logoUrl={preset.logoUrl}
+                heroImageUrl={preset.heroUrl}
               />
             </div>
             <span className="text-sm font-medium text-ink-dark">

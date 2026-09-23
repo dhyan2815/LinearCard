@@ -38,6 +38,7 @@ export class MembersController {
     @Query('offset') offsetQuery?: string,
     @Query('q') q?: string,
     @Query('dir') dir?: string,
+    @Query('programId') programId?: string,
   ) {
     try {
       // Phase 6.1 (FE-3) — `total` is what lets the caller page instead of
@@ -58,6 +59,7 @@ export class MembersController {
         offset,
         q,
         dir,
+        programId,
       });
 
       if (error) {

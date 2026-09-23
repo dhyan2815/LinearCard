@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 export default function LiveActivityPage() {
   const { 
     selectedTenantId, 
+    selectedProgramId,
     manageData, 
     setManageData, 
     passHistory, 
@@ -97,6 +98,7 @@ export default function LiveActivityPage() {
       />
       <LiveActivityView
         tenantId={selectedTenantId}
+        programId={selectedProgramId}
         manageData={manageData}
         setManageData={setManageData}
         handleUpdatePass={handleUpdatePass}

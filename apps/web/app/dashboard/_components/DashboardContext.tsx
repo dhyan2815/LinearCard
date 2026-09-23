@@ -242,8 +242,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     if (selectedTenantId) {
       apiClient(`/dashboard/stats?tenantId=${selectedTenantId}`)
         .then(data => {
-           // The route returns these at the top level; reading `data.stats`
-           // silently set undefined and emptied the dashboard.
            if (data.success) {
              setStats({
                memberCount: data.memberCount ?? 0,
@@ -260,10 +258,17 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           }
           console.error('Failed to fetch stats:', err);
         });
+    }
+  }, [selectedTenantId, router]);
 
+  useEffect(() => {
+    if (selectedTenantId) {
       // Phase 6.1 — this feeds the "select from history" picker, not a full
       // listing; the bound is explicit so it can't silently grow into one.
-      apiClient(`/members?tenantId=${selectedTenantId}&limit=50`)
+      const queryParams = new URLSearchParams({ tenantId: selectedTenantId, limit: '50' });
+      if (selectedProgramId) queryParams.append('programId', selectedProgramId);
+      
+      apiClient(`/members?${queryParams.toString()}`)
         .then(data => {
           if (data.success) {
              const allPasses = data.members?.flatMap((m: any) => m.passes?.map((p: any) => ({
@@ -284,7 +289,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           console.error('Failed to fetch members:', err);
         });
     }
-  }, [selectedTenantId, router]);
+  }, [selectedTenantId, selectedProgramId, router]);
 
   const handleTenantChange = (newTenantId: string) => {
     setSelectedTenantId(newTenantId);
