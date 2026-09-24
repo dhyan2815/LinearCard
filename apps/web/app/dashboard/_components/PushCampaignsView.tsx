@@ -113,8 +113,7 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  // 7.4: a send is queued, not completed, by the time this request returns.
-  const [result, setResult] = useState<{ queued: number } | null>(null);
+  const [result, setResult] = useState<{ sent: number; failed: number } | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -176,11 +175,9 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
         body: JSON.stringify({ tenantId, name, channel, header, body: message, audienceFilter }),
       });
       if (!data.success) throw new Error(data.error || 'Failed to send');
-      setResult({ queued: data.recipientCount ?? 0 });
+      setResult({ sent: data.sent ?? 0, failed: data.failed ?? 0 });
       setMessage(''); setHeader(''); setName('');
-      // Delivery counts land on the campaign row as the worker gets through
-      // the audience, so the history below is what reports the outcome.
-      [2000, 6000, 15000].forEach(ms => setTimeout(loadCampaigns, ms));
+      loadCampaigns();
     } catch (err: any) {
       setSendError(err.message);
     } finally {
@@ -354,7 +351,10 @@ export function PushCampaignsView({ tenantId }: { tenantId: string }) {
               </>
             )}
             {result && (
-              <Alert variant="success">Queued for {result.queued} members. Delivery progress appears in the history below.</Alert>
+              <Alert variant="success">
+                Sent to {result.sent} member{result.sent === 1 ? '' : 's'}
+                {result.failed > 0 ? `, ${result.failed} failed` : ''}.
+              </Alert>
             )}
             {sendError && <Alert variant="error">{sendError}</Alert>}
             <Button

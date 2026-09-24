@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import WhatsAppTemplatesEditor from './_components/WhatsAppTemplatesEditor';
 
 export const metadata: Metadata = {
-  title: 'WhatsApp Messages — LinearCard',
+  title: 'Messages — LinearCard',
 };
 
 export default async function ProgramMessagesPage({ params }: { params: { id: string } }) {
