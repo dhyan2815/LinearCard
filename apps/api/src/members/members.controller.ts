@@ -449,14 +449,17 @@ export class MembersController {
         .eq('id', passId)
         .single();
       if (passError || !pass)
-        return { success: false, error: 'Pass not found' };
+        throw new HttpException(
+          { success: false, error: 'Pass not found' },
+          HttpStatus.BAD_REQUEST,
+        );
 
       const newBalance = Number(newBalanceRaw);
       if (!Number.isFinite(newBalance) || newBalance < 0)
-        return {
-          success: false,
-          error: 'newBalance must be a non-negative number',
-        };
+        throw new HttpException(
+          { success: false, error: 'newBalance must be a non-negative number' },
+          HttpStatus.BAD_REQUEST,
+        );
 
       let finalTier = pass.tier;
       if (newTier) {
@@ -520,7 +523,11 @@ export class MembersController {
 
       return { success: true, newBalance };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }
