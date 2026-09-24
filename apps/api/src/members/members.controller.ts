@@ -75,12 +75,14 @@ export class MembersController {
   }
 
   @Get(':id')
-  async getMemberById(@Param('id') id: string) {
+  @UseGuards(TenantGuard)
+  async getMemberById(@Param('id') id: string, @Req() req: TenantRequest) {
     try {
       const { data: member, error } = await this.supabaseService.client
         .from('Member')
         .select('*, Tenant(name)')
         .eq('id', id)
+        .eq('tenantId', req.tenantId!)
         .single();
       if (error || !member)
         throw new HttpException(
