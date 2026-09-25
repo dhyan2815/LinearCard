@@ -15,32 +15,6 @@ In LinearCard, a tenant runs multiple **programs** (loyalty clubs, gym membershi
 
 ---
 
-## Visual System Architecture
-
-The LinearCard architecture spans a Next.js App Router frontend, a NestJS API backend, Supabase PostgreSQL with application-level tenant isolation, and integrations with Google Wallet, WhatsApp, and external POS/PSP systems.
-
-### System Data Flow Diagram
-The complete lifecycle from consumer onboarding and QR scanning to transaction processing, tier evaluation, Google Wallet updates, and WhatsApp delivery:
-
-![LinearCard Architecture Data Flow](architecture/data_flow_diagram.jpg)
-
-### End-to-End Sequence Diagram
-Detailed sequence of pass issuance, POS order verification, tier computation, Google Wallet class/object synchronization, and customer messaging:
-
-![LinearCard Sequence Diagram](architecture/sequence_diagram.jpg)
-
-### Core Activity Diagram
-Step-by-step decision flow for member enrollment, order processing, tier progression, push campaigns, and data protection:
-
-![LinearCard Activity Diagram](architecture/activity_diagram.jpg)
-
-### Entity-Relationship Diagram (ERD)
-Database schema showing relationships between Tenants, Programs, PassTemplates, Tiers, Passes, Members, Campaigns, Store Locations, and Audit Logs:
-
-![LinearCard Entity-Relationship Diagram](architecture/entity_relationship_diagram.jpg)
-
----
-
 ## Features & Capabilities
 
 ### Google Wallet Integration
@@ -215,6 +189,32 @@ linearcard/
 ├── AGENTS.md                          # Next.js 16 breaking change guidelines
 └── README.md
 ```
+
+---
+
+## Visual System Architecture
+
+The LinearCard architecture spans a Next.js App Router frontend, a NestJS API backend, Supabase PostgreSQL with application-level tenant isolation, and integrations with Google Wallet, WhatsApp, and external POS/PSP systems.
+
+### System Data Flow Diagram
+The complete lifecycle from consumer onboarding and QR scanning to transaction processing, tier evaluation, Google Wallet updates, and WhatsApp delivery:
+
+![LinearCard Architecture Data Flow](architecture/data_flow_diagram.jpg)
+
+### End-to-End Sequence Diagram
+Detailed sequence of pass issuance, POS order verification, tier computation, Google Wallet class/object synchronization, and customer messaging:
+
+![LinearCard Sequence Diagram](architecture/sequence_diagram.jpg)
+
+### Core Activity Diagram
+Step-by-step decision flow for member enrollment, order processing, tier progression, push campaigns, and data protection:
+
+![LinearCard Activity Diagram](architecture/activity_diagram.jpg)
+
+### Entity-Relationship Diagram (ERD)
+Database schema showing relationships between Tenants, Programs, PassTemplates, Tiers, Passes, Members, Campaigns, Store Locations, and Audit Logs:
+
+![LinearCard Entity-Relationship Diagram](architecture/entity_relationship_diagram.jpg)
 
 ---
 
