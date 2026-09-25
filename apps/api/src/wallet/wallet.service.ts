@@ -57,6 +57,22 @@ export const RAW_PROTECTED_KEYS = ['id', 'classId', 'callbackOptions'];
  * wholesale, because a half-merged `merchantLocations` or `cardRowTemplateInfos`
  * is never what the caller meant.
  */
+/**
+ * The brand line shown at the top of every Google Wallet pass and as the
+ * class `issuerName`. Combines the tenant's name with the program/template
+ * title so two presets under one tenant (e.g. "Bistro Cafe" running both a
+ * Coffee Loyalty and a Gift Card program) are distinguishable on the pass —
+ * previously this picked the tenant name ALONE whenever it was present,
+ * which is always, so the program name was silently dropped (WAL-10).
+ */
+export function resolveCardTitle(
+  tenantName?: string | null,
+  templateTitle?: string | null,
+): string | undefined {
+  if (tenantName && templateTitle) return `${tenantName} · ${templateTitle}`;
+  return tenantName || templateTitle || undefined;
+}
+
 export function deepMergeRaw(base: any, raw: any): any {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
   const out = { ...base };
@@ -240,6 +256,7 @@ export interface GoogleWalletPassOptions {
   logoUrl?: string;
   heroImageUrl?: string;
   rows?: any[];
+  programId?: string;
   /** Part 4 escape hatch — deep-merged last. See `applyRaw`. */
   rawObject?: Record<string, any>;
 }
@@ -393,6 +410,7 @@ export class WalletService {
     classSuffix?: string;
     cardTitle?: string;
     fieldRows?: any[];
+    programId?: string;
   }> {
     const { data: tenant } = await this.supabaseService.client
       .from('Tenant')
@@ -447,8 +465,9 @@ export class WalletService {
         logoUrl: template.logoUrl || tenant?.logoUrl,
         heroImageUrl: template.heroImageUrl || tenant?.heroUrl,
         classSuffix: template.classSuffix || tenant?.classSuffix,
-        cardTitle: tenant?.name || template.title,
+        cardTitle: resolveCardTitle(tenant?.name, template.title),
         fieldRows: template.fieldRows || [],
+        programId: template.programId || programId,
       };
     }
 
@@ -459,6 +478,7 @@ export class WalletService {
       classSuffix: tenant?.classSuffix,
       cardTitle: tenant?.name,
       fieldRows: [],
+      programId: programId,
     };
   }
 
@@ -502,8 +522,9 @@ export class WalletService {
    * public tunnel URL in `PUBLIC_CALLBACK_URL`.
    */
   public resolveCallbackUrl(): string {
+    const isDeployed = !!process.env.VERCEL_ENV;
     const base = (
-      process.env.PUBLIC_CALLBACK_URL ||
+      (!isDeployed && process.env.PUBLIC_CALLBACK_URL) ||
       process.env.NEXT_PUBLIC_API_URL ||
       (process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL
         ? `https://${process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL}`
@@ -547,6 +568,24 @@ export class WalletService {
         .order('updatedAt', { ascending: false })
         .limit(1)
         .maybeSingle();
+      return data?.storeLocations ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Geofences for a program. The Program row is the canonical source of truth
+   * for locations (shared by all tiers in that program).
+   */
+  public async storeLocationsForProgram(programId?: string): Promise<any[]> {
+    if (!programId) return [];
+    try {
+      const { data } = await this.supabaseService.client
+        .from('Program')
+        .select('storeLocations')
+        .eq('id', programId)
+        .single();
       return data?.storeLocations ?? [];
     } catch {
       return [];
@@ -635,18 +674,14 @@ export class WalletService {
       Array.isArray(templateData.storeLocations) &&
       templateData.storeLocations.length > 0
     ) {
-      const locations = templateData.storeLocations
+      classPayload.merchantLocations = templateData.storeLocations
         .slice(0, 10)
         .map(
           (l: { latitude: number | string; longitude: number | string }) => ({
-            kind: 'walletobjects#latLongPoint',
             latitude: Number(l.latitude),
             longitude: Number(l.longitude),
           }),
         );
-
-      classPayload.merchantLocations = locations;
-      classPayload.locations = locations; // Fallback for backwards compatibility if Google drops merchantLocations
     }
 
     // Throws on a localhost URL rather than poisoning a live class (ENV-4).
@@ -857,18 +892,21 @@ export class WalletService {
           });
         });
       } else if (formattedBalance !== undefined || updateData.tier) {
-        patchPayload.textModulesData = [
-          {
+        patchPayload.textModulesData = [];
+        if (formattedBalance !== undefined) {
+          patchPayload.textModulesData.push({
             id: 'balance',
             header: 'Points / Status',
-            body: formattedBalance || '0 Pts',
-          },
-          {
+            body: formattedBalance,
+          });
+        }
+        if (updateData.tier) {
+          patchPayload.textModulesData.push({
             id: 'tier_info',
             header: 'Tier Level',
-            body: updateData.tier || 'Standard',
-          },
-        ];
+            body: updateData.tier,
+          });
+        }
       }
 
       if (updateData.tier) {
@@ -880,14 +918,21 @@ export class WalletService {
         };
       }
 
+      if (updateData.cardTitle) {
+        patchPayload.cardTitle = {
+          defaultValue: {
+            language: 'en-US',
+            value: updateData.cardTitle,
+          },
+        };
+      }
+
       if (
         genericObject.barcode &&
         (formattedBalance !== undefined || updateData.tier)
       ) {
         const currentTier =
-          updateData.tier ||
-          genericObject.subheader?.defaultValue?.value ||
-          'Member';
+          updateData.tier || genericObject.subheader?.defaultValue?.value;
 
         let displayBalance = formattedBalance;
         if (displayBalance === undefined) {
@@ -897,13 +942,22 @@ export class WalletService {
             );
             if (balMod) displayBalance = balMod.body;
           }
-          if (displayBalance === undefined) displayBalance = '0 Pts';
         }
 
-        patchPayload.barcode = {
-          ...genericObject.barcode,
-          alternateText: `${currentTier} • ${displayBalance}`,
-        };
+        if (currentTier !== undefined || displayBalance !== undefined) {
+          const parts = [];
+          if (currentTier) parts.push(currentTier);
+          if (displayBalance) parts.push(displayBalance);
+          patchPayload.barcode = {
+            ...genericObject.barcode,
+            alternateText: parts.join(' • '),
+          };
+        } else {
+          patchPayload.barcode = {
+            ...genericObject.barcode,
+            alternateText: ' ',
+          };
+        }
       }
 
       if (updateData.hexBackgroundColor) {
@@ -984,7 +1038,7 @@ export class WalletService {
       memberName,
       cardTitle,
       balance,
-      tier = 'Member',
+      tier,
       hexBackgroundColor = DEFAULT_PASS_HEX,
       classSuffix,
       logoUrl = '',
@@ -1000,9 +1054,6 @@ export class WalletService {
     const missing = [
       !memberName && 'memberName',
       !cardTitle && 'cardTitle',
-      balance === undefined || balance === null || balance === ''
-        ? 'balance'
-        : null,
       !classSuffix && 'classSuffix',
     ].filter(Boolean);
     if (missing.length) {
@@ -1065,10 +1116,20 @@ export class WalletService {
         });
       });
     } else {
-      textModulesData.push(
-        { id: 'balance', header: 'Points / Status', body: balance },
-        { id: 'tier_info', header: 'Tier Level', body: tier || 'Standard' },
-      );
+      if (balance !== undefined) {
+        textModulesData.push({
+          id: 'balance',
+          header: 'Points / Status',
+          body: balance,
+        });
+      }
+      if (tier !== undefined) {
+        textModulesData.push({
+          id: 'tier_info',
+          header: 'Tier Level',
+          body: tier,
+        });
+      }
     }
 
     const genericObjectPayload = {
@@ -1078,12 +1139,6 @@ export class WalletService {
         defaultValue: {
           language: 'en-US',
           value: cardTitle || 'LinearCard',
-        },
-      },
-      subheader: {
-        defaultValue: {
-          language: 'en-US',
-          value: tier || 'Member',
         },
       },
       header: {
@@ -1096,10 +1151,29 @@ export class WalletService {
       barcode: {
         type: 'QR_CODE',
         value: barcodeValue,
-        alternateText: `${tier || 'Member'} • ${balance || '0 Pts'}`,
       },
       hexBackgroundColor: hexBackgroundColor || DEFAULT_PASS_HEX,
     } as any;
+
+    if (tier) {
+      genericObjectPayload.subheader = {
+        defaultValue: {
+          language: 'en-US',
+          value: tier,
+        },
+      };
+    }
+
+    if (tier || balance !== undefined) {
+      const parts = [];
+      if (tier) parts.push(tier);
+      if (balance !== undefined) parts.push(balance);
+      genericObjectPayload.barcode.alternateText = parts.join(' • ');
+    } else {
+      // For tier-less passes, explicitly set a space so Google Wallet
+      // doesn't fall back to displaying the raw barcode URL/value.
+      genericObjectPayload.barcode.alternateText = ' ';
+    }
 
     // Google Wallet ignores hexBackgroundColor if no logo is provided.
     // To match the frontend preview card's behavior, we generate a fallback initials logo.
@@ -1157,7 +1231,9 @@ export class WalletService {
           logoUrl,
           heroImageUrl,
           rows,
-          storeLocations: await this.storeLocationsForSuffix(classSuffix),
+          storeLocations: await this.storeLocationsForProgram(
+            options.programId,
+          ),
         });
         await client.request({
           url: 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject',
@@ -1521,6 +1597,16 @@ export class WalletService {
     const tiers = pass.tiers || [];
     const previousTier = pass.tier || 'Standard';
 
+    let programName: string | undefined;
+    if (pass.programId) {
+      const { data: prog } = await this.supabaseService.client
+        .from('Program')
+        .select('name')
+        .eq('id', pass.programId)
+        .maybeSingle();
+      if (prog) programName = prog.name;
+    }
+
     // Every Google Wallet call this method fans out to must use the pass's
     // OWN tenant credentials, not whatever instance happened to be injected.
     // Already-scoped instances (from forTenant) are reused as-is; the plain
@@ -1553,7 +1639,12 @@ export class WalletService {
             pass.phone,
             `${transaction.newBalance} Pts`,
             tenantName,
-            { tenantId: pass.tenantId, memberId: pass.memberId },
+            {
+              tenantId: pass.tenantId,
+              memberId: pass.memberId,
+              programName,
+              programId: pass.programId,
+            },
           );
         } catch (err: any) {
           this.logger.warn(
@@ -1645,7 +1736,12 @@ export class WalletService {
           pass.phone,
           `${transaction.newBalance} Pts`,
           tenantName,
-          { tenantId: pass.tenantId, memberId: pass.memberId },
+          {
+            tenantId: pass.tenantId,
+            memberId: pass.memberId,
+            programName,
+            programId: pass.programId,
+          },
         );
       } catch (err: any) {
         this.logger.warn(
@@ -1662,7 +1758,12 @@ export class WalletService {
             pass.phone,
             nextTier,
             tenantName,
-            { tenantId: pass.tenantId, memberId: pass.memberId },
+            {
+              tenantId: pass.tenantId,
+              memberId: pass.memberId,
+              programName,
+              programId: pass.programId,
+            },
           );
         } catch (err: any) {
           this.logger.warn(
@@ -1811,11 +1912,26 @@ export class WalletService {
     // Per-program economics (WAL-4 + Phase 3.1). The Program row owns these
     // now; a program created before the migration (or a pass with no
     // program) falls back to its templates, then to the defaults.
-    const { data: programRow } = pass.programId
+    let activeProgramId = pass.programId;
+    if (!activeProgramId && pass.Tenant?.PassTemplate) {
+      const templates = Array.isArray(pass.Tenant.PassTemplate)
+        ? pass.Tenant.PassTemplate
+        : [pass.Tenant.PassTemplate];
+      const published = templates
+        .filter((t: any) => t?.status === 'published')
+        .sort((a: any, b: any) =>
+          String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || '')),
+        );
+      if (published.length > 0 && published[0].programId) {
+        activeProgramId = published[0].programId;
+      }
+    }
+
+    const { data: programRow } = activeProgramId
       ? await this.supabaseService.client
           .from('Program')
           .select('id, kind, earnRate, redeemRate, redeemCapPercent')
-          .eq('id', pass.programId)
+          .eq('id', activeProgramId)
           .maybeSingle()
       : { data: null };
 
@@ -1831,7 +1947,7 @@ export class WalletService {
     const rules: LoyaltyRules = rulesForPass(
       programRow,
       pass.Tenant?.PassTemplate,
-      pass.programId,
+      activeProgramId,
     );
 
     const currentBalance = Number(pass.balance) || 0;

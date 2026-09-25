@@ -3,6 +3,7 @@ import { CreditCard, QrCode } from 'lucide-react';
 import Link from 'next/link';
 import { DashboardProvider } from './_components/DashboardContext';
 import { DashboardSidebar } from './_components/DashboardSidebar';
+import { DashboardHeaderBrand } from './_components/DashboardHeaderBrand';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,14 +11,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Subtle Grain / Glow background overlay */}
       <div className="fixed inset-0 z-0 pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_top,var(--tw-gradient-stops))] from-border-strong via-canvas to-canvas" />
 
-      <header className="border-b border-border-subtle bg-canvas/80 backdrop-blur-xl sticky top-0 z-40 shrink-0">
+      <DashboardProvider>
+        <header className="border-b border-border-subtle bg-canvas/80 backdrop-blur-xl sticky top-0 z-40 shrink-0">
         <div className="w-full px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-brand-blue flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
                 <CreditCard className="w-4 h-4 text-white" />
               </div>
-              <span className="font-semibold text-base text-ink-dark tracking-tight">LinearCard Admin</span>
+              <div className="flex flex-col">
+                <span className="font-semibold text-base text-ink-dark tracking-tight leading-tight">LinearCard Admin</span>
+                <DashboardHeaderBrand />
+              </div>
             </Link>
           </div>
           <div className="flex items-center gap-4">
@@ -34,19 +39,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </header>
 
       <div className="relative z-10 flex-1 flex flex-col min-h-0">
-        <DashboardProvider>
-          <div className="flex flex-1 overflow-hidden bg-canvas min-h-0">
-            <DashboardSidebar />
-            <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-canvas">
+        <div className="flex flex-1 overflow-hidden bg-canvas min-h-0">
+          <DashboardSidebar />
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-canvas">
               <main className="flex-1 overflow-y-auto">
-                <div className="max-w-[1120px] mx-auto px-8 py-6 lg:py-8">
+                <div className="max-w-280 mx-auto px-8 py-6 lg:py-8">
                   {children}
                 </div>
               </main>
             </div>
           </div>
-        </DashboardProvider>
-      </div>
+        </div>
+      </DashboardProvider>
     </div>
   );
 }

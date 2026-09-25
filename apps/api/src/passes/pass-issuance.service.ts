@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { WalletService } from '../wallet/wallet.service';
 import { WhatsappService } from '../notification/whatsapp.service';
 import { WebhookService } from '../developers/webhook.service';
+import { AuditService } from '../audit/audit.service';
 import { resolveImageUrl } from './passes.controller';
 
 export interface IssuePassResult {
@@ -35,6 +36,8 @@ export class PassIssuanceService {
     private readonly walletService: WalletService,
     private readonly whatsappService: WhatsappService,
     private readonly webhookService: WebhookService,
+    /** Analytics only — optional so a caller can construct this without it. */
+    @Optional() private readonly auditService?: AuditService,
   ) {}
 
   /** The program's lowest tier — never a hardcoded 'Bronze' that may not exist. */
@@ -52,8 +55,14 @@ export class PassIssuanceService {
 
   async issueForMember(input: {
     tenantId: string;
-    member: { id: string; phone: string; name?: string | null };
-    program?: { id: string } | null;
+    member: {
+      id: string;
+      phone: string;
+      name?: string | null;
+      isTestAccount?: boolean;
+      marketingOptOutAt?: string | null;
+    };
+    program?: { id: string; name?: string } | null;
     tenant?: { name?: string; classSuffix?: string } | null;
     /** Extra GenericObject fields (memberName, tier, balance, rows…). */
     passData?: Record<string, any>;
@@ -78,9 +87,44 @@ export class PassIssuanceService {
       tenant = data;
     }
 
+    // Demo-status tenants may only issue to registered test members. This is
+    // the one chokepoint every issuance path takes (enrollment OTP, payments
+    // webhook), so the gate lives here rather than at each call site. Fails
+    // OPEN on a missing/unknown status: 'demo' has to be set explicitly, so an
+    // unreadable tenant row can never block a live tenant.
+    /*
+    // Temporarily disabled for PoC: Allow passes to be issued to any number regardless of test account status
+    if ((tenant as any)?.publishStatus === 'demo') {
+      let isTestAccount = member.isTestAccount;
+      if (isTestAccount === undefined) {
+        const { data: memberRow } = await this.supabaseService.client
+          .from('Member')
+          .select('isTestAccount')
+          .eq('id', member.id)
+          .eq('tenantId', tenantId)
+          .maybeSingle();
+        isTestAccount = memberRow?.isTestAccount ?? false;
+      }
+      if (!isTestAccount) {
+        return {
+          success: false,
+          existing: false,
+          passId: null,
+          error:
+            'This tenant is in demo mode: passes can only be issued to registered test accounts until approved for production.',
+        };
+      }
+    }
+    */
+
     const entryTier = await this.resolveEntryTier(program?.id);
-    const startingTier = passData.tier || entryTier?.name || 'Bronze';
-    const startingBalance = passData.balance || '0 Pts';
+    const hasTierConcept = passData.tier !== undefined || entryTier !== null;
+    const startingTier = hasTierConcept
+      ? passData.tier || entryTier?.name || undefined
+      : undefined;
+    const startingBalance = hasTierConcept
+      ? passData.balance || '0 Pts'
+      : undefined;
 
     const passDesign = await this.walletService.resolveTenantPassDesign(
       tenantId,
@@ -123,14 +167,21 @@ export class PassIssuanceService {
     const passResult = await tenantWallet.createGoogleWalletPass({
       ...passData,
       passId: explicitPassId,
+      programId: passDesign.programId,
       tier: startingTier,
       balance: startingBalance,
-      barcodeAltText: `${startingTier} Tier • ${startingBalance}`,
+      barcodeAltText: hasTierConcept
+        ? `${startingTier} Tier • ${startingBalance}`
+        : undefined,
       cardTitle: passDesign.cardTitle || tenant?.name,
       classSuffix: passDesign.classSuffix || tenant?.classSuffix,
       hexBackgroundColor: passDesign.hexBackgroundColor,
       logoUrl: resolveImageUrl(passDesign.logoUrl),
       heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),
+      // The template's Dynamic Field Architecture — without this the object
+      // falls back to WalletService's hardcoded balance/tier_info skeleton,
+      // ignoring whatever fields the designer actually configured.
+      rows: passData.rows ?? passDesign.fieldRows,
     });
 
     let passRecordId: string | null = null;
@@ -146,17 +197,34 @@ export class PassIssuanceService {
             tierId: entryTier?.id ?? null,
             fullPassId: passResult.fullPassId,
             balance: 0,
-            tier: startingTier,
+            tier: startingTier ?? null,
           })
           .select()
           .single();
       if (!passError && insertedPass) {
         passRecordId = insertedPass.id;
         this.webhookService
-          .dispatch(tenantId, 'member.enrolled', {
-            passId: passRecordId,
+          .dispatch(
+            tenantId,
+            'member.enrolled',
+            {
+              passId: passRecordId,
+              memberId: member.id,
+              phone: member.phone,
+            },
+            program?.id ?? null,
+          )
+          .catch(() => {});
+
+        // Analytics only — a failed write must never fail issuance.
+        this.auditService
+          ?.record({
+            tenantId,
             memberId: member.id,
-            phone: member.phone,
+            passId: passRecordId,
+            programId: program?.id ?? null,
+            actor: 'system',
+            action: 'pass_created',
           })
           .catch(() => {});
       }
@@ -168,12 +236,39 @@ export class PassIssuanceService {
           member.phone,
           this.shortPassUrl(passRecordId),
           passData.memberName || member.name || member.phone,
-          tenant?.name || 'LinearCard',
-          { tenantId, memberId: member.id },
+          passDesign.cardTitle || tenant?.name || 'LinearCard',
+          {
+            tenantId,
+            memberId: member.id,
+            programName: program?.name,
+            programId: program?.id,
+          },
         )
         .catch((err) =>
           this.logger.warn(`WhatsApp pass link failed (non-fatal): ${err}`),
         );
+    }
+
+    // Program-level welcome, after the save link so the pass arrives first.
+    // Opt-outs are never a choice — same rule every campaign send follows.
+    if (program?.id && passRecordId) {
+      const { data: programRow } = await this.supabaseService.client
+        .from('Program')
+        .select('welcomeMessage')
+        .eq('id', program.id)
+        .maybeSingle();
+      const welcome = (programRow?.welcomeMessage || '').trim();
+      if (welcome && !member.marketingOptOutAt) {
+        this.whatsappService
+          .sendTextWithLog(member.phone, welcome, {
+            tenantId,
+            memberId: member.id,
+            type: 'program_welcome',
+          })
+          .catch((err: any) =>
+            this.logger.warn(`Welcome message failed (non-fatal): ${err}`),
+          );
+      }
     }
 
     return {

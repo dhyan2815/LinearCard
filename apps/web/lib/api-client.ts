@@ -3,7 +3,7 @@
 // exponential retries — ~22s of a frozen-looking page. Dev fails fast and
 // loud instead; production keeps the patient settings.
 const IS_DEV = process.env.NODE_ENV !== 'production';
-const API_TIMEOUT = IS_DEV ? 4000 : 15000;
+const API_TIMEOUT = IS_DEV ? 30000 : 30000;
 const MAX_RETRIES = IS_DEV ? 1 : 3;
 const RETRY_DELAY_MS = 1000; // exponential: 1s, 2s, 4s
 
@@ -56,6 +56,9 @@ async function fetchWithRetry(url: string, options: RequestInit, attempt = 1): P
 
     // Log actual error for debugging
     console.error(`[API] ${url} (attempt ${attempt}): ${error instanceof Error ? error.message : String(error)}`);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.');
+    }
     throw error;
   }
 }

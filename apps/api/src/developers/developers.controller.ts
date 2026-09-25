@@ -17,7 +17,7 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { ApiKeyService } from './api-key.service';
 import { WebhookService, isPublicWebhookUrl } from './webhook.service';
 
-const WEBHOOK_EVENTS = [
+export const WEBHOOK_EVENTS = [
   'pass.installed',
   'pass.deleted',
   'points.awarded',

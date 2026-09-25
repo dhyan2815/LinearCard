@@ -45,6 +45,8 @@ export interface ProgramPreset {
     redeemRate: number;
     redeemCapPercent: number;
   };
+  logoUrl?: string;
+  heroUrl?: string;
 }
 
 export const PROGRAM_PRESETS: ProgramPreset[] = [
@@ -74,6 +76,10 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
       { name: 'Gold', minPoints: 500 },
     ],
     loyalty: { earnRate: 0.1, redeemRate: 1, redeemCapPercent: 50 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1000&auto=format&fit=crop&q=80',
   },
   {
     id: 'gym_membership',
@@ -106,6 +112,10 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
     ],
     // One "point" per visit: earnRate 1 with the scan sending amount=1.
     loyalty: { earnRate: 1, redeemRate: 1, redeemCapPercent: 0 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=1000&auto=format&fit=crop&q=80',
   },
   {
     id: 'event_ticket',
@@ -132,6 +142,10 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
       },
     ],
     tiers: [],
+    logoUrl:
+      'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=1000&auto=format&fit=crop&q=80',
   },
   {
     id: 'travel_ticket',
@@ -158,6 +172,213 @@ export const PROGRAM_PRESETS: ProgramPreset[] = [
       },
     ],
     tiers: [],
+    logoUrl:
+      'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTzN-jFx_6Gr2VzxPYFkXT-BS-Lnvkz5BoFk9dDA51Dj2HDTUMK0lHdx7Y&s=10',
+  },
+  {
+    id: 'modern_membership',
+    name: 'Modern membership',
+    kind: 'loyalty',
+    archetype: 'membership',
+    description:
+      'A plain membership card: member id and renewal date, no points maths.',
+    hexBackgroundColor: '#1F2933',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'memberId', header: 'Member', body: '—' },
+          { key: 'membership_expires', header: 'Renews', body: '—' },
+        ],
+      },
+    ],
+    tiers: [],
+    loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 0 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1491336477066-31156b5e4f35?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=1000&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'tiered_membership',
+    name: 'Tiered membership',
+    kind: 'loyalty',
+    archetype: 'membership',
+    description:
+      'Four tiers earned on spend, with the current tier shown on the pass.',
+    hexBackgroundColor: '#2D1B4E',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'points', header: 'Points', body: '0' },
+          { key: 'tier', header: 'Tier', body: 'Member' },
+        ],
+      },
+      {
+        id: 'row2',
+        columns: [{ key: 'memberId', header: 'Member', body: '—' }],
+      },
+    ],
+    tiers: [
+      { name: 'Member', minPoints: 0 },
+      { name: 'Silver', minPoints: 250 },
+      { name: 'Gold', minPoints: 1000 },
+      { name: 'Platinum', minPoints: 5000 },
+    ],
+    loyalty: { earnRate: 0.1, redeemRate: 1, redeemCapPercent: 50 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=1000&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'loyalty_offer',
+    name: 'Loyalty offer',
+    kind: 'loyalty',
+    archetype: 'loyalty',
+    description:
+      'A running offer on a loyalty card — points plus the current reward.',
+    hexBackgroundColor: '#7A2E1D',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'points', header: 'Points', body: '0' },
+          { key: 'reward', header: 'Reward', body: '—' },
+        ],
+      },
+    ],
+    tiers: [{ name: 'Member', minPoints: 0 }],
+    loyalty: { earnRate: 0.1, redeemRate: 1, redeemCapPercent: 100 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=1000&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'business_card',
+    name: 'Business card',
+    kind: 'loyalty',
+    archetype: 'id_card',
+    description:
+      'Name, role and contact — an identity card with nothing to earn.',
+    hexBackgroundColor: '#111827',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'role', header: 'Role', body: '—' },
+          { key: 'memberId', header: 'ID', body: '—' },
+        ],
+      },
+    ],
+    tiers: [],
+    loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 0 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1554774853-719586f82d77?w=1000&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'gift_card',
+    name: 'Gift card',
+    kind: 'loyalty',
+    archetype: 'loyalty',
+    description: 'A stored balance spent down to zero: one point is one rupee.',
+    hexBackgroundColor: '#14532D',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'points', header: 'Balance', body: '0' },
+          { key: 'memberId', header: 'Card', body: '—' },
+        ],
+      },
+    ],
+    tiers: [{ name: 'Member', minPoints: 0 }],
+    // Nothing is earned on a gift card; the whole balance is spendable.
+    loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 100 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=1000&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'single_use_coupon',
+    name: 'Single-use coupon',
+    kind: 'loyalty',
+    archetype: 'loyalty',
+    description: 'One redemption, then the coupon is spent. No tiers.',
+    hexBackgroundColor: '#9A3412',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'reward', header: 'Offer', body: '—' },
+          { key: 'expires', header: 'Expires', body: '—' },
+        ],
+      },
+    ],
+    tiers: [],
+    loyalty: { earnRate: 0, redeemRate: 1, redeemCapPercent: 100 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1607083206968-13611e3d76db?w=1000&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'stamp_card',
+    name: 'Stamp card',
+    kind: 'loyalty',
+    archetype: 'loyalty',
+    description: 'Ten stamps, one free — a stamp is a point, the tenth resets.',
+    hexBackgroundColor: '#5B3A1E',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'points', header: 'Stamps', body: '0' },
+          { key: 'reward', header: 'Next reward', body: '10 stamps' },
+        ],
+      },
+    ],
+    tiers: [{ name: 'Member', minPoints: 0 }],
+    // One stamp per visit: the scan sends amount=1.
+    loyalty: { earnRate: 1, redeemRate: 1, redeemCapPercent: 100 },
+    logoUrl:
+      'https://images.unsplash.com/photo-1559525839-b184a4d698c7?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=1000&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'access_pass',
+    name: 'Access pass',
+    kind: 'ticket',
+    archetype: 'event_ticket',
+    description:
+      'Venue or site access for a dated window — zone and gate, no points.',
+    hexBackgroundColor: '#1E3A5F',
+    fieldRows: [
+      {
+        id: 'row1',
+        columns: [
+          { key: 'section', header: 'Zone', body: '—' },
+          { key: 'gate', header: 'Gate', body: '—' },
+        ],
+      },
+      {
+        id: 'row2',
+        columns: [{ key: 'event_starts', header: 'Valid from', body: '—' }],
+      },
+    ],
+    tiers: [],
+    logoUrl:
+      'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1000&auto=format&fit=crop&q=80',
+    heroUrl:
+      'https://images.unsplash.com/photo-1531058020387-3be344556be6?w=1000&auto=format&fit=crop&q=80',
   },
 ];
 

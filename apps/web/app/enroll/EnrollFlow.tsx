@@ -128,7 +128,8 @@ export default function EnrollFlow() {
                   method: 'POST',
                   body: JSON.stringify({
                     phone: `${countryCode}${onboardingPhone}`,
-                    tenantId: tenantConfig.tenantId
+                    tenantId: tenantConfig.tenantId,
+                    programId: tenantConfig.program?.id
                   })
                 }).then((data) => {
                   if (!data.success) throw new Error(data.error);

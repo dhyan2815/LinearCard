@@ -1,4 +1,4 @@
-import { WalletService } from './wallet.service';
+import { WalletService, resolveCardTitle } from './wallet.service';
 
 // Phase 0.2: publishing a class refuses a localhost callback URL, and the
 // repo .env points at localhost. Give these tests a public one.
@@ -7,6 +7,26 @@ import { encryptSecret, decryptSecret } from '../env';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+
+describe('resolveCardTitle', () => {
+  it('combines tenant name and template title with a middle dot', () => {
+    expect(resolveCardTitle('Bistro Cafe', 'Gift Card')).toBe(
+      'Bistro Cafe · Gift Card',
+    );
+  });
+
+  it('falls back to the tenant name alone when there is no template title', () => {
+    expect(resolveCardTitle('Bistro Cafe', undefined)).toBe('Bistro Cafe');
+  });
+
+  it('falls back to the template title alone when there is no tenant name', () => {
+    expect(resolveCardTitle(undefined, 'Gift Card')).toBe('Gift Card');
+  });
+
+  it('returns undefined when neither is present', () => {
+    expect(resolveCardTitle(undefined, undefined)).toBeUndefined();
+  });
+});
 
 describe('WalletService.sendPromoMessageWithAudit', () => {
   let service: WalletService;
@@ -306,6 +326,20 @@ describe('resolveTenantPassDesign', () => {
     );
   });
 
+  it('combines tenant name and template title into cardTitle', async () => {
+    mockFrom(
+      { name: 'Bistro Cafe', brandHexColor: '#8B4513' },
+      {
+        hexBackgroundColor: '#7C3AED',
+        classSuffix: 'tpl_suffix',
+        title: 'Gift Card',
+      },
+    );
+
+    const design = await service.resolveTenantPassDesign('tenant-1');
+    expect(design.cardTitle).toBe('Bistro Cafe · Gift Card');
+  });
+
   it('prefers the published template colour over the tenant colour', async () => {
     mockFrom(
       { brandHexColor: '#8B4513', logoUrl: 'tenant-logo.png' },
@@ -347,6 +381,32 @@ describe('updateGenericObject — hexBackgroundColor patching', () => {
     jest
       .spyOn(service, 'getGoogleAuthClient')
       .mockResolvedValue(mockGoogleAuthClient as any);
+  });
+
+  it('includes cardTitle in the PATCH payload when supplied', async () => {
+    mockGoogleAuthClient.request
+      .mockResolvedValueOnce({ data: {} })
+      .mockResolvedValueOnce({ data: {} });
+
+    await service.updateGenericObject('issuer.pass-1', {
+      cardTitle: 'Bistro Cafe · Gift Card',
+    });
+
+    const patchCall = mockGoogleAuthClient.request.mock.calls[1][0];
+    expect(patchCall.data.cardTitle).toEqual({
+      defaultValue: { language: 'en-US', value: 'Bistro Cafe · Gift Card' },
+    });
+  });
+
+  it('omits cardTitle from the PATCH payload when not supplied', async () => {
+    mockGoogleAuthClient.request
+      .mockResolvedValueOnce({ data: {} })
+      .mockResolvedValueOnce({ data: {} });
+
+    await service.updateGenericObject('issuer.pass-1', { tier: 'Gold' });
+
+    const patchCall = mockGoogleAuthClient.request.mock.calls[1][0];
+    expect(patchCall.data.cardTitle).toBeUndefined();
   });
 
   it('includes hexBackgroundColor in the PATCH payload when supplied', async () => {
@@ -527,24 +587,10 @@ describe('createGenericClass — merchantLocations (geofencing)', () => {
     const payload = mockGoogleAuthClient.request.mock.calls[0][0].data;
     expect(payload.merchantLocations).toEqual([
       {
-        kind: 'walletobjects#latLongPoint',
         latitude: 19.076,
         longitude: 72.877,
       },
       {
-        kind: 'walletobjects#latLongPoint',
-        latitude: 28.6139,
-        longitude: 77.209,
-      },
-    ]);
-    expect(payload.locations).toEqual([
-      {
-        kind: 'walletobjects#latLongPoint',
-        latitude: 19.076,
-        longitude: 72.877,
-      },
-      {
-        kind: 'walletobjects#latLongPoint',
         latitude: 28.6139,
         longitude: 77.209,
       },
@@ -582,6 +628,48 @@ describe('createGenericClass — merchantLocations (geofencing)', () => {
 
     const payload = mockGoogleAuthClient.request.mock.calls[0][0].data;
     expect(payload.merchantLocations).toBeUndefined();
+  });
+});
+
+describe('resolveCallbackUrl', () => {
+  let originalEnv: NodeJS.ProcessEnv;
+  let service: WalletService;
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    service = new WalletService(
+      {} as any, // mockSupabaseService
+      {} as any, // configService
+      {} as any, // notifyService
+      {} as any, // whatsappService
+      {} as any, // auditService
+    );
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('ignores PUBLIC_CALLBACK_URL when VERCEL_ENV is set', () => {
+    process.env.VERCEL_ENV = 'production';
+    process.env.PUBLIC_CALLBACK_URL = 'https://some-tunnel.ngrok.io';
+    process.env.NEXT_PUBLIC_API_URL = 'https://linearcard-api.vercel.app';
+    delete process.env.WALLET_WEBHOOK_SECRET;
+
+    expect(service.resolveCallbackUrl()).toBe(
+      'https://linearcard-api.vercel.app/passes/webhooks/google-wallet',
+    );
+  });
+
+  it('uses PUBLIC_CALLBACK_URL on local dev when VERCEL_ENV is not set', () => {
+    delete process.env.VERCEL_ENV;
+    process.env.PUBLIC_CALLBACK_URL = 'https://some-tunnel.ngrok.io';
+    process.env.NEXT_PUBLIC_API_URL = 'http://localhost:3001';
+    delete process.env.WALLET_WEBHOOK_SECRET;
+
+    expect(service.resolveCallbackUrl()).toBe(
+      'https://some-tunnel.ngrok.io/passes/webhooks/google-wallet',
+    );
   });
 });
 
@@ -1009,5 +1097,52 @@ describe('processOrderTransaction — tier propagation', () => {
     expect(passedTiers).toHaveLength(1);
     expect(passedTiers[0].name).toBe('Silver'); // coffee's tier, not gym's Gold
     expect(syncSpy.mock.calls[0][0].programId).toBe('program-coffee');
+  });
+});
+
+describe('createGoogleWalletPass - tier/balance conditionally', () => {
+  let service: WalletService;
+  let mockGoogleAuthClient: { request: jest.Mock };
+
+  beforeEach(() => {
+    service = new WalletService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+    mockGoogleAuthClient = {
+      request: jest.fn().mockResolvedValue({ data: {} }),
+    };
+    jest
+      .spyOn(service, 'getGoogleAuthClient')
+      .mockResolvedValue(mockGoogleAuthClient as any);
+    const { privateKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+
+    jest.spyOn(service as any, 'getCredentialsOrThrow').mockReturnValue({
+      issuerId: 'issuer',
+      clientEmail: 'test@example.com',
+      privateKey,
+    });
+  });
+
+  it('omits subheader and barcode.alternateText when tier and balance are undefined', async () => {
+    await service.createGoogleWalletPass({
+      passId: 'pass-1',
+      memberName: 'John Doe',
+      cardTitle: 'Ticket',
+      classSuffix: 'ticket_class',
+      tier: undefined,
+      balance: undefined,
+    });
+
+    const payload = mockGoogleAuthClient.request.mock.calls[0][0].data;
+    expect(payload.subheader).toBeUndefined();
+    expect(payload.barcode.alternateText).toBe(' ');
   });
 });

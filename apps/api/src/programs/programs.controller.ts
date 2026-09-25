@@ -30,6 +30,10 @@ interface ProgramBody {
   eventStartsAt?: string | null;
   eventEndsAt?: string | null;
   venueName?: string | null;
+  welcomeMessage?: string | null;
+  retentionDays?: number | null;
+  storeLocations?: any[];
+  whatsappTemplates?: Record<string, string>;
 }
 
 interface TierBody {
@@ -99,7 +103,7 @@ export class ProgramsController {
   async list(@Req() req: TenantRequest) {
     const { data, error } = await this.supabaseService.client
       .from('Program')
-      .select('*, tiers:Tier(id), templates:PassTemplate(id)')
+      .select('*, tiers:Tier(id), templates:PassTemplate(id, updatedAt)')
       .eq('tenantId', req.tenantId)
       .order('createdAt', { ascending: true });
     if (error)
@@ -178,8 +182,8 @@ export class ProgramsController {
       status: 'draft',
       fieldRows: preset.fieldRows,
       hexBackgroundColor: preset.hexBackgroundColor,
-      logoUrl: tenant?.logoUrl ?? null,
-      heroImageUrl: tenant?.heroUrl ?? null,
+      logoUrl: preset.logoUrl ?? tenant?.logoUrl ?? null,
+      heroImageUrl: preset.heroUrl ?? tenant?.heroUrl ?? null,
       // Kept in sync with the program for templates that predate the move.
       earnRate: preset.loyalty?.earnRate ?? 0.1,
       redeemRate: preset.loyalty?.redeemRate ?? 1,
@@ -314,6 +318,50 @@ export class ProgramsController {
         payload[field] = body[field];
       }
 
+    // Phase 8 — Settings tab. Both apply to every program kind.
+    if (body.welcomeMessage !== undefined)
+      payload.welcomeMessage = (body.welcomeMessage || '').trim() || null;
+    if (body.retentionDays !== undefined) {
+      if (body.retentionDays === null || body.retentionDays === ('' as any)) {
+        payload.retentionDays = null;
+      } else {
+        const days = Number(body.retentionDays);
+        if (isNaN(days) || days < 1)
+          this.bad('retentionDays must be a positive number of days');
+        payload.retentionDays = Math.floor(days);
+      }
+    }
+
+    if (body.storeLocations !== undefined) {
+      if (!Array.isArray(body.storeLocations)) {
+        this.bad('storeLocations must be an array');
+      }
+      if (body.storeLocations.length > 10) {
+        this.bad('storeLocations must contain at most 10 entries');
+      }
+      for (const loc of body.storeLocations) {
+        if (!loc.latitude || !loc.longitude)
+          this.bad('Each store location must have latitude and longitude');
+        const lat = parseFloat(loc.latitude);
+        const lng = parseFloat(loc.longitude);
+        if (isNaN(lat) || lat < -90 || lat > 90)
+          this.bad(`Invalid latitude: ${loc.latitude}`);
+        if (isNaN(lng) || lng < -180 || lng > 180)
+          this.bad(`Invalid longitude: ${loc.longitude}`);
+      }
+      payload.storeLocations = body.storeLocations;
+    }
+
+    if (body.whatsappTemplates !== undefined) {
+      if (
+        typeof body.whatsappTemplates !== 'object' ||
+        Array.isArray(body.whatsappTemplates)
+      ) {
+        this.bad('whatsappTemplates must be an object');
+      }
+      payload.whatsappTemplates = body.whatsappTemplates;
+    }
+
     const { data, error } = await this.supabaseService.client
       .from('Program')
       .update(payload)
@@ -326,12 +374,47 @@ export class ProgramsController {
         { success: false, error: error.message },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
+
+    // Keep templates in sync so legacy passes without a programId fall back to the updated rules
+    const templateUpdates: any = {};
+    if (payload.earnRate !== undefined)
+      templateUpdates.earnRate = payload.earnRate;
+    if (payload.redeemRate !== undefined)
+      templateUpdates.redeemRate = payload.redeemRate;
+    if (payload.redeemCapPercent !== undefined)
+      templateUpdates.redeemCapPercent = payload.redeemCapPercent;
+
+    if (Object.keys(templateUpdates).length > 0) {
+      // Only the published template actually serves passes; a draft under
+      // the same program is mid-edit and must keep its own rates until
+      // published, not get silently overwritten by a program-level change.
+      await this.supabaseService.client
+        .from('PassTemplate')
+        .update(templateUpdates)
+        .eq('programId', id)
+        .eq('tenantId', req.tenantId)
+        .eq('status', 'published');
+    }
+
     return { success: true, program: data };
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: TenantRequest) {
-    await this.load(id, req.tenantId!);
+  async remove(
+    @Param('id') id: string,
+    @Req() req: TenantRequest,
+    @Body() body?: { confirmName?: string },
+  ) {
+    const program = await this.load(id, req.tenantId!);
+
+    // This expires every issued pass in Google Wallet and hard-deletes the
+    // Pass rows. The UI asks for the name; the check lives here so a stray
+    // curl cannot skip the dialog.
+    if ((body?.confirmName || '').trim() !== program.name) {
+      this.bad(
+        `To delete this program, send confirmName exactly matching "${program.name}".`,
+      );
+    }
 
     // 1. Find all passes associated with this program
     const { data: passes } = await this.supabaseService.client
@@ -551,5 +634,102 @@ export class ProgramsController {
       );
 
     return { success: true, tiers: data || [] };
+  }
+
+  /**
+   * Sync store locations from the live Google Wallet class (via any template)
+   * into the Program's local storeLocations array.
+   */
+  @Post(':id/sync-locations')
+  async syncLocations(@Param('id') id: string, @Req() req: TenantRequest) {
+    if (!this.walletService)
+      this.bad('Google Wallet is disabled in this environment');
+    const program = await this.load(id, req.tenantId!);
+
+    // Find all templates for this program to gather possible class suffixes
+    const { data: templates } = await this.supabaseService.client
+      .from('PassTemplate')
+      .select('classSuffix, tenant:Tenant(classSuffix)')
+      .eq('programId', id)
+      .eq('tenantId', req.tenantId);
+
+    const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+
+    // Collect all possible suffixes to check (most specific first)
+    const suffixesToCheck = new Set<string>();
+
+    // 1. Explicit classSuffix from templates
+    for (const t of templates || []) {
+      if (t.classSuffix) {
+        suffixesToCheck.add(t.classSuffix);
+      }
+    }
+
+    // 2. Dynamically generated standard program classSuffix
+    const { data: tenantData } = await this.supabaseService.client
+      .from('Tenant')
+      .select('slug')
+      .eq('id', req.tenantId)
+      .single();
+    if (tenantData?.slug && program.enrollmentSlug) {
+      suffixesToCheck.add(
+        buildClassSuffix(tenantData.slug, program.enrollmentSlug),
+      );
+    }
+
+    // 3. Fallback to tenant's default classSuffix
+    for (const t of templates || []) {
+      const tenantClassSuffix = Array.isArray(t.tenant)
+        ? (t.tenant as any)[0]?.classSuffix
+        : (t.tenant as any)?.classSuffix;
+      if (tenantClassSuffix) {
+        suffixesToCheck.add(tenantClassSuffix);
+      }
+    }
+
+    let walletClass = null;
+
+    // Try each suffix until we find one that is actually live on Google Wallet
+    for (const suffix of suffixesToCheck) {
+      const cls = await tenantWallet.getGenericClass(suffix);
+      if (cls) {
+        walletClass = cls;
+        break;
+      }
+    }
+
+    if (!walletClass) {
+      return {
+        success: false,
+        error:
+          'No live wallet class found for this program on Google. Publish a template first.',
+      };
+    }
+
+    // Map Google's merchantLocations { latitude, longitude } back to our local schema
+    const liveLocations = walletClass.merchantLocations ?? [];
+    const storeLocations = liveLocations.map((loc: any) => ({
+      latitude: String(loc.latitude),
+      longitude: String(loc.longitude),
+      label: '', // Google does not store our labels
+    }));
+
+    // Update the database
+    const { error: updateError } = await this.supabaseService.client
+      .from('Program')
+      .update({ storeLocations })
+      .eq('id', id);
+
+    if (updateError) {
+      throw new HttpException(
+        {
+          success: false,
+          error: 'Failed to save synced locations to database',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    return { success: true, storeLocations };
   }
 }

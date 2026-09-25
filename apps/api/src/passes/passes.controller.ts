@@ -17,6 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { WebhookService } from '../developers/webhook.service';
 import { describeError } from '../errors';
 import { verifyWalletCallback } from '../wallet/google-jws';
+import { computeTier } from '../tiers/tier.util';
 
 /** Parses a raw body string, returning undefined rather than throwing. */
 function safeJson(raw: string): any {
@@ -87,10 +88,23 @@ export class PassesController {
         .select('*')
         .eq('phone', phone)
         .eq('tenantId', targetTenantId)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       // If the member does not exist in the database, create a new record for them
       if (!member) {
+        // Admin Exclusivity Validation
+        const { data: adminExists } = await this.supabaseService.client
+          .from('Admin')
+          .select('id')
+          .eq('tenantId', targetTenantId)
+          .eq('phone', phone)
+          .maybeSingle();
+
+        if (adminExists) {
+          throw new Error('Phone number is reserved for admin use.');
+        }
+
         const { data: newMember } = await this.supabaseService.client
           .from('Member')
           .insert({
@@ -123,8 +137,10 @@ export class PassesController {
         body.programId,
       );
 
-      // Demo-status tenants may only issue passes to registered test
-      // members — a minimal gate ahead of the production-approval flow.
+      // Demo-status tenants may only issue passes to registered test members.
+      // This route mints directly rather than through PassIssuanceService, so
+      // it carries its own copy of the gate in
+      // `PassIssuanceService.issueForMember` — change both together.
       // Fails OPEN on a missing/unknown status: 'demo' has to be set
       // explicitly (the column defaults to 'production'), so an unreadable
       // tenant row can never silently block a live tenant's issuance.
@@ -144,6 +160,7 @@ export class PassesController {
       // 4. Create the Google Wallet Pass using the explicit Pass ID
       const result = await tenantWallet.createGoogleWalletPass({
         passId: explicitPassId,
+        programId: passDesign.programId,
         memberName: body.memberName,
         cardTitle: body.cardTitle ?? passDesign.cardTitle,
         balance: body.balance ?? body.issueBalance,
@@ -156,7 +173,7 @@ export class PassesController {
         heroImageUrl: resolveImageUrl(
           body.heroImageUrl ?? passDesign.heroImageUrl,
         ),
-        rows: body.rows,
+        rows: body.rows ?? passDesign.fieldRows,
       });
 
       // 4. Record the newly generated pass in the database, linked to the member and tenant
@@ -194,13 +211,28 @@ export class PassesController {
               : 'http://localhost:3000');
           const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
 
+          let programNameForMessage: string | undefined;
+          if (body.programId) {
+            const { data: p } = await this.supabaseService.client
+              .from('Program')
+              .select('name')
+              .eq('id', body.programId)
+              .maybeSingle();
+            if (p) programNameForMessage = p.name;
+          }
+
           this.whatsappService
             .sendPassLinkWithLog(
               body.phone,
               shortUrl,
               body.memberName || 'Member',
-              body.cardTitle || 'LinearCard',
-              { tenantId: targetTenantId, memberId: member.id },
+              body.cardTitle || passDesign.cardTitle || 'LinearCard',
+              {
+                tenantId: targetTenantId,
+                memberId: member.id,
+                programName: programNameForMessage,
+                programId: body.programId,
+              },
             )
             .catch((e) => console.error('WAHA delivery error:', e)); // Log delivery errors without failing the overall req
         }
@@ -291,18 +323,36 @@ export class PassesController {
 
       const member = pass.Member;
 
-      const { data: programRow } = pass.programId
+      let activeProgramId = pass.programId;
+      if (!activeProgramId && pass.Tenant?.PassTemplate) {
+        // Fallback: find the programId from the most recently published template
+        const templates = Array.isArray(pass.Tenant.PassTemplate)
+          ? pass.Tenant.PassTemplate
+          : [pass.Tenant.PassTemplate];
+        const published = templates
+          .filter((t: any) => t?.status === 'published')
+          .sort((a: any, b: any) =>
+            String(b?.updatedAt || '').localeCompare(
+              String(a?.updatedAt || ''),
+            ),
+          );
+        if (published.length > 0 && published[0].programId) {
+          activeProgramId = published[0].programId;
+        }
+      }
+
+      const { data: programRow } = activeProgramId
         ? await this.supabaseService.client
             .from('Program')
             .select('id, kind, earnRate, redeemRate, redeemCapPercent')
-            .eq('id', pass.programId)
+            .eq('id', activeProgramId)
             .maybeSingle()
         : { data: null };
 
       return res.status(200).json({
         valid: true,
         memberName: member?.name || 'Unknown Member',
-        balance: pass.balance.toString(),
+        balance: (pass.balance ?? 0).toString(),
         tier: pass.tier,
         fullPassId: pass.fullPassId,
         phone: member?.phone,
@@ -313,7 +363,7 @@ export class PassesController {
         rules: rulesForPass(
           programRow,
           pass.Tenant?.PassTemplate,
-          pass.programId,
+          activeProgramId,
         ),
       });
     } catch (error: any) {
@@ -373,7 +423,7 @@ export class PassesController {
         if (!data) {
           const { data: fuzzyPass } = await this.supabaseService.client
             .from('Pass')
-            .select('*, Member(*), Tenant(*)')
+            .select('*, Member(*), Tenant(*), Program(*)')
             .ilike('fullPassId', `%${passId}%`)
             .limit(1)
             .single();
@@ -401,8 +451,30 @@ export class PassesController {
 
       const newBalance = parseInt(balance, 10);
 
+      let finalTier = tier || pass.tier;
+
+      // Auto-promotion: only kicks in when the caller doesn't specify a tier at
+      // all. The Live Activity form always sends the pass's current tier, so
+      // treating "tier === pass.tier" as "not specified" silently overrode an
+      // admin who deliberately resubmitted the same tier.
+      if (!tier) {
+        if (pass.programId) {
+          const { data: tiers } = await this.supabaseService.client
+            .from('Tier')
+            .select('*')
+            .eq('programId', pass.programId);
+
+          if (tiers && tiers.length > 0) {
+            const computedTierRow = computeTier(newBalance, tiers);
+            if (computedTierRow) {
+              finalTier = computedTierRow.name;
+            }
+          }
+        }
+      }
+
       // Duplicate check: if the balance and tier are the same, just return success early.
-      if (pass.balance === newBalance && pass.tier === tier) {
+      if (pass.balance === newBalance && pass.tier === finalTier) {
         return res.status(200).json({
           success: true,
           updatedData: { skipped: true, reason: 'Duplicate' },
@@ -414,7 +486,7 @@ export class PassesController {
         .from('Pass')
         .update({
           balance: newBalance,
-          tier: tier || pass.tier,
+          tier: finalTier,
         })
         .eq('id', pass.id);
 
@@ -423,8 +495,8 @@ export class PassesController {
       Promise.all([
         tenantWallet
           .updateGenericObject(pass.fullPassId, {
-            balance: balance.toString(),
-            tier: tier || pass.tier,
+            balance: (balance ?? 0).toString(),
+            tier: finalTier,
             pushNotification,
           })
           .then(() =>
@@ -450,9 +522,13 @@ export class PassesController {
           ? this.whatsappService
               .sendRedemptionReceiptWithLog(
                 pass.Member?.phone || phone,
-                balance.toString(),
+                (balance ?? 0).toString(),
                 pass.Tenant?.name || brandName || 'LinearCard',
-                { tenantId: pass.tenantId, memberId: pass.memberId },
+                {
+                  tenantId: pass.tenantId,
+                  memberId: pass.memberId,
+                  programName: pass.Program?.name,
+                },
               )
               .catch((err) =>
                 console.error('WhatsApp receipt failed (non-fatal):', err),
@@ -462,7 +538,7 @@ export class PassesController {
         console.error('Async follow-up failed (non-fatal):', err);
       });
 
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, tier: finalTier });
     } catch (error: any) {
       console.error('API Error updating pass:', error);
       return res.status(500).json({
@@ -793,7 +869,7 @@ export class PassesController {
       if (result.transaction && result.transaction.passId) {
         const { data: fullPass } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member(*), Tenant(*)')
+          .select('*, Member(*), Tenant(*), Program(*)')
           .eq('id', result.transaction.passId)
           .single();
 
@@ -801,9 +877,13 @@ export class PassesController {
           this.whatsappService
             .sendRedemptionReceiptWithLog(
               fullPass.Member.phone,
-              result.newBalance.toString() + ' Pts',
+              (result.newBalance ?? 0).toString() + ' Pts',
               fullPass.Tenant?.name || 'LinearCard',
-              { tenantId: fullPass.tenantId, memberId: fullPass.memberId },
+              {
+                tenantId: fullPass.tenantId,
+                memberId: fullPass.memberId,
+                programName: fullPass.Program?.name,
+              },
             )
             .catch((err) =>
               console.error('WhatsApp receipt failed (non-fatal):', err),
@@ -884,7 +964,7 @@ export class PassesController {
       // We need to fetch full pass details to send the message properly.
       const { data: fullPass } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*), Program(*)')
         .eq('id', pass.id)
         .single();
 
@@ -892,9 +972,13 @@ export class PassesController {
         this.whatsappService
           .sendRedemptionReceiptWithLog(
             fullPass.Member.phone,
-            result.newBalance.toString(),
+            (result.newBalance ?? 0).toString(),
             fullPass.Tenant?.name || 'LinearCard',
-            { tenantId: fullPass.tenantId, memberId: fullPass.memberId },
+            {
+              tenantId: fullPass.tenantId,
+              memberId: fullPass.memberId,
+              programName: fullPass.Program?.name,
+            },
           )
           .catch((err) =>
             console.error('WhatsApp webhook receipt failed (non-fatal):', err),
@@ -961,7 +1045,7 @@ export class PassesController {
       // Look up the pass by fullPassId (objectId in Google Wallet)
       const { data: pass } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*), Program(*)')
         .eq('fullPassId', objectId)
         .single();
 
@@ -987,6 +1071,7 @@ export class PassesController {
             tenantId: pass.tenantId,
             memberId: pass.memberId,
             passId: pass.id,
+            programId: pass.programId ?? null,
             actor: 'google-wallet-webhook',
             action: 'pass_deleted',
             details: { objectId, classId, nonce },
@@ -999,11 +1084,16 @@ export class PassesController {
         }
 
         this.webhookService
-          .dispatch(pass.tenantId, 'pass.deleted', {
-            passId: pass.id,
-            objectId,
-            memberId: pass.memberId,
-          })
+          .dispatch(
+            pass.tenantId,
+            'pass.deleted',
+            {
+              passId: pass.id,
+              objectId,
+              memberId: pass.memberId,
+            },
+            pass.programId ?? null,
+          )
           .catch(() => {});
 
         return res.status(200).send('OK');
@@ -1031,12 +1121,36 @@ export class PassesController {
           .eq('id', pass.id);
       }
 
+      // First install wins: this is the timestamp the Overview tab counts, and
+      // re-adding a removed pass must not move it.
+      if (!pass.installedAt) {
+        await this.supabaseService.client
+          .from('Pass')
+          .update({ installedAt: new Date().toISOString() })
+          .eq('id', pass.id);
+      }
+
+      this.auditService
+        .record({
+          tenantId: pass.tenantId,
+          memberId: pass.memberId,
+          passId: pass.id,
+          programId: pass.programId ?? null,
+          actor: 'google-wallet-webhook',
+          action: 'pass_installed',
+        })
+        .catch(() => {});
+
       if (pass.Member?.phone) {
         await this.whatsappService
           .sendWalletSaveConfirmationWithLog(
             pass.Member.phone,
             pass.Tenant?.name || 'LinearCard',
-            { tenantId: pass.tenantId, memberId: pass.memberId },
+            {
+              tenantId: pass.tenantId,
+              memberId: pass.memberId,
+              programName: pass.Program?.name,
+            },
           )
           .catch((err) =>
             console.error(
@@ -1047,11 +1161,16 @@ export class PassesController {
       }
 
       this.webhookService
-        .dispatch(pass.tenantId, 'pass.installed', {
-          passId: pass.id,
-          objectId,
-          memberId: pass.memberId,
-        })
+        .dispatch(
+          pass.tenantId,
+          'pass.installed',
+          {
+            passId: pass.id,
+            objectId,
+            memberId: pass.memberId,
+          },
+          pass.programId ?? null,
+        )
         .catch(() => {});
 
       return res.status(200).send('OK');

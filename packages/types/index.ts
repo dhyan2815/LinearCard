@@ -8,6 +8,7 @@ export interface User {
 export interface SendOtpRequest {
   phone: string;
   tenantId?: string;
+  programId?: string;
 }
 
 export interface VerifyOtpRequest {
@@ -39,6 +40,15 @@ export interface Tenant {
   heroUrl?: string;
   apiKey?: string;
   webhookUrl?: string;
+}
+
+export interface Admin {
+  id: string;
+  phone: string;
+  name: string;
+  tenantId: string;
+  role: string;
+  createdAt?: string;
 }
 
 export interface Pass {
@@ -88,8 +98,42 @@ export interface Program {
   eventStartsAt?: string | null;
   eventEndsAt?: string | null;
   venueName?: string | null;
+  /** Phase 8 — WhatsApp message sent on enrollment. Empty means none. */
+  welcomeMessage?: string | null;
+  /** Phase 8 - Customizable WhatsApp Templates */
+  whatsappTemplates?: Record<string, string>;
+  retentionDays?: number | null;
+  storeLocations?: any[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** Phase 8 — program Overview tab (Upgraded to Business Metrics). */
+export interface ProgramOverview {
+  totalRevenue: number;
+  totalOrders: number;
+  pointsAwarded: number;
+  pointsRedeemed: number;
+  series: Array<{
+    bucket: string;
+    revenue: number;
+    orders: number;
+    pointsAwarded: number;
+    pointsRedeemed: number;
+  }>;
+  /** Event recording began here; the chart labels this rather than implying zero. */
+  historyStartsAt: string | null;
+}
+
+/** Phase 8 — program Member Events feed. */
+export interface ProgramMemberEvent {
+  id: string;
+  memberId: string;
+  memberName?: string | null;
+  phone?: string | null;
+  action: string;
+  actor: string;
+  occurredAt: string;
 }
 
 /**

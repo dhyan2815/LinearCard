@@ -14,7 +14,10 @@ import { toast } from 'sonner';
 export default function LoginPage() {
   const router = useRouter();
   
-  const [currentScreen, setCurrentScreen] = useState<'admin_phone' | 'admin_otp'>('admin_phone');
+  const [currentScreen, setCurrentScreen] = useState<'admin_phone' | 'admin_otp' | 'brand_name'>('admin_phone');
+  const [signupToken, setSignupToken] = useState('');
+  const [brandName, setBrandName] = useState('');
+  const [adminName, setAdminName] = useState('');
   const [countryCode, setCountryCode] = useState('+91');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [onboardingPhone, setOnboardingPhone] = useState('');
@@ -167,6 +170,14 @@ export default function LoginPage() {
                  });
                  if (!data.success) throw new Error(data.error);
 
+                 // First OTP for a phone with no Admin row: no session yet,
+                 // the brand name completes signup at /auth/admin/signup.
+                 if (data.needsOnboarding) {
+                   setSignupToken(data.signupToken);
+                   setCurrentScreen('brand_name');
+                   return;
+                 }
+
                  // Backend auto-sets httpOnly cookie. Wait a tick for cookie to be available.
                  // DO NOT manually set cookie - backend handles it securely.
                  await new Promise(resolve => setTimeout(resolve, 100));
@@ -192,6 +203,60 @@ export default function LoginPage() {
                </div>
                <Button type="submit" disabled={onboardingOtp.length < 4 || isMockLoading} className="w-full">
                  {isMockLoading ? <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> Authenticating...</span> : 'Login to Dashboard'}
+               </Button>
+             </form>
+           </Card>
+        </motion.main>
+      )}
+
+      {currentScreen === 'brand_name' && (
+        <motion.main key="brand_name" initial="hidden" animate="visible" exit="exit" variants={slideLeft} className="flex-1 max-w-md w-full mx-auto px-4 py-12 sm:py-20 flex flex-col items-center justify-center">
+           <Card className="p-6 sm:p-8 w-full">
+             <div className="w-10 h-10 bg-brand-blue/10 rounded-xl flex items-center justify-center mb-6 border border-brand-blue/20">
+               <Zap className="w-5 h-5 text-brand-blue" />
+             </div>
+             <h2 className="text-2xl font-semibold tracking-tight mb-2">Name your brand</h2>
+             <p className="text-ink-secondary text-sm mb-8">This is what members see on their pass. You can change it later.</p>
+
+             <form onSubmit={async (e) => {
+               e.preventDefault();
+               if (!brandName.trim() || !adminName.trim()) return;
+               setIsMockLoading(true);
+               try {
+                 const data = await apiClient('/auth/admin/signup', {
+                   method: 'POST',
+                   body: JSON.stringify({ signupToken, brandName: brandName.trim(), adminName: adminName.trim() })
+                 });
+                 if (!data.success) throw new Error(data.error || 'Signup failed');
+                 await new Promise(resolve => setTimeout(resolve, 100));
+                 router.push('/dashboard/programs/new');
+               } catch (err: any) {
+                 setOtpError(err.message || 'Signup failed');
+               } finally {
+                 setIsMockLoading(false);
+               }
+             }} className="space-y-6">
+               <div className="space-y-4">
+                 <div className="space-y-2">
+                   <Label htmlFor="brandName">Business Name</Label>
+                   <Input id="brandName" value={brandName} onChange={(e) => {
+                     setBrandName(e.target.value);
+                     setOtpError('');
+                   }} placeholder="Eg, Bistro Cafe" autoFocus required />
+                 </div>
+                 <div className="space-y-2">
+                   <Label htmlFor="adminName">Your Name</Label>
+                   <Input id="adminName" value={adminName} onChange={(e) => {
+                     setAdminName(e.target.value);
+                     setOtpError('');
+                   }} placeholder="Eg, Alex" required />
+                 </div>
+                 {otpError && (
+                   <p className="text-red-500 text-sm font-medium animate-in fade-in slide-in-from-top-1">{otpError}</p>
+                 )}
+               </div>
+               <Button type="submit" disabled={!brandName.trim() || !adminName.trim() || isMockLoading} className="w-full">
+                 {isMockLoading ? <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> Creating account...</span> : 'Create account'}
                </Button>
              </form>
            </Card>

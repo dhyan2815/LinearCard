@@ -77,17 +77,23 @@ export class WebhookService {
     tenantId: string,
     event: string,
     payload: Record<string, any>,
+    /** Phase 8 — when set, program hooks for this program also fire. */
+    programId?: string | null,
   ): Promise<void> {
     try {
       const { data: endpoints, error } = await this.supabaseService.client
         .from('WebhookEndpoint')
-        .select('id, url, secret, events, active')
+        .select('id, url, secret, events, active, programId')
         .eq('tenantId', tenantId)
         .eq('active', true);
       if (error || !endpoints?.length) return;
 
-      const targets = endpoints.filter((e: any) =>
-        (e.events || []).includes(event),
+      const targets = endpoints.filter(
+        (e: any) =>
+          (e.events || []).includes(event) &&
+          // NULL means tenant-wide and always fires; a program hook fires only
+          // for its own program.
+          (!e.programId || e.programId === programId),
       );
       await Promise.all(
         targets.map((endpoint: any) =>

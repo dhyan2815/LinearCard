@@ -1,7 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient, UnauthorizedError } from '@/lib/api-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Tenant, Program, Tier, DEFAULT_PASS_HEX } from '@linearcard/types';
 
 type Archetype = 'loyalty' | 'membership' | 'id_card' | 'access_badge';
@@ -46,6 +46,9 @@ interface DashboardContextType {
 
   /** Phase 3.4 — a tenant runs several programs (D8); one is active at a time. */
   programs: Program[];
+  /** False only once `/programs` has answered — the gallery must not flash
+   * its empty state before the first response lands. */
+  programsLoaded: boolean;
   currentProgram?: Program;
   selectedProgramId: string;
   handleProgramChange: (id: string) => void;
@@ -111,6 +114,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [programsLoaded, setProgramsLoaded] = useState(false);
   const [selectedProgramId, setSelectedProgramId] = useState<string>('');
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null);
@@ -168,10 +172,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const data = await apiClient('/programs');
       if (data.success) {
         setPrograms(data.programs);
+        // Phase 8 — under /dashboard/programs/[id] the URL owns the choice,
+        // so never override it with the first program; elsewhere (gallery,
+        // account pages) a sensible default is still wanted.
         setSelectedProgramId(prev =>
           data.programs.some((p: Program) => p.id === prev)
             ? prev
-            : data.programs[0]?.id || ''
+            : window.location.pathname.startsWith('/dashboard/programs/')
+              ? prev
+              : data.programs[0]?.id || ''
         );
       }
     } catch (err) {
@@ -180,12 +189,28 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       console.error('Failed to fetch programs:', err);
+    } finally {
+      setProgramsLoaded(true);
     }
   }, [selectedTenantId, router]);
 
   useEffect(() => {
     loadPrograms();
   }, [loadPrograms]);
+
+  // Phase 8 — the URL owns the active program. Deep links must work, and two
+  // tabs open on different programs must not fight over one piece of state.
+  const pathname = usePathname();
+  useEffect(() => {
+    const match = pathname?.match(/^\/dashboard\/programs\/([^/]+)/);
+    const idFromUrl = match?.[1];
+    if (!idFromUrl || idFromUrl === 'new') return;
+    if (idFromUrl !== selectedProgramId) {
+      setSelectedProgramId(idFromUrl);
+      setSavedTemplateId(null);
+      setTemplateStatus('unsaved');
+    }
+  }, [pathname, selectedProgramId]);
 
   // The active program's tiers — loaded here so the designer's tier editor
   // and any future tier view share one copy.
@@ -218,7 +243,12 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       apiClient(`/dashboard/stats?tenantId=${selectedTenantId}`)
         .then(data => {
            if (data.success) {
-             setStats(data.stats);
+             setStats({
+               memberCount: data.memberCount ?? 0,
+               passCount: data.passCount ?? 0,
+               walletStatus: data.walletStatus,
+               tierDistribution: data.tierDistribution ?? {},
+             });
            }
         })
         .catch(err => {
@@ -228,10 +258,17 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           }
           console.error('Failed to fetch stats:', err);
         });
+    }
+  }, [selectedTenantId, router]);
 
+  useEffect(() => {
+    if (selectedTenantId) {
       // Phase 6.1 — this feeds the "select from history" picker, not a full
       // listing; the bound is explicit so it can't silently grow into one.
-      apiClient(`/members?tenantId=${selectedTenantId}&limit=50`)
+      const queryParams = new URLSearchParams({ tenantId: selectedTenantId, limit: '50' });
+      if (selectedProgramId) queryParams.append('programId', selectedProgramId);
+      
+      apiClient(`/members?${queryParams.toString()}`)
         .then(data => {
           if (data.success) {
              const allPasses = data.members?.flatMap((m: any) => m.passes?.map((p: any) => ({
@@ -252,7 +289,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           console.error('Failed to fetch members:', err);
         });
     }
-  }, [selectedTenantId, router]);
+  }, [selectedTenantId, selectedProgramId, router]);
 
   const handleTenantChange = (newTenantId: string) => {
     setSelectedTenantId(newTenantId);
@@ -276,6 +313,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setSavedTemplateId(null);
     setTemplateStatus('unsaved');
     setPrograms([]);
+    setProgramsLoaded(false);
     setSelectedProgramId('');
     setTiers([]);
     setStats({
@@ -287,69 +325,75 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setPassHistory([]);
   };
 
+  // Request-ordering guard: ensures a stale fetch response for a previous
+  // program/tenant can never overwrite designData loaded for the current one.
+  const templatesReqId = React.useRef(0);
+
   useEffect(() => {
-    if (currentTenant) {
-      apiClient(`/templates?tenantId=${currentTenant.id}`)
-        .then(data => {
-          // PRG-2: pick the template of the *selected program*, not whichever
-          // of the tenant's templates happens to sort first — under D8 that
-          // would load the gym design while the coffee program is open.
-          const scoped = (data.templates || []).filter((t: any) =>
-            selectedProgramId ? t.programId === selectedProgramId : true
-          );
-          if (data.success && scoped.length > 0) {
-            const t = scoped[0];
-            setSavedTemplateId(t.id);
-            setTemplateStatus(t.status || 'draft');
-            setDesignData({
-              classSuffix: t.classSuffix,
-              archetype: t.archetype,
-              cardTitle: t.title || t.name,
-              hexBackgroundColor: t.hexBackgroundColor || DEFAULT_PASS_HEX,
-              logoUrl: t.logoUrl || '',
-              heroImageUrl: t.heroImageUrl || '',
-              rows: (t.fieldRows || [{ id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }]).map((row: any) => ({
-                ...row,
-                columns: row.columns.map((col: any, idx: number) => ({
-                  ...col,
-                  key: col.key || `${row.id}_${idx}`,
-                })),
+    if (!currentTenant) return;
+    const reqId = ++templatesReqId.current;
+    apiClient(`/templates?tenantId=${currentTenant.id}`)
+      .then(data => {
+        if (reqId !== templatesReqId.current) return; // stale response — drop
+        // PRG-2: pick the template of the *selected program*, not whichever
+        // of the tenant's templates happens to sort first — under D8 that
+        // would load the gym design while the coffee program is open.
+        const scoped = (data.templates || []).filter((t: any) =>
+          selectedProgramId ? t.programId === selectedProgramId : true
+        );
+        if (data.success && scoped.length > 0) {
+          const t = scoped[0];
+          setSavedTemplateId(t.id);
+          setTemplateStatus(t.status || 'draft');
+          setDesignData({
+            classSuffix: t.classSuffix,
+            archetype: t.archetype,
+            cardTitle: t.title || t.name,
+            hexBackgroundColor: t.hexBackgroundColor || DEFAULT_PASS_HEX,
+            logoUrl: t.logoUrl || '',
+            heroImageUrl: t.heroImageUrl || '',
+            rows: (t.fieldRows || [{ id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }]).map((row: any) => ({
+              ...row,
+              columns: row.columns.map((col: any, idx: number) => ({
+                ...col,
+                key: col.key || `${row.id}_${idx}`,
               })),
-              storeLocations: t.storeLocations || [],
-              earnRate: t.earnRate ?? 0.1,
-              redeemRate: t.redeemRate ?? 1,
-              redeemCapPercent: t.redeemCapPercent ?? 50
-            });
-          } else {
-            setSavedTemplateId(null);
-            setTemplateStatus('unsaved');
-            setDesignData({
-              classSuffix: currentTenant.classSuffix || '',
-              archetype: 'loyalty',
-              cardTitle: currentTenant.name || '',
-              hexBackgroundColor: currentTenant.brandHexColor || DEFAULT_PASS_HEX,
-              logoUrl: currentTenant.logoUrl || '',
-              heroImageUrl: currentTenant.heroUrl || '',
-              rows: [
-                { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
-              ],
-              storeLocations: [],
-              earnRate: 0.1,
-              redeemRate: 1,
-              redeemCapPercent: 50
-            });
-          }
-        })
-        .catch(err => {
-          if (err instanceof UnauthorizedError) {
-            router.push('/login');
-            return;
-          }
-          console.error('Error fetching templates:', err);
+            })),
+            storeLocations: programs.find(p => p.id === selectedProgramId)?.storeLocations || t.storeLocations || [],
+            earnRate: t.earnRate ?? 0.1,
+            redeemRate: t.redeemRate ?? 1,
+            redeemCapPercent: t.redeemCapPercent ?? 50
+          });
+        } else {
           setSavedTemplateId(null);
           setTemplateStatus('unsaved');
-        });
-    }
+          setDesignData({
+            classSuffix: currentTenant.classSuffix || '',
+            archetype: 'loyalty',
+            cardTitle: currentTenant.name || '',
+            hexBackgroundColor: currentTenant.brandHexColor || DEFAULT_PASS_HEX,
+            logoUrl: currentTenant.logoUrl || '',
+            heroImageUrl: currentTenant.heroUrl || '',
+            rows: [
+              { id: 'row1', columns: [{ key: 'points', header: 'Points', body: '500' }, { key: 'tier', header: 'Tier', body: 'Gold' }] }
+            ],
+            storeLocations: [],
+            earnRate: 0.1,
+            redeemRate: 1,
+            redeemCapPercent: 50
+          });
+        }
+      })
+      .catch(err => {
+        if (reqId !== templatesReqId.current) return; // stale response — drop
+        if (err instanceof UnauthorizedError) {
+          router.push('/login');
+          return;
+        }
+        console.error('Error fetching templates:', err);
+        setSavedTemplateId(null);
+        setTemplateStatus('unsaved');
+      });
   }, [currentTenant, selectedProgramId, router]);
 
   return (
@@ -359,6 +403,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       selectedTenantId,
       handleTenantChange,
       programs,
+      programsLoaded,
       currentProgram,
       selectedProgramId,
       handleProgramChange,

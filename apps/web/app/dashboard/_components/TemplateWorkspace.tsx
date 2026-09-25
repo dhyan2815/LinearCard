@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
@@ -10,6 +11,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { StoreLocationEntry } from './StoreLocationEntry';
+import { useDashboard } from './DashboardContext';
 
 const COLOR_PALETTE = [
   { name: 'Midnight Black', hex: '#0F172A' },
@@ -25,9 +27,9 @@ const COLOR_PALETTE = [
 ];
 
 const ARCHETYPES = [
-  { value: 'loyalty',      label: 'Loyalty', icon: Gift },
-  { value: 'membership',   label: 'Membership', icon: ShieldCheck },
-  { value: 'id_card',      label: 'ID Card', icon: IdCard },
+  { value: 'loyalty', label: 'Loyalty', icon: Gift },
+  { value: 'membership', label: 'Membership', icon: ShieldCheck },
+  { value: 'id_card', label: 'ID Card', icon: IdCard },
   { value: 'access_badge', label: 'Access Badge', icon: Ticket },
 ] as const;
 
@@ -53,7 +55,7 @@ const ARCHETYPE_PRESETS: Record<string, any[]> = {
   ]
 };
 
-export function TemplateWorkspace({
+export const TemplateWorkspace = React.forwardRef(({
   designData,
   setDesignData,
   origin,
@@ -64,17 +66,17 @@ export function TemplateWorkspace({
   currentTenant,
   selectedTenantId,
   currentProgram,
-  tiers = [],
-  setTiers,
   passCount = 0
-}: any) {
+}: any, ref: React.Ref<any>) => {
+  const { refreshPrograms } = useDashboard();
   const [fieldsExpanded, setFieldsExpanded] = React.useState(true);
-  const [tiersExpanded, setTiersExpanded] = React.useState(false);
-  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = React.useState(false);
   // Phase 4.1 — the live class as Google actually holds it, not as we assume.
   const [liveClass, setLiveClass] = React.useState<any>(null);
   const [liveClassLoading, setLiveClassLoading] = React.useState(false);
+
+  React.useImperativeHandle(ref, () => ({
+    saveTemplate
+  }));
 
   // Any design edit invalidates whatever is currently published (or makes an
   // unsaved template as-yet-unpublished), so every mutation routes through
@@ -134,66 +136,7 @@ export function TemplateWorkspace({
     updateDesignData({ ...designData, rows: newRows });
   };
 
-  // Phase 3.2 — the editor works on the program's real `Tier` rows and saves
-  // them through PATCH /programs/:id/tiers. The old `tierThresholds` JSONB it
-  // used to write was never read by the scan pipeline (DB-9), so editing a
-  // tier here changed nothing about what the next scan computed.
   const isTicketProgram = currentProgram?.kind === 'ticket';
-
-  const setTierList = (next: any[]) => {
-    setTiers?.(next);
-    setTemplateStatus((prev: any) => (prev === 'published' ? 'draft' : prev));
-  };
-
-  const addTier = () => {
-    setTierList([...tiers, { name: '', minPoints: 0, templateId: null }]);
-  };
-
-  const updateTier = (
-    index: number,
-    field: 'name' | 'minPoints',
-    value: string,
-  ) => {
-    const next = [...tiers];
-    next[index] = {
-      ...next[index],
-      [field]: field === 'minPoints' ? Number(value) || 0 : value,
-    };
-    setTierList(next);
-  };
-
-  const removeTier = (index: number) => {
-    setTierList(tiers.filter((_: any, i: number) => i !== index));
-  };
-
-  const storeLocations: Array<{ id?: string; latitude: string; longitude: string; label: string }> =
-    designData.storeLocations || [];
-
-  const addLocation = () => {
-    if (storeLocations.length >= 10) return;
-    updateDesignData({
-      ...designData,
-      storeLocations: [...storeLocations, { latitude: '', longitude: '', label: '' }],
-    });
-  };
-
-  const updateLocation = (
-    index: number,
-    fieldOrUpdates: 'latitude' | 'longitude' | 'label' | Record<string, string>,
-    value?: string,
-  ) => {
-    const next = [...storeLocations];
-    if (typeof fieldOrUpdates === 'string') {
-      next[index] = { ...next[index], [fieldOrUpdates]: value };
-    } else {
-      next[index] = { ...next[index], ...fieldOrUpdates };
-    }
-    updateDesignData({ ...designData, storeLocations: next });
-  };
-
-  const removeLocation = (index: number) => {
-    updateDesignData({ ...designData, storeLocations: storeLocations.filter((_, i) => i !== index) });
-  };
 
   // Saves the current design and returns the template id, so callers that
   // need a persisted template (publish, preview-on-device) don't each
@@ -203,41 +146,11 @@ export function TemplateWorkspace({
       name: designData.cardTitle,
       archetype: designData.archetype,
       fieldRows: designData.rows,
-      storeLocations,
-      earnRate: designData.earnRate,
-      redeemRate: designData.redeemRate,
-      redeemCapPercent: designData.redeemCapPercent,
       hexBackgroundColor: designData.hexBackgroundColor,
       logoUrl: designData.logoUrl || null,
       heroImageUrl: designData.heroImageUrl || null,
     };
 
-    // A saved design on a loyalty program also persists its tiers and its
-    // economics onto the Program row, which is what the scan pipeline reads.
-    const saveProgramConfig = async () => {
-      if (!currentProgram?.id || currentProgram.kind !== 'loyalty') return;
-      await apiClient(`/programs/${currentProgram.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          earnRate: designData.earnRate,
-          redeemRate: designData.redeemRate,
-          redeemCapPercent: designData.redeemCapPercent,
-        }),
-      });
-      const named = tiers.filter((t: any) => t.name?.trim());
-      const data = await apiClient(`/programs/${currentProgram.id}/tiers`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          tiers: named.map((t: any) => ({
-            name: t.name,
-            minPoints: Number(t.minPoints) || 0,
-            templateId: t.templateId ?? null,
-          })),
-        }),
-      });
-      if (!data.success) throw new Error(data.error || 'Error saving tiers');
-      setTiers?.(data.tiers);
-    };
 
     if (savedTemplateId) {
       const data = await apiClient(`/templates/${savedTemplateId}`, {
@@ -245,7 +158,6 @@ export function TemplateWorkspace({
         body: JSON.stringify(payload),
       });
       if (!data.success) throw new Error(data.error || 'Error saving draft');
-      await saveProgramConfig();
       setTemplateStatus('draft');
       return savedTemplateId;
     }
@@ -260,7 +172,6 @@ export function TemplateWorkspace({
       }),
     });
     if (!data.success) throw new Error(data.error || 'Error saving draft');
-    await saveProgramConfig();
     setSavedTemplateId(data.template.id);
     setTemplateStatus('draft');
     return data.template.id;
@@ -280,6 +191,10 @@ export function TemplateWorkspace({
       const publishData = await apiClient(`/templates/${tplId}/publish`, { method: 'POST' });
       if (!publishData.success) throw new Error(publishData.error || 'Failed to publish');
       setTemplateStatus('published');
+      // Publishing a template can flip the parent Program to 'published'
+      // too (see templates.service.ts) — refetch so the gallery/nav badge
+      // updates without a full page reload.
+      refreshPrograms();
       // Phase 4.1 — Google can accept the publish and still drop the
       // geofences; that must not look like a clean success.
       if (publishData.warning) toast.warning(publishData.warning);
@@ -292,25 +207,7 @@ export function TemplateWorkspace({
     });
   };
 
-  // Phase 1.1 — saves the current design, then mints a throwaway pass against
-  // the template's `_preview` class so the admin can scan it onto their own
-  // phone. Saving first is what makes the QR show the edit they just made.
-  const handlePreviewOnDevice = async () => {
-    setPreviewLoading(true);
-    const previewPromise = async () => {
-      const tplId = await saveTemplate();
-      const data = await apiClient(`/templates/${tplId}/preview-pass`, { method: 'POST' });
-      if (!data.success) throw new Error(data.error || 'Failed to build preview pass');
-      setPreviewUrl(data.googleWalletUrl);
-      return data;
-    };
 
-    toast.promise(previewPromise().finally(() => setPreviewLoading(false)), {
-      loading: 'Building preview pass...',
-      success: 'Scan the QR to add it to your Wallet.',
-      error: (err: any) => err.message || 'Preview failed',
-    });
-  };
 
   // Phase 4.1 — verification harness. Asks Google what the class really
   // contains, so "the geofences didn't publish" and "Google didn't fire" stop
@@ -348,75 +245,15 @@ export function TemplateWorkspace({
     });
   };
 
-  const previewModal = previewUrl ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-surface-card border border-border-subtle rounded-2xl p-6 shadow-xl text-center">
-        <div className="flex items-start justify-between mb-4">
-          <div className="text-left">
-            <h3 className="text-sm font-semibold text-ink-dark">Preview on device</h3>
-            <p className="text-xs text-ink-muted mt-1">
-              Scan with the phone you want the pass on. This is a throwaway
-              pass — it never counts in your stats.
-            </p>
-          </div>
-          <button type="button" onClick={() => setPreviewUrl(null)} className="text-ink-muted hover:text-ink-dark shrink-0" aria-label="Close preview">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="inline-block p-3 bg-white rounded-xl">
-          <QRCodeSVG value={previewUrl} size={256} level="Q" includeMargin={true} />
-        </div>
-        <div className="mt-4 flex gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            className="flex-1"
-            onClick={() => {
-              navigator.clipboard.writeText(previewUrl);
-              toast.success('Preview link copied');
-            }}
-          >
-            Copy link
-          </Button>
-          <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
-            <Button type="button" className="w-full">Open</Button>
-          </a>
-        </div>
-      </div>
-    </div>
-  ) : null;
+  const myTemplateInfo = currentProgram?.templates?.find((t: any) => t.id === savedTemplateId);
+  const isProgramNewer = myTemplateInfo?.updatedAt 
+    ? new Date(currentProgram?.updatedAt || 0) > new Date(myTemplateInfo.updatedAt) 
+    : false;
+
+  const isPublishDisabled = templateStatus === 'published' && !isProgramNewer;
 
   return (
     <div className="flex flex-col gap-8 w-full max-w-3xl">
-      {previewModal}
-
-
-      {origin && (
-        <div className="bg-surface-card border border-brand-blue/30 p-5 rounded-xl flex items-center justify-between gap-4 shadow-sm">
-          <div className="flex-1 min-w-0">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-brand-blue mb-1">Consumer Enrollment Link</Label>
-            <div className="flex items-center gap-2 mt-1 min-w-0">
-              <code className="text-sm bg-canvas px-3 py-2 rounded-lg border border-border-subtle text-ink-dark truncate flex-1">
-                {`${origin}/enroll/${designData.classSuffix}`}
-              </code>
-              <Button 
-                type="button" 
-                variant="secondary" 
-                className="shrink-0 h-9"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${origin}/enroll/${designData.classSuffix}`);
-                  toast.success('Enrollment link copied to clipboard!');
-                }}
-              >
-                Copy Link
-              </Button>
-            </div>
-          </div>
-          <div className="p-2 bg-white rounded-lg shrink-0 shadow-sm flex items-center justify-center">
-            <QRCodeSVG value={`${origin}/enroll/${designData.classSuffix}`} size={90} level="Q" includeMargin={true} />
-          </div>
-        </div>
-      )}
 
       <div className="space-y-6">
         <div>
@@ -428,7 +265,7 @@ export function TemplateWorkspace({
               </span>
             )}
           </Label>
-          <Input type="text" value={designData.cardTitle} onChange={(e) => updateDesignData({...designData, cardTitle: e.target.value})} className="mt-2" required/>
+          <Input type="text" value={designData.cardTitle} onChange={(e) => updateDesignData({ ...designData, cardTitle: e.target.value })} className="mt-2" required />
         </div>
 
         <div className="space-y-2">
@@ -449,11 +286,10 @@ export function TemplateWorkspace({
                     });
                     setTemplateStatus('draft');
                   }}
-                  className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-lg text-[11px] font-medium border transition-all ${
-                    designData.archetype === arch.value
+                  className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-lg text-[11px] font-medium border transition-all ${designData.archetype === arch.value
                       ? 'bg-brand-blue/10 border-brand-blue text-brand-blue'
                       : 'bg-surface-card border-border-subtle text-ink-secondary hover:border-border-strong'
-                  }`}>
+                    }`}>
                   <Icon className="w-4 h-4" strokeWidth={1.75} />
                   {arch.label}
                 </button>
@@ -473,7 +309,7 @@ export function TemplateWorkspace({
                   <ImageOff className="w-4 h-4 text-ink-muted" strokeWidth={1.75} />
                 )}
               </div>
-              <Input type="text" value={designData.logoUrl} onChange={(e) => updateDesignData({...designData, logoUrl: e.target.value})} placeholder="https://..." className="font-mono text-sm"/>
+              <Input type="text" value={designData.logoUrl} onChange={(e) => updateDesignData({ ...designData, logoUrl: e.target.value })} placeholder="https://..." className="font-mono text-sm" />
             </div>
           </div>
           <div className="space-y-2">
@@ -486,7 +322,7 @@ export function TemplateWorkspace({
                   <ImageOff className="w-4 h-4 text-ink-muted" strokeWidth={1.75} />
                 )}
               </div>
-              <Input type="text" value={designData.heroImageUrl} onChange={(e) => updateDesignData({...designData, heroImageUrl: e.target.value})} placeholder="https://..." className="font-mono text-sm"/>
+              <Input type="text" value={designData.heroImageUrl} onChange={(e) => updateDesignData({ ...designData, heroImageUrl: e.target.value })} placeholder="https://..." className="font-mono text-sm" />
             </div>
           </div>
         </div>
@@ -497,9 +333,9 @@ export function TemplateWorkspace({
             {COLOR_PALETTE.map((c) => (
               <button
                 key={c.hex} type="button" title={`${c.name} — ${c.hex}`}
-                onClick={() => updateDesignData({...designData, hexBackgroundColor: c.hex})}
+                onClick={() => updateDesignData({ ...designData, hexBackgroundColor: c.hex })}
                 className={`w-8 h-8 rounded-full border-2 transition-all ${designData.hexBackgroundColor === c.hex ? 'border-white dark:border-zinc-300 scale-110 shadow-sm' : 'border-transparent opacity-60 hover:scale-105 hover:opacity-100'}`}
-                style={{backgroundColor: c.hex}}
+                style={{ backgroundColor: c.hex }}
               />
             ))}
             <div
@@ -509,7 +345,7 @@ export function TemplateWorkspace({
               <input
                 type="color"
                 value={designData.hexBackgroundColor}
-                onChange={(e) => updateDesignData({...designData, hexBackgroundColor: e.target.value})}
+                onChange={(e) => updateDesignData({ ...designData, hexBackgroundColor: e.target.value })}
                 className="absolute -inset-2 w-12 h-12 cursor-pointer opacity-0 z-10"
               />
               <div
@@ -573,129 +409,6 @@ export function TemplateWorkspace({
           )}
         </div>
 
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-ink-dark">
-              Store Locations ({storeLocations.length}/10 locations)
-            </h3>
-            <button
-              type="button"
-              onClick={addLocation}
-              disabled={storeLocations.length >= 10}
-              className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors disabled:opacity-50"
-            >
-              + Add Location
-            </button>
-          </div>
-          <p className="text-xs text-ink-muted mb-3">
-            Up to 10 outlet pins for Google Wallet's proximity notifications
-            (~150m radius). The notification text is Google's own and cannot
-            be customised. Delivery requires the customer to have "Allow all
-            the time" location access and the Nearby Passes toggle enabled —
-            neither LinearCard nor the merchant can grant this on their behalf.
-          </p>
-          {storeLocations.length > 0 && (
-            <div className="space-y-3">
-              {storeLocations.map((loc, idx) => (
-                <StoreLocationEntry
-                  key={idx}
-                  index={idx}
-                  location={loc}
-                  onUpdate={updateLocation}
-                  onRemove={removeLocation}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Phase 4.1 — verify against Google rather than against hope. */}
-          <div className="mt-3 pt-3 border-t border-border-subtle">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-ink-muted">
-                Check what Google actually holds for this class.
-              </span>
-              <button
-                type="button"
-                onClick={handleInspectClass}
-                disabled={!savedTemplateId || liveClassLoading}
-                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors disabled:opacity-50 shrink-0"
-              >
-                {liveClassLoading ? 'Checking…' : 'Verify on Google'}
-              </button>
-            </div>
-
-            {liveClass && (
-              <div className="mt-2 space-y-1 text-xs font-mono">
-                {!liveClass.exists ? (
-                  <p className="text-amber-600 dark:text-amber-400">
-                    No class on Google yet — publish this template first.
-                  </p>
-                ) : (
-                  <>
-                    <p
-                      className={
-                        liveClass.geofenceCount === liveClass.expectedGeofenceCount
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-red-600 dark:text-red-400'
-                      }
-                    >
-                      Geofences live on Google: {liveClass.geofenceCount}
-                      {liveClass.geofenceCount === liveClass.expectedGeofenceCount
-                        ? ' ✓'
-                        : ` ✗ (${liveClass.expectedGeofenceCount} saved here)`}
-                    </p>
-                    <p
-                      className={
-                        liveClass.callbackIsLocalhost
-                          ? 'text-red-600 dark:text-red-400 break-all'
-                          : 'text-ink-muted break-all'
-                      }
-                    >
-                      Callback: {liveClass.callbackUrl || 'none'}
-                      {liveClass.callbackIsLocalhost &&
-                        ' — points at a localhost machine, so live callbacks go nowhere. Republish from a public environment.'}
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {!isTicketProgram && (
-        <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
-          <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Loyalty Economics</h3>
-          <p className="text-xs text-ink-muted mb-3">
-            Applied on every scan. Earn rate is points per ₹1 spent; redeem
-            rate is the ₹ discount each point buys; the cap limits how much of
-            an order points may cover.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {([
-              { field: 'earnRate', label: 'Earn rate (pts per ₹1)', step: 0.01, min: 0, max: 10 },
-              { field: 'redeemRate', label: 'Redeem rate (₹ per pt)', step: 0.01, min: 0.01, max: 1000 },
-              { field: 'redeemCapPercent', label: 'Redeem cap (% of order)', step: 1, min: 0, max: 100 },
-            ] as const).map(({ field, label, step, min, max }) => (
-              <div key={field} className="space-y-1.5">
-                <Label className="text-[11px] font-semibold text-ink-secondary">{label}</Label>
-                <Input
-                  type="number"
-                  step={step}
-                  min={min}
-                  max={max}
-                  value={designData[field]}
-                  onChange={(e) => updateDesignData({ ...designData, [field]: Number(e.target.value) })}
-                />
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-ink-muted mt-3">
-            A ₹1,000 order earns {Math.floor(1000 * (Number(designData.earnRate) || 0))} pts, and points may
-            cover at most ₹{Math.floor(1000 * ((Number(designData.redeemCapPercent) || 0) / 100))} of it.
-          </p>
-        </div>
-        )}
-
         {isTicketProgram && (
           <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm p-4">
             <h3 className="text-xs font-semibold text-ink-dark uppercase tracking-wide mb-1">Ticket Program</h3>
@@ -706,67 +419,11 @@ export function TemplateWorkspace({
           </div>
         )}
 
-        {!isTicketProgram && (
-        <div className="mt-6 bg-surface-card rounded-xl border border-border-subtle shadow-sm">
-          <button type="button" onClick={() => setTiersExpanded(!tiersExpanded)} className="w-full flex items-center justify-between p-4">
-            <span className="flex items-center gap-2 text-xs font-semibold text-ink-dark">
-              <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${tiersExpanded ? 'rotate-180' : ''}`} strokeWidth={1.75} />
-              Tiers {tiers.length > 0 ? `(${tiers.length})` : ''}
-            </span>
-            {tiersExpanded && (
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); addTier(); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); addTier(); } }}
-                className="text-xs font-semibold text-brand-blue hover:text-brand-blue-hover transition-colors"
-              >
-                + Add Tier
-              </span>
-            )}
-          </button>
-          {tiersExpanded && (
-            <div className="px-4 pb-4">
-              <p className="text-xs text-ink-muted mb-3">
-                Members are auto-promoted to a tier once their points balance
-                reaches its minimum, on every scan transaction. Saved onto the
-                program, which is what the scanner reads.
-              </p>
-              {tiers.map((tier: any, idx: number) => (
-                <div key={idx} className="flex items-center gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={tier.name}
-                    onChange={(e) => updateTier(idx, 'name', e.target.value)}
-                    placeholder="Tier name (e.g. Gold)"
-                    className="text-sm flex-1 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    value={tier.minPoints}
-                    onChange={(e) => updateTier(idx, 'minPoints', e.target.value)}
-                    placeholder="Min points"
-                    className="text-sm w-32 bg-canvas border border-border-subtle rounded-md px-2 py-1 text-ink-dark placeholder:text-ink-muted outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeTier(idx)}
-                    className="text-ink-muted hover:text-red-500 transition-colors"
-                    aria-label="Remove tier"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        )}
+
       </div>
 
-      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-4 bg-linear-to-t from-canvas via-canvas/95 to-transparent">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle pt-4 gap-4">
+      <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-4 bg-linear-to-t from-canvas via-canvas/95 to-transparent z-10">
+        <div className="flex flex-row items-center justify-between border-border-subtle pt-4 gap-4 overflow-x-auto pb-1 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <div className="shrink-0">
             {templateStatus !== 'unsaved' && (
               <Badge tone={templateStatus === 'published' ? 'success' : 'warning'}>
@@ -774,21 +431,18 @@ export function TemplateWorkspace({
               </Badge>
             )}
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-row items-center gap-3 shrink-0">
             {templateStatus === 'published' && savedTemplateId && (
-              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="w-full sm:w-auto">
-                Sync Existing Passes {passCount > 0 ? `(${passCount})` : ''}
+              <Button type="button" variant="secondary" onClick={handleResyncPasses} className="shrink-0 whitespace-nowrap">
+                Sync Existing Passes
               </Button>
             )}
             {templateStatus !== 'published' && (
-              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="w-full sm:w-auto">
+              <Button type="button" variant="secondary" onClick={handleSaveDraft} className="shrink-0 whitespace-nowrap">
                 Save Draft
               </Button>
             )}
-            <Button type="button" variant="secondary" disabled={previewLoading} onClick={handlePreviewOnDevice} className="w-full sm:w-auto">
-              Preview on device
-            </Button>
-            <Button type="button" disabled={templateStatus === 'published'} onClick={handlePublish} className="w-full sm:w-auto">
+            <Button type="button" disabled={isPublishDisabled} onClick={handlePublish} className="shrink-0 whitespace-nowrap">
               Publish Template
             </Button>
           </div>
@@ -796,4 +450,4 @@ export function TemplateWorkspace({
       </div>
     </div>
   );
-}
+});

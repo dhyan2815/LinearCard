@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import { WalletService } from '../wallet/wallet.service';
+import { WalletService, resolveCardTitle } from '../wallet/wallet.service';
 
 /** How many passes are pushed to Google Wallet concurrently. */
 const RESYNC_BATCH_SIZE = 10;
@@ -35,7 +35,7 @@ export class TemplatesService {
 
     const { data: template, error } = await this.supabaseService.client
       .from('PassTemplate')
-      .select('*')
+      .select('*, tenant:Tenant(name)')
       .eq('id', templateId)
       .eq('tenantId', tenantId)
       .single();
@@ -46,12 +46,18 @@ export class TemplatesService {
       );
     }
 
-    const { data: passes, error: passesError } =
-      await this.supabaseService.client
-        .from('Pass')
-        .select('id, fullPassId')
-        .eq('tenantId', tenantId)
-        .is('deletedAt', null);
+    // Scoped to this template's own program (WAL-11) — without this, resyncing
+    // one program's template pushed its colors/logo/fields onto every pass in
+    // the tenant, including passes for completely different programs.
+    let passesQuery = this.supabaseService.client
+      .from('Pass')
+      .select('id, fullPassId')
+      .eq('tenantId', tenantId)
+      .is('deletedAt', null);
+    passesQuery = template.programId
+      ? passesQuery.eq('programId', template.programId)
+      : passesQuery.is('programId', null);
+    const { data: passes, error: passesError } = await passesQuery;
     if (passesError) throw passesError;
 
     const tenantWallet = await this.walletService.forTenant(tenantId);
@@ -74,6 +80,7 @@ export class TemplatesService {
           // Live values (balance, tier, member name) are preserved inside
           // updateGenericObject; only presentation is overwritten.
           tenantWallet.updateGenericObject(p.fullPassId, {
+            cardTitle: resolveCardTitle(template.tenant?.name, template.title),
             hexBackgroundColor: template.hexBackgroundColor,
             logoUrl: bust(template.logoUrl),
             heroImageUrl: bust(template.heroImageUrl),
@@ -141,15 +148,19 @@ export class TemplatesService {
 
     const tenantWallet = await this.walletService.forTenant(tenantId);
     const envKey = tenantWallet.getWalletEnvPrefix() || 'prod';
+    const resolvedLocations = template.programId
+      ? await this.walletService.storeLocationsForProgram(template.programId)
+      : (template.storeLocations ?? []);
+
     const classData: any = await tenantWallet.createGenericClass({
       classSuffix: template.classSuffix || template.tenant?.classSuffix,
-      cardTitle: template.tenant?.name || template.title,
+      cardTitle: resolveCardTitle(template.tenant?.name, template.title),
       hexBackgroundColor:
         template.hexBackgroundColor || template.tenant?.brandHexColor,
       rows: rowsWithKeys,
       logoUrl,
       heroImageUrl,
-      storeLocations: template.storeLocations ?? [],
+      storeLocations: resolvedLocations,
       // Each environment tracks whether *its own* class exists (ENV-1):
       // `googleClassId` alone held whichever environment published last.
       isUpdate: !!(template.googleClassIds || {})[envKey],
@@ -173,7 +184,7 @@ export class TemplatesService {
     // with no `merchantLocations`. Publishing then "succeeds" with zero live
     // geofences, which is exactly the failure Part 3 chased for weeks. Surface
     // it instead of leaving the admin to guess.
-    const sentLocations = (template.storeLocations ?? []).length;
+    const sentLocations = resolvedLocations.length;
     const liveLocations = (
       classData?.merchantLocations ??
       classData?.locations ??
@@ -205,6 +216,81 @@ export class TemplatesService {
         .single();
     if (updateError) throw updateError;
 
+    if (template.programId) {
+      await this.syncSiblingClassLocations(
+        tenantId,
+        template.programId,
+        template.id,
+        tenantWallet,
+      );
+
+      // Publishing any one tier's design is enough to take the whole
+      // program live — the DRAFT badge on the gallery/nav tracks this.
+      await this.supabaseService.client
+        .from('Program')
+        .update({ status: 'published', updatedAt: new Date().toISOString() })
+        .eq('id', template.programId)
+        .eq('tenantId', tenantId)
+        .eq('status', 'draft');
+    }
+
     return { classData, template: updated, warning };
+  }
+
+  private async syncSiblingClassLocations(
+    tenantId: string,
+    programId: string,
+    excludeTemplateId: string,
+    tenantWallet: any,
+  ) {
+    const { data: siblings } = await this.supabaseService.client
+      .from('PassTemplate')
+      .select(
+        'id, classSuffix, googleClassIds, title, hexBackgroundColor, logoUrl, heroImageUrl, tenant:Tenant(name, classSuffix, brandHexColor, logoUrl, heroUrl)',
+      )
+      .eq('programId', programId)
+      .eq('tenantId', tenantId)
+      .eq('status', 'published')
+      .neq('id', excludeTemplateId);
+
+    if (!siblings || siblings.length === 0) return;
+
+    const envKey = tenantWallet.getWalletEnvPrefix() || 'prod';
+    const storeLocations =
+      await tenantWallet.storeLocationsForProgram(programId);
+
+    for (const sibling of siblings) {
+      if (!(sibling.googleClassIds || {})[envKey]) continue; // Skip if this env doesn't have a class yet
+
+      try {
+        await tenantWallet.createGenericClass({
+          classSuffix:
+            sibling.classSuffix || (sibling.tenant as any)?.classSuffix,
+          cardTitle: resolveCardTitle(
+            (sibling.tenant as any)?.name,
+            sibling.title,
+          ),
+          hexBackgroundColor:
+            sibling.hexBackgroundColor ||
+            (sibling.tenant as any)?.brandHexColor,
+          logoUrl: TemplatesService.resolveImageUrl(
+            sibling.logoUrl || (sibling.tenant as any)?.logoUrl,
+          ),
+          heroImageUrl: TemplatesService.resolveImageUrl(
+            sibling.heroImageUrl || (sibling.tenant as any)?.heroUrl,
+          ),
+          rows: [], // createGenericClass skips updating text modules if rows are empty during an update
+          storeLocations,
+          isUpdate: true,
+        });
+        this.logger.log(
+          `Synced locations to sibling class ${sibling.classSuffix}`,
+        );
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to sync locations to sibling class ${sibling.classSuffix}: ${error.message}`,
+        );
+      }
+    }
   }
 }

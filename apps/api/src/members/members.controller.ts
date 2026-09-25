@@ -18,6 +18,8 @@ import { WalletService } from '../wallet/wallet.service';
 import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
 import { AuditService } from '../audit/audit.service';
 import { describeError } from '../errors';
+import { buildMemberQuery } from './member-query';
+import { computeTier } from '../tiers/tier.util';
 
 @Controller('members')
 export class MembersController {
@@ -36,6 +38,7 @@ export class MembersController {
     @Query('offset') offsetQuery?: string,
     @Query('q') q?: string,
     @Query('dir') dir?: string,
+    @Query('programId') programId?: string,
   ) {
     try {
       // Phase 6.1 (FE-3) — `total` is what lets the caller page instead of
@@ -46,28 +49,18 @@ export class MembersController {
       );
       const offset = Number(offsetQuery) >= 0 ? Number(offsetQuery) : 0;
 
-      let query = this.supabaseService.client
-        .from('Member')
-        .select(
-          'id, name, phone, tenantId, createdAt, isTestAccount, Tenant(name), passes:Pass(id, fullPassId, tier, balance)',
-          { count: 'exact' },
-        )
-        .eq('tenantId', req.tenantId);
-
-      if (q) {
-        query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
-      }
-
       const {
         data: members,
         error,
         count,
-      } = await query
-        // Only a Member column can order a paged query; balance lives on the
-        // child Pass rows, so sorting by it would only ever sort the page.
-        .order('name', { ascending: dir !== 'desc' })
-        .order('createdAt', { ascending: false })
-        .range(offset, offset + limit - 1);
+      } = await buildMemberQuery(this.supabaseService.client, {
+        tenantId: req.tenantId!,
+        limit,
+        offset,
+        q,
+        dir,
+        programId,
+      });
 
       if (error) {
         throw error;
@@ -82,12 +75,14 @@ export class MembersController {
   }
 
   @Get(':id')
-  async getMemberById(@Param('id') id: string) {
+  @UseGuards(TenantGuard)
+  async getMemberById(@Param('id') id: string, @Req() req: TenantRequest) {
     try {
       const { data: member, error } = await this.supabaseService.client
         .from('Member')
         .select('*, Tenant(name)')
         .eq('id', id)
+        .eq('tenantId', req.tenantId!)
         .single();
       if (error || !member)
         throw new HttpException(
@@ -95,11 +90,13 @@ export class MembersController {
           HttpStatus.NOT_FOUND,
         );
 
-      const [passesResult, auditLogResult, consentLogResult] =
+      const [passesResult, auditLogResult, consentLogResult, paymentsResult] =
         await Promise.all([
+          // The joined Program is what the dashboard shows as "programs this
+          // member belongs to" — a member holds one pass per program.
           this.supabaseService.client
             .from('Pass')
-            .select('*')
+            .select('*, Program(id, name, kind, status, enrollmentSlug)')
             .eq('memberId', id)
             .order('createdAt', { ascending: false }),
           this.supabaseService.client
@@ -113,10 +110,21 @@ export class MembersController {
             .select('*')
             .eq('memberId', id)
             .order('consentedAt', { ascending: false }),
+          // PaymentEvent is keyed by phone, not memberId (Phase 5.1): the
+          // payment arrives before the member exists. Scoped to the member's
+          // own tenant so one phone number in two tenants can't leak across.
+          this.supabaseService.client
+            .from('PaymentEvent')
+            .select('*')
+            .eq('tenantId', member.tenantId)
+            .eq('phone', member.phone)
+            .order('occurredAt', { ascending: false })
+            .limit(50),
         ]);
       let passes = passesResult.data;
       const auditLog = auditLogResult.data;
       const consentLog = consentLogResult.data;
+      const payments = paymentsResult.data;
 
       // Check Google Wallet synchronization
       if (passes && passes.length > 0) {
@@ -174,6 +182,7 @@ export class MembersController {
           passes: passes || [],
           auditLog: formattedAuditLog,
           consentLog: consentLog || [],
+          payments: payments || [],
         },
       };
     } catch (error: any) {
@@ -427,19 +436,51 @@ export class MembersController {
   @Post(':id/adjust-balance')
   async adjustBalance(@Param('id') memberId: string, @Body() body: any) {
     try {
-      const { amount, reason, passId, adminId } = body;
+      const {
+        newBalance: newBalanceRaw,
+        newTier,
+        note,
+        passId,
+        adminId,
+      } = body;
       const { data: pass, error: passError } = await this.supabaseService.client
         .from('Pass')
         .select('*')
         .eq('id', passId)
         .single();
       if (passError || !pass)
-        return { success: false, error: 'Pass not found' };
+        throw new HttpException(
+          { success: false, error: 'Pass not found' },
+          HttpStatus.BAD_REQUEST,
+        );
 
-      const newBalance = (pass.balance || 0) + Number(amount);
+      const newBalance = Number(newBalanceRaw);
+      if (!Number.isFinite(newBalance) || newBalance < 0)
+        throw new HttpException(
+          { success: false, error: 'newBalance must be a non-negative number' },
+          HttpStatus.BAD_REQUEST,
+        );
+
+      let finalTier = pass.tier;
+      if (newTier) {
+        finalTier = newTier;
+      } else if (pass.programId) {
+        const { data: tiers } = await this.supabaseService.client
+          .from('Tier')
+          .select('*')
+          .eq('programId', pass.programId);
+
+        if (tiers && tiers.length > 0) {
+          const computedTierRow = computeTier(newBalance, tiers);
+          if (computedTierRow) {
+            finalTier = computedTierRow.name;
+          }
+        }
+      }
+
       const { error: updateError } = await this.supabaseService.client
         .from('Pass')
-        .update({ balance: newBalance })
+        .update({ balance: newBalance, tier: finalTier })
         .eq('id', passId);
       if (updateError) throw updateError;
 
@@ -451,14 +492,14 @@ export class MembersController {
         passId,
         actor: adminId || 'unknown-admin',
         action: 'balance_adjusted',
-        details: { amount, reason, previousBalance: pass.balance, newBalance },
+        details: { note, previousBalance: pass.balance, newBalance },
       });
 
       this.walletService
         .updateGenericObject(pass.fullPassId, {
           balance: String(newBalance),
-          tier: pass.tier,
-          pushNotification: `Balance updated: ${newBalance} Pts. (${reason})`,
+          tier: finalTier,
+          pushNotification: `Balance updated: ${newBalance} Pts.${note ? ` (${note})` : ''}`,
         })
         .then(() =>
           this.notifyService.logNotification({
@@ -482,7 +523,11 @@ export class MembersController {
 
       return { success: true, newBalance };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, error: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }

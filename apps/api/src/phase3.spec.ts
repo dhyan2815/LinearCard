@@ -277,16 +277,23 @@ describe('3.3 — two programs per tenant (PRG-1, PRG-2)', () => {
 });
 
 describe('3.5 — preset catalog (D9/D14)', () => {
-  it('ships four presets across two kinds', () => {
-    expect(PROGRAM_PRESETS).toHaveLength(4);
-    expect(PROGRAM_PRESETS.filter((p) => p.kind === 'loyalty')).toHaveLength(2);
-    expect(PROGRAM_PRESETS.filter((p) => p.kind === 'ticket')).toHaveLength(2);
+  // Phase 8 grew the catalog to twelve for the template gallery; the point
+  // this assertion protects is that both kinds ship, not the exact count.
+  it('ships presets across two kinds', () => {
+    expect(
+      PROGRAM_PRESETS.filter((p) => p.kind === 'loyalty').length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      PROGRAM_PRESETS.filter((p) => p.kind === 'ticket').length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
-  it('gives every loyalty preset tiers and economics, and every ticket preset neither', () => {
+  it('gives every loyalty preset economics, and every ticket preset neither', () => {
     for (const preset of PROGRAM_PRESETS) {
       if (preset.kind === 'loyalty') {
-        expect(preset.tiers.length).toBe(3);
+        // Phase 8 added one-off cards (gift card, coupon, business card) that
+        // legitimately have no tiers; economics are still required so the
+        // scanner always has rates to apply.
         expect(preset.loyalty).toBeDefined();
       } else {
         expect(preset.tiers).toEqual([]);
@@ -372,7 +379,10 @@ describe('3.5 — preset catalog (D9/D14)', () => {
       mockWallet as any,
     );
 
-    const res = await ctrl.remove('p-1', { tenantId: 'tenant-1' } as any);
+    // Phase 8 — the delete is name-confirmed; the cascade below is unchanged.
+    const res = await ctrl.remove('p-1', { tenantId: 'tenant-1' } as any, {
+      confirmName: 'Apex Events',
+    });
     expect(res.success).toBe(true);
     expect(res.expiredPassesCount).toBe(1);
     expect(expiredPassIds).toContain('pass.123');

@@ -12,11 +12,13 @@ export function computeTier(balance: number, tiers: Tier[]): Tier | null {
     return null;
   }
 
-  const sorted = [...tiers].sort((a, b) => a.minPoints - b.minPoints);
+  const sorted = [...tiers].sort(
+    (a, b) => Number(a.minPoints) - Number(b.minPoints),
+  );
 
   let matched = sorted[0];
   for (const tier of sorted) {
-    if (balance >= tier.minPoints) {
+    if (Number(balance) >= Number(tier.minPoints)) {
       matched = tier;
     }
   }

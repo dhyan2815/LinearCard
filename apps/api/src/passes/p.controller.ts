@@ -60,6 +60,8 @@ export class PController {
         logoUrl: resolveImageUrl(passDesign.logoUrl),
         heroImageUrl: resolveImageUrl(passDesign.heroImageUrl),
         passId: objectSuffixOverride,
+        programId: pass.programId || undefined,
+        rows: passDesign.fieldRows,
       });
 
       if (passResult.success && passResult.googleWalletUrl) {

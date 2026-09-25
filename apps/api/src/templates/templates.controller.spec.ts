@@ -466,3 +466,64 @@ describe('TemplatesController collection-route tenant scoping', () => {
     expect(payload.tenantId).toBe('guard-tenant');
   });
 });
+
+describe('TemplatesController.previewPass — cardTitle', () => {
+  let controller: TemplatesController;
+  let createGenericClassCalls: any[];
+  let mockWalletService: any;
+
+  beforeEach(async () => {
+    createGenericClassCalls = [];
+    const supabaseServiceMock = {
+      client: {
+        from: jest.fn().mockImplementation(() => ({
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                single: async () => ({
+                  data: {
+                    id: 'tpl-1',
+                    programId: 'prog-1',
+                    fieldRows: [],
+                    tenant: { name: 'Bistro Cafe' },
+                    title: 'Gift Card',
+                  },
+                }),
+              }),
+            }),
+          }),
+        })),
+      },
+    };
+    mockWalletService = {
+      forTenant: async () => ({
+        createGenericClass: async (data: any) => {
+          createGenericClassCalls.push(data);
+          return { id: 'issuer.dev_prog-1_preview' };
+        },
+        createGoogleWalletPass: async () => ({
+          googleWalletUrl: 'https://pay.google.com/gp/v/save/token',
+          passId: 'preview_tpl-1',
+        }),
+      }),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [TemplatesController],
+      providers: [
+        { provide: SupabaseService, useValue: supabaseServiceMock },
+        { provide: WalletService, useValue: mockWalletService },
+        { provide: TemplatesService, useValue: {} },
+      ],
+    }).compile();
+
+    controller = module.get<TemplatesController>(TemplatesController);
+  });
+
+  it('combines tenant name and template title for the preview class', async () => {
+    await controller.previewPass('tpl-1', { tenantId: 'tenant-1' } as any);
+    expect(createGenericClassCalls[0].cardTitle).toBe(
+      'Bistro Cafe · Gift Card',
+    );
+  });
+});

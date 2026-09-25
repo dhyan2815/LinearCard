@@ -97,13 +97,14 @@ export class TenantController {
    */
   @Get('tenants')
   @UseGuards(TenantGuard)
-  async getTenants() {
+  async getTenants(@Req() req: TenantRequest) {
     try {
       const { data: tenants, error } = await this.supabaseService.client
         .from('Tenant')
         .select(
           'id, name, brandHexColor, logoUrl, heroUrl, classSuffix, publishStatus',
         )
+        .eq('id', req.tenantId)
         .order('name', { ascending: true });
 
       if (error) {

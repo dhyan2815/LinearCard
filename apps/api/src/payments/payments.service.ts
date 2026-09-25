@@ -270,17 +270,34 @@ export class PaymentsService {
       .select('*')
       .eq('tenantId', tenant.id)
       .eq('phone', payment.phone)
+      .limit(1)
       .maybeSingle();
 
     let member = existingMember;
     let enrolled = false;
     if (!member) {
+      // Admin Exclusivity Validation
+      const { data: adminExists } = await this.supabaseService.client
+        .from('Admin')
+        .select('id')
+        .eq('tenantId', tenant.id)
+        .eq('phone', payment.phone)
+        .maybeSingle();
+
+      if (adminExists) {
+        throw new HttpException(
+          'Phone number is reserved for admin use.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
       const { data: created, error } = await this.supabaseService.client
         .from('Member')
-        .upsert(
-          { phone: payment.phone, name: payment.phone, tenantId: tenant.id },
-          { onConflict: 'tenantId,phone' },
-        )
+        .insert({
+          phone: payment.phone,
+          name: payment.phone,
+          tenantId: tenant.id,
+        })
         .select()
         .single();
       if (error || !created) {

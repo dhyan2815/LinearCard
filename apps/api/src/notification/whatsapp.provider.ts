@@ -48,14 +48,26 @@ export class WahaProvider implements WhatsappProvider {
 
     for (let attempt = 0; ; attempt++) {
       try {
+        const controller = new AbortController();
+        // 60-second hard TCP timeout to prevent indefinite hangs
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+
         const res = await fetch(url, {
           method: 'POST',
           headers,
           body: JSON.stringify({ session, ...body }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!res.ok) {
           const detail = await res.text();
+          if (detail.includes('no LID found')) {
+            throw new ServiceError(
+              'WHATSAPP_NUMBER_INVALID',
+              'The phone number is not registered on WhatsApp. Please verify the number and try again.',
+            );
+          }
           throw new ServiceError(
             'WHATSAPP_SEND_FAILED',
             `WhatsApp provider rejected the send (HTTP ${res.status}): ${detail.slice(0, 300)}`,
