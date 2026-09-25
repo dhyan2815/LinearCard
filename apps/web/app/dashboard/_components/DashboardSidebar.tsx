@@ -1,36 +1,18 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Layers, Palette, Zap, Bell, Users, Settings2, ChevronDown, Check, Menu, Terminal, User, LogOut, Moon, Sun, CreditCard, ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { useDashboard } from './DashboardContext';
+import { usePathname, useRouter } from 'next/navigation';
+import { Layers, Settings2, Terminal, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { motion } from 'motion/react';
 import { ProgramSidebar } from './ProgramNav';
-import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
 
 const ICON_STROKE = 1.75;
 
 export function DashboardSidebar() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-
-  const { tenants, currentTenant, selectedTenantId, handleTenantChange } = useDashboard();
-
-  useEffect(() => {
-    setIsDarkMode(!document.documentElement.classList.contains('light'));
-  }, []);
-
-  const toggleTheme = () => {
-    document.documentElement.classList.toggle('light');
-    const nowLight = document.documentElement.classList.contains('light');
-    setIsDarkMode(!nowLight);
-    try {
-      localStorage.setItem('theme', nowLight ? 'light' : 'dark');
-    } catch {}
-  };
 
   const handleLogout = async () => {
     try {
@@ -99,6 +81,21 @@ export function DashboardSidebar() {
              </Link>
            );
          })}
+      </div>
+
+      <div className="px-2 py-3 border-t border-border-subtle">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 p-2 rounded-lg text-ink-secondary hover:bg-surface-hover hover:text-ink-dark transition-colors overflow-hidden"
+        >
+          <div className="shrink-0"><LogOut className="w-4 h-4" strokeWidth={ICON_STROKE} /></div>
+          <motion.span
+            animate={{ opacity: isSidebarOpen ? 1 : 0, width: isSidebarOpen ? 'auto' : 0 }}
+            className="text-[13px] font-medium whitespace-nowrap overflow-hidden text-left"
+          >
+            Logout
+          </motion.span>
+        </button>
       </div>
 
     </motion.aside>

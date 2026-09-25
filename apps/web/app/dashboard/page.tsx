@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Plus, Trash2 } from 'lucide-react';
 import { PageShell } from '@/components/ui/PageShell';

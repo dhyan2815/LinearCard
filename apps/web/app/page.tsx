@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { Sparkles, CreditCard, ArrowRight, QrCode } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Link from 'next/link';

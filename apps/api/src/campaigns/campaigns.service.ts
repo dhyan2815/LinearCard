@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { NotifyService } from '../notification/notify.service';
 import { WhatsappService } from '../notification/whatsapp.service';
@@ -30,8 +30,6 @@ export const SEND_CHUNK_SIZE = 25;
 
 @Injectable()
 export class CampaignsService {
-  private readonly logger = new Logger(CampaignsService.name);
-
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly notifyService: NotifyService,

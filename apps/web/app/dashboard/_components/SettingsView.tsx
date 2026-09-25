@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';

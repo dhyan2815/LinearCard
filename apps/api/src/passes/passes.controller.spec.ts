@@ -12,7 +12,7 @@ import { WebhookService } from '../developers/webhook.service';
 /**
  * Phase 7.2 — the controller now verifies every callback against Google's
  * root signing keys. The signature scheme itself is exercised against real
- * generated EC keys in phase7.spec.ts; here it is stubbed so these tests
+ * generated EC keys in idempotency-and-wallet-jws.spec.ts; here it is stubbed so these tests
  * stay about the controller's routing and side effects.
  */
 jest.mock('../wallet/google-jws', () => ({
@@ -288,8 +288,10 @@ describe('PassesController.postgeneratepass — rows default to passDesign.field
           select: () => ({
             eq: () => ({
               eq: () => ({
-                single: async () => ({
-                  data: { id: 'member-1', phone: '+911234567890' },
+                limit: () => ({
+                  maybeSingle: async () => ({
+                    data: { id: 'member-1', phone: '+911234567890' },
+                  }),
                 }),
               }),
             }),

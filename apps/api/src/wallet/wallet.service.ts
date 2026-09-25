@@ -555,29 +555,6 @@ export class WalletService {
   }
 
   /**
-   * Geofences of the template owning `classSuffix` (WAL-9).
-   *
-   * Used by the auto-create-class fallback, which has only a suffix in hand.
-   * Never throws: a missing template must not turn a pass creation retry
-   * into a hard failure — it just means no geofences.
-   */
-  private async storeLocationsForSuffix(classSuffix?: string): Promise<any[]> {
-    if (!classSuffix) return [];
-    try {
-      const { data } = await this.supabaseService.client
-        .from('PassTemplate')
-        .select('storeLocations')
-        .eq('classSuffix', classSuffix.replace(/_preview$/, ''))
-        .order('updatedAt', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data?.storeLocations ?? [];
-    } catch {
-      return [];
-    }
-  }
-
-  /**
    * Geofences for a program. The Program row is the canonical source of truth
    * for locations (shared by all tiers in that program).
    */

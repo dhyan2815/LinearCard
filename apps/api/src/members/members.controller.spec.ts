@@ -152,8 +152,8 @@ describe('MembersController.adjustBalance', () => {
     const controller = module.get<MembersController>(MembersController);
 
     await controller.adjustBalance('member1', {
-      amount: 5,
-      reason: 'test',
+      newBalance: 15,
+      note: 'test',
       passId: 'pass1',
       adminId: 'admin1',
     });
