@@ -1,16 +1,26 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Layers, Settings2, Terminal, ChevronLeft, ChevronRight } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Layers, Settings2, Terminal, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ProgramSidebar } from './ProgramNav';
+import { apiClient } from '@/lib/api-client';
 
 const ICON_STROKE = 1.75;
 
 export function DashboardSidebar() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await apiClient('/auth/admin/logout', { method: 'POST' });
+    } finally {
+      router.push('/login');
+    }
+  };
 
   // Phase 8 — two-level nav. Everything program-scoped (design, campaigns,
   // activity, members) now lives on the program's own tab strip, so the
@@ -71,6 +81,21 @@ export function DashboardSidebar() {
              </Link>
            );
          })}
+      </div>
+
+      <div className="px-2 py-3 border-t border-border-subtle">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 p-2 rounded-lg text-ink-secondary hover:bg-surface-hover hover:text-ink-dark transition-colors overflow-hidden"
+        >
+          <div className="shrink-0"><LogOut className="w-4 h-4" strokeWidth={ICON_STROKE} /></div>
+          <motion.span
+            animate={{ opacity: isSidebarOpen ? 1 : 0, width: isSidebarOpen ? 'auto' : 0 }}
+            className="text-[13px] font-medium whitespace-nowrap overflow-hidden text-left"
+          >
+            Logout
+          </motion.span>
+        </button>
       </div>
 
     </motion.aside>
