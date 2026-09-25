@@ -12,7 +12,6 @@ import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
-import { NotifyService } from '../notification/notify.service';
 import * as jwt from 'jsonwebtoken';
 import {
   SendOtpRequest,
@@ -28,7 +27,6 @@ export class AuthController {
     private readonly supabaseService: SupabaseService,
     private readonly otpService: OtpService,
     private readonly whatsappService: WhatsappService,
-    private readonly notifyService: NotifyService,
     private readonly passIssuanceService: PassIssuanceService,
   ) {}
 

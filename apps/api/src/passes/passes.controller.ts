@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
-import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
 import {
   WalletService,
@@ -51,7 +50,6 @@ export function resolveImageUrl(url?: string): string | undefined {
 export class PassesController {
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly otpService: OtpService,
     private readonly whatsappService: WhatsappService,
     private readonly walletService: WalletService,
     private readonly notifyService: NotifyService,
