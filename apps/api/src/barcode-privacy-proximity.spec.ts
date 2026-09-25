@@ -67,10 +67,12 @@ describe('4.4 — store location map picker', () => {
     expect(src).toContain('ssr: false');
   });
 
-  it('uses keyless OpenStreetMap tiles, so no API key ships in the bundle', () => {
+  it('uses the Google Maps API, gated behind a configurable key', () => {
+    // D8 switched the picker from keyless OpenStreetMap tiles to
+    // @vis.gl/react-google-maps; the key is optional (degrades gracefully
+    // when unset) rather than baked in unconditionally.
     const src = readWeb('app/dashboard/_components/StoreLocationMap.tsx');
-    expect(src).toContain('tile.openstreetmap.org');
-    expect(src).toContain('OpenStreetMap contributors');
-    expect(src).not.toMatch(/NEXT_PUBLIC_\w*(MAPS|MAPBOX)\w*_KEY/);
+    expect(src).toContain('@vis.gl/react-google-maps');
+    expect(src).toContain('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY');
   });
 });

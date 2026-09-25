@@ -129,51 +129,17 @@ describe('TemplatesController.updateTemplate', () => {
     });
   });
 
-  describe('updateTemplate — storeLocations validation', () => {
-    it('rejects more than 10 locations', async () => {
-      const tooMany = Array.from({ length: 11 }, (_, i) => ({
-        latitude: 10 + i,
-        longitude: 20 + i,
-      }));
-      await expect(
-        controller.updateTemplate('template-1', { storeLocations: tooMany }, {
-          tenantId: 'tenant-1',
-        } as any),
-      ).rejects.toThrow('storeLocations must contain at most 10 entries');
-    });
-
-    it('rejects an out-of-range latitude', async () => {
-      await expect(
-        controller.updateTemplate(
-          'template-1',
-          { storeLocations: [{ latitude: 95, longitude: 20 }] },
-          { tenantId: 'tenant-1' } as any,
-        ),
-      ).rejects.toThrow('Invalid latitude: 95');
-    });
-
-    it('rejects an out-of-range longitude', async () => {
-      await expect(
-        controller.updateTemplate(
-          'template-1',
-          { storeLocations: [{ latitude: 10, longitude: 200 }] },
-          { tenantId: 'tenant-1' } as any,
-        ),
-      ).rejects.toThrow('Invalid longitude: 200');
-    });
-
-    it('accepts and persists a valid storeLocations array', async () => {
-      const valid = [{ latitude: 19.076, longitude: 72.8777 }];
-      const result = await controller.updateTemplate(
-        'template-1',
-        { storeLocations: valid },
-        { tenantId: 'tenant-1' } as any,
-      );
-      expect(result.success).toBe(true);
-      expect(mockUpdatePayload).toEqual(
-        expect.objectContaining({ storeLocations: valid }),
-      );
-    });
+  // storeLocations validation lives on ProgramsController.updateProgram now
+  // (see programs.controller.ts), not on TemplatesController.updateTemplate.
+  // A body.storeLocations here is simply ignored (not persisted).
+  it('ignores a storeLocations field on the template update body', async () => {
+    const result = await controller.updateTemplate(
+      'template-1',
+      { storeLocations: [{ latitude: 19.076, longitude: 72.8777 }] },
+      { tenantId: 'tenant-1' } as any,
+    );
+    expect(result.success).toBe(true);
+    expect(mockUpdatePayload).not.toHaveProperty('storeLocations');
   });
 });
 

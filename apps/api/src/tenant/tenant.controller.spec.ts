@@ -9,7 +9,11 @@ describe('TenantController.getTenants', () => {
 
   beforeEach(async () => {
     selectMock = jest.fn().mockReturnValue({
-      order: jest.fn().mockResolvedValue({ data: [{ id: 't1' }], error: null }),
+      eq: jest.fn().mockReturnValue({
+        order: jest
+          .fn()
+          .mockResolvedValue({ data: [{ id: 't1' }], error: null }),
+      }),
     });
 
     const module: TestingModule = await Test.createTestingModule({
@@ -35,7 +39,7 @@ describe('TenantController.getTenants', () => {
   });
 
   it('never selects credential, business-detail or legacy apiKey columns', async () => {
-    await controller.getTenants();
+    await controller.getTenants({ tenantId: 'test-tenant' } as any);
 
     const columns: string = selectMock.mock.calls[0][0];
     expect(columns).not.toContain('*');

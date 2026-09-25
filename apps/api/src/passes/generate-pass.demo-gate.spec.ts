@@ -33,7 +33,11 @@ describe('PassesController.postgeneratepass demo gate', () => {
         return {
           select: () => ({
             eq: () => ({
-              eq: () => ({ single: async () => ({ data: member }) }),
+              eq: () => ({
+                limit: () => ({
+                  maybeSingle: async () => ({ data: member }),
+                }),
+              }),
             }),
           }),
         };

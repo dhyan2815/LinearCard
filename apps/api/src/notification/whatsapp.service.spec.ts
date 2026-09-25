@@ -12,7 +12,20 @@ describe('WhatsappService', () => {
     notifyService = {
       logNotification: jest.fn().mockResolvedValue(undefined),
     };
-    service = new WhatsappService(notifyService);
+    const supabaseService: any = {
+      client: {
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              maybeSingle: jest
+                .fn()
+                .mockResolvedValue({ data: null, error: null }),
+            }),
+          }),
+        }),
+      },
+    };
+    service = new WhatsappService(notifyService, supabaseService);
 
     global.fetch = jest.fn();
   });

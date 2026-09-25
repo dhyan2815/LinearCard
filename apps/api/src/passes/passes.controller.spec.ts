@@ -288,8 +288,10 @@ describe('PassesController.postgeneratepass — rows default to passDesign.field
           select: () => ({
             eq: () => ({
               eq: () => ({
-                single: async () => ({
-                  data: { id: 'member-1', phone: '+911234567890' },
+                limit: () => ({
+                  maybeSingle: async () => ({
+                    data: { id: 'member-1', phone: '+911234567890' },
+                  }),
                 }),
               }),
             }),
