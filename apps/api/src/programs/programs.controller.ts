@@ -385,11 +385,15 @@ export class ProgramsController {
       templateUpdates.redeemCapPercent = payload.redeemCapPercent;
 
     if (Object.keys(templateUpdates).length > 0) {
+      // Only the published template actually serves passes; a draft under
+      // the same program is mid-edit and must keep its own rates until
+      // published, not get silently overwritten by a program-level change.
       await this.supabaseService.client
         .from('PassTemplate')
         .update(templateUpdates)
         .eq('programId', id)
-        .eq('tenantId', req.tenantId);
+        .eq('tenantId', req.tenantId)
+        .eq('status', 'published');
     }
 
     return { success: true, program: data };

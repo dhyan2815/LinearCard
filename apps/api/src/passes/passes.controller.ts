@@ -453,10 +453,11 @@ export class PassesController {
 
       let finalTier = tier || pass.tier;
 
-      // Auto-promotion: if the tier parameter matches the old tier (meaning the user
-      // didn't manually change it in the Live Activity UI), or wasn't provided,
-      // evaluate it automatically against the program's tiers.
-      if (!tier || tier === pass.tier) {
+      // Auto-promotion: only kicks in when the caller doesn't specify a tier at
+      // all. The Live Activity form always sends the pass's current tier, so
+      // treating "tier === pass.tier" as "not specified" silently overrode an
+      // admin who deliberately resubmitted the same tier.
+      if (!tier) {
         if (pass.programId) {
           const { data: tiers } = await this.supabaseService.client
             .from('Tier')

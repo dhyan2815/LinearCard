@@ -95,7 +95,7 @@ export function MemberDetailView({ backHref }: { backHref: string }) {
         if (passes.length > 0) {
           const target = passes.find((p: any) => p.id === keepPassId) || passes[0];
           setSelectedPassId(target.id);
-          setNewBalance(String(target.balance));
+          setNewBalance(target.balance != null ? String(target.balance) : '');
           setNewTier(target.tier || '');
         }
       } catch (err: any) {
@@ -382,7 +382,7 @@ export function MemberDetailView({ backHref }: { backHref: string }) {
                     setSelectedPassId(e.target.value);
                     const p = passes.find((x) => x.id === e.target.value);
                     if (p) {
-                      setNewBalance(String(p.balance));
+                      setNewBalance(p.balance != null ? String(p.balance) : '');
                       setNewTier(p.tier || '');
                     }
                   }}
