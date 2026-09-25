@@ -1,44 +1,16 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Layers, Palette, Zap, Bell, Users, Settings2, ChevronDown, Check, Menu, Terminal, User, LogOut, Moon, Sun, CreditCard, ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { useDashboard } from './DashboardContext';
+import { Layers, Settings2, Terminal, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion } from 'motion/react';
 import { ProgramSidebar } from './ProgramNav';
-import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api-client';
 
 const ICON_STROKE = 1.75;
 
 export function DashboardSidebar() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const pathname = usePathname();
-  const router = useRouter();
-
-  const { tenants, currentTenant, selectedTenantId, handleTenantChange } = useDashboard();
-
-  useEffect(() => {
-    setIsDarkMode(!document.documentElement.classList.contains('light'));
-  }, []);
-
-  const toggleTheme = () => {
-    document.documentElement.classList.toggle('light');
-    const nowLight = document.documentElement.classList.contains('light');
-    setIsDarkMode(!nowLight);
-    try {
-      localStorage.setItem('theme', nowLight ? 'light' : 'dark');
-    } catch {}
-  };
-
-  const handleLogout = async () => {
-    try {
-      await apiClient('/auth/admin/logout', { method: 'POST' });
-    } finally {
-      router.push('/login');
-    }
-  };
 
   // Phase 8 — two-level nav. Everything program-scoped (design, campaigns,
   // activity, members) now lives on the program's own tab strip, so the

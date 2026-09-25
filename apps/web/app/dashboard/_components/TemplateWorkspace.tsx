@@ -1,13 +1,11 @@
 'use client';
 import React from 'react';
-import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Plus, X, ChevronDown, Gift, IdCard, ShieldCheck, Ticket, ImageOff } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { StoreLocationEntry } from './StoreLocationEntry';
