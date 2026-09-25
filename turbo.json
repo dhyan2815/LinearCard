@@ -1,9 +1,33 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "NEXT_PUBLIC_*",
+    "JWT_SECRET",
+    "WALLET_CREDENTIALS_KEY",
+    "WALLET_WEBHOOK_SECRET",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_JWT_SECRET",
+    "ISSUER_ID",
+    "GOOGLE_ISSUER_ID",
+    "GOOGLE_WALLET_ISSUER_ID",
+    "GOOGLE_CLIENT_EMAIL",
+    "GOOGLE_PRIVATE_KEY",
+    "WALLET_ENV_PREFIX",
+    "PUBLIC_CALLBACK_URL",
+    "FRONTEND_URL",
+    "PORT",
+    "API_ORIGIN",
+    "WAHA_BASE_URL",
+    "WAHA_API_KEY",
+    "WAHA_SESSION",
+    "DEMO_TENANT_IDS"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "start": {
       "dependsOn": ["build"],
