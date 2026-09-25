@@ -17,6 +17,8 @@ export interface ConfirmationDialogProps {
   cancelText?: string;
   variant?: 'destructive' | 'default';
   isLoading?: boolean;
+  /** Blocks the confirm button without implying work is in flight. */
+  confirmDisabled?: boolean;
   children?: React.ReactNode;
 }
 
@@ -30,6 +32,7 @@ export function ConfirmationDialog({
   cancelText = 'Cancel',
   variant = 'destructive',
   isLoading = false,
+  confirmDisabled = false,
   children,
 }: ConfirmationDialogProps) {
   const [mounted, setMounted] = useState(false);
@@ -154,7 +157,7 @@ export function ConfirmationDialog({
                 variant={variant === 'destructive' ? 'destructive' : 'default'}
                 size="sm"
                 onClick={onConfirm}
-                disabled={isLoading}
+                disabled={isLoading || confirmDisabled}
                 className="gap-1.5"
               >
                 {isLoading ? (

@@ -1,39 +1,43 @@
-import { Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
-import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
-import { WalletService } from '../wallet/wallet.service';
+import {
+  WalletService,
+  PASS_TEMPLATE_RULE_FIELDS,
+  rulesForPass,
+} from '../wallet/wallet.service';
 import { NotifyService } from '../notification/notify.service';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../env';
+import { TenantGuard, TenantRequest } from '../auth/tenant.guard';
+import { AuditService } from '../audit/audit.service';
+import { WebhookService } from '../developers/webhook.service';
+import { describeError } from '../errors';
+import { verifyWalletCallback } from '../wallet/google-jws';
+import { computeTier } from '../tiers/tier.util';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
-
-function extractAdminToken(req: Request): string | null {
-  const authHeader = req.headers['authorization'];
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7);
+/** Parses a raw body string, returning undefined rather than throwing. */
+function safeJson(raw: string): any {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
   }
-  if (req.cookies?.admin_session) {
-    const c = req.cookies.admin_session;
-    return typeof c === 'object' && c?.value ? c.value : c;
-  }
-  const rawCookie = req.headers['cookie'];
-  if (rawCookie) {
-    const match = rawCookie.match(/(?:^|;\s*)admin_session=([^;]+)/);
-    if (match) return decodeURIComponent(match[1]);
-  }
-  return null;
 }
 
-function resolveImageUrl(url?: string): string | undefined {
+export function resolveImageUrl(url?: string): string | undefined {
   if (!url) return undefined;
   if (url.includes('localhost') || url.includes('127.0.0.1')) {
     return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
   }
   if (url.startsWith('/')) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace('-api', '')}` : 'http://localhost:3000');
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
+        : 'http://localhost:3000');
     if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
       return 'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
     }
@@ -46,10 +50,12 @@ function resolveImageUrl(url?: string): string | undefined {
 export class PassesController {
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly otpService: OtpService,
     private readonly whatsappService: WhatsappService,
     private readonly walletService: WalletService,
     private readonly notifyService: NotifyService,
+    private readonly tenantGuard: TenantGuard,
+    private readonly auditService: AuditService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   @Post('generate-pass')
@@ -80,10 +86,23 @@ export class PassesController {
         .select('*')
         .eq('phone', phone)
         .eq('tenantId', targetTenantId)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       // If the member does not exist in the database, create a new record for them
       if (!member) {
+        // Admin Exclusivity Validation
+        const { data: adminExists } = await this.supabaseService.client
+          .from('Admin')
+          .select('id')
+          .eq('tenantId', targetTenantId)
+          .eq('phone', phone)
+          .maybeSingle();
+
+        if (adminExists) {
+          throw new Error('Phone number is reserved for admin use.');
+        }
+
         const { data: newMember } = await this.supabaseService.client
           .from('Member')
           .insert({
@@ -103,20 +122,56 @@ export class PassesController {
       // 2. Generate the definitive, explicit Pass ID (UUID)
       const explicitPassId = crypto.randomUUID();
 
-      // 3. Create the Google Wallet Pass using the explicit Pass ID
-      const result = await this.walletService.createGoogleWalletPass({
+      // 3. Fall back to the tenant's published design when the caller
+      // doesn't explicitly override a field — keeps this endpoint's
+      // "whatever the caller sends" flexibility while still defaulting to
+      // the single source of truth instead of a stale/undefined colour.
+      // Phase 3.3 — scope the design fallback to the program the caller is
+      // issuing against; without it, a tenant running two programs could get
+      // the other program's published design (PRG-2).
+      const passDesign = await this.walletService.resolveTenantPassDesign(
+        targetTenantId,
+        undefined,
+        body.programId,
+      );
+
+      // Demo-status tenants may only issue passes to registered test members.
+      // This route mints directly rather than through PassIssuanceService, so
+      // it carries its own copy of the gate in
+      // `PassIssuanceService.issueForMember` — change both together.
+      // Fails OPEN on a missing/unknown status: 'demo' has to be set
+      // explicitly (the column defaults to 'production'), so an unreadable
+      // tenant row can never silently block a live tenant's issuance.
+      const { data: tenantRow } = await this.supabaseService.client
+        .from('Tenant')
+        .select('publishStatus')
+        .eq('id', targetTenantId)
+        .single();
+      if (tenantRow?.publishStatus === 'demo' && !member.isTestAccount) {
+        throw new Error(
+          'This tenant is in demo mode: passes can only be issued to registered test accounts until approved for production.',
+        );
+      }
+
+      const tenantWallet = await this.walletService.forTenant(targetTenantId);
+
+      // 4. Create the Google Wallet Pass using the explicit Pass ID
+      const result = await tenantWallet.createGoogleWalletPass({
         passId: explicitPassId,
+        programId: passDesign.programId,
         memberName: body.memberName,
-        cardTitle: body.cardTitle,
+        cardTitle: body.cardTitle ?? passDesign.cardTitle,
         balance: body.balance ?? body.issueBalance,
         tier: body.tier ?? body.issueTier,
-        hexBackgroundColor: body.hexBackgroundColor,
-        barcodeValue: body.barcodeValue, // will fallback to passId if not provided
+        hexBackgroundColor:
+          body.hexBackgroundColor ?? passDesign.hexBackgroundColor,
         barcodeAltText: body.barcodeAltText, // will fallback to passId if not provided
-        classSuffix: body.classSuffix,
-        logoUrl: resolveImageUrl(body.logoUrl),
-        heroImageUrl: resolveImageUrl(body.heroImageUrl),
-        rows: body.rows,
+        classSuffix: body.classSuffix ?? passDesign.classSuffix,
+        logoUrl: resolveImageUrl(body.logoUrl ?? passDesign.logoUrl),
+        heroImageUrl: resolveImageUrl(
+          body.heroImageUrl ?? passDesign.heroImageUrl,
+        ),
+        rows: body.rows ?? passDesign.fieldRows,
       });
 
       // 4. Record the newly generated pass in the database, linked to the member and tenant
@@ -130,6 +185,7 @@ export class PassesController {
               fullPassId: result.fullPassId,
               memberId: member.id,
               tenantId: targetTenantId,
+              programId: body.programId ?? null,
               balance:
                 parseInt(body.balance ?? body.issueBalance ?? '0', 10) || 0,
               tier: body.tier ?? body.issueTier ?? 'Standard',
@@ -147,16 +203,34 @@ export class PassesController {
         // 5. Trigger WhatsApp delivery if reqed
         if (body.deliverWhatsapp && body.phone && passRecordId) {
           const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL.replace('-api', '')}` : 'http://localhost:3000');
+            process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') ||
+            (process.env.VERCEL_URL
+              ? `https://${process.env.VERCEL_URL.replace('-api', '')}`
+              : 'http://localhost:3000');
           const shortUrl = `${baseUrl}/api/p/${passRecordId}`;
+
+          let programNameForMessage: string | undefined;
+          if (body.programId) {
+            const { data: p } = await this.supabaseService.client
+              .from('Program')
+              .select('name')
+              .eq('id', body.programId)
+              .maybeSingle();
+            if (p) programNameForMessage = p.name;
+          }
 
           this.whatsappService
             .sendPassLinkWithLog(
               body.phone,
               shortUrl,
               body.memberName || 'Member',
-              body.cardTitle || 'LinearCard',
-              { tenantId: targetTenantId, memberId: member.id },
+              body.cardTitle || passDesign.cardTitle || 'LinearCard',
+              {
+                tenantId: targetTenantId,
+                memberId: member.id,
+                programName: programNameForMessage,
+                programId: body.programId,
+              },
             )
             .catch((e) => console.error('WAHA delivery error:', e)); // Log delivery errors without failing the overall req
         }
@@ -172,8 +246,12 @@ export class PassesController {
     }
   }
 
+  // SEC-1: authenticated and tenant-scoped. This endpoint returns member
+  // name, phone, balance and tier — unauthenticated it was a cross-brand
+  // member enumeration API. Every lookup below is pinned to req.tenantId.
   @Post('validate-pass')
-  async postvalidatepass(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async postvalidatepass(@Req() req: TenantRequest, @Res() res: Response) {
     try {
       const { passId } = req.body;
       if (!passId) {
@@ -182,37 +260,29 @@ export class PassesController {
           .json({ success: false, error: 'passId is required' });
       }
 
-      let pass: any = null;
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        return res
+          .status(403)
+          .json({ valid: false, error: 'No tenant context on this session' });
+      }
 
-      // 1. Phone number check (if passId is likely a phone number)
+      let pass: any = null;
+      // Phase 6.3 — the same columns processOrderTransaction scores with, so
+      // the scanner's on-screen preview can use the real rates instead of a
+      // hardcoded 10% / 50%.
+      const PASS_SELECT = `*, Member!inner(*), Tenant(name, PassTemplate(${PASS_TEMPLATE_RULE_FIELDS}))`;
+
+      // 1. Phone number lookup — exact phone, this tenant only.
       if (/^\d{8,}$/.test(passId) || /^\+\d+$/.test(passId)) {
         const { data: phonePasses } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*), Tenant(name)')
-          .ilike('Member.phone', `%${passId}%`)
+          .select(PASS_SELECT)
+          .eq('tenantId', tenantId)
+          .ilike('Member.phone', '%' + passId)
           .order('createdAt', { ascending: false });
 
-        if (phonePasses && phonePasses.length > 0) {
-          const token = extractAdminToken(req);
-          let staffTenantId = null;
-          if (token) {
-            try {
-              const decoded: any = jwt.verify(token, JWT_SECRET);
-              staffTenantId = decoded.tenantId;
-            } catch {
-              // Ignore invalid session
-            }
-          }
-
-          // If a staff member is logged in, prioritize returning the pass for their tenant
-          if (staffTenantId) {
-            pass =
-              phonePasses.find((p: any) => p.tenantId === staffTenantId) ||
-              phonePasses[0];
-          } else {
-            pass = phonePasses[0];
-          }
-        }
+        pass = phonePasses?.[0] || null;
       }
 
       // 2. Exact match check using fullPassId
@@ -222,41 +292,77 @@ export class PassesController {
           : `${process.env.ISSUER_ID}.${passId}`;
         const { data: exactPass } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*), Tenant(name)')
+          .select(PASS_SELECT)
+          .eq('tenantId', tenantId)
           .eq('fullPassId', fullPassId)
-          .single();
+          .maybeSingle();
 
         pass = exactPass;
       }
 
-      // 3. Fallback suffix/partial match
+      // 3. Suffix match on the object id — still tenant-scoped.
       if (!pass) {
         const { data: fallbackPass } = await this.supabaseService.client
           .from('Pass')
-          .select('*, Member!inner(*), Tenant(name)')
-          .ilike('fullPassId', `%${passId}%`)
+          .select(PASS_SELECT)
+          .eq('tenantId', tenantId)
+          .ilike('fullPassId', `%.${passId}`)
           .order('createdAt', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
         pass = fallbackPass;
       }
 
       if (!pass) {
         return res
-          .status(404)
+          .status(200)
           .json({ valid: false, error: 'Pass not found or invalid' });
       }
 
       const member = pass.Member;
 
+      let activeProgramId = pass.programId;
+      if (!activeProgramId && pass.Tenant?.PassTemplate) {
+        // Fallback: find the programId from the most recently published template
+        const templates = Array.isArray(pass.Tenant.PassTemplate)
+          ? pass.Tenant.PassTemplate
+          : [pass.Tenant.PassTemplate];
+        const published = templates
+          .filter((t: any) => t?.status === 'published')
+          .sort((a: any, b: any) =>
+            String(b?.updatedAt || '').localeCompare(
+              String(a?.updatedAt || ''),
+            ),
+          );
+        if (published.length > 0 && published[0].programId) {
+          activeProgramId = published[0].programId;
+        }
+      }
+
+      const { data: programRow } = activeProgramId
+        ? await this.supabaseService.client
+            .from('Program')
+            .select('id, kind, earnRate, redeemRate, redeemCapPercent')
+            .eq('id', activeProgramId)
+            .maybeSingle()
+        : { data: null };
+
       return res.status(200).json({
         valid: true,
         memberName: member?.name || 'Unknown Member',
-        balance: pass.balance.toString(),
+        balance: (pass.balance ?? 0).toString(),
         tier: pass.tier,
         fullPassId: pass.fullPassId,
         phone: member?.phone,
         tenantName: pass.Tenant?.name || member?.Tenant?.name || null,
+        // A ticket pass has no points pipeline (D9/D14) — process-order
+        // rejects it, so the scanner must not offer award/redeem at all.
+        programKind: programRow?.kind ?? 'loyalty',
+        rules: rulesForPass(
+          programRow,
+          pass.Tenant?.PassTemplate,
+          activeProgramId,
+        ),
       });
     } catch (error: any) {
       console.error('API Error validating pass:', error);
@@ -268,7 +374,8 @@ export class PassesController {
   }
 
   @Post('update-pass')
-  async postupdatepass(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async postupdatepass(@Req() req: TenantRequest, @Res() res: Response) {
     try {
       const body = req.body;
 
@@ -280,42 +387,8 @@ export class PassesController {
           .json({ success: false, error: 'passId is required' });
       }
 
-      // API Key or Admin Session Validation
-      const rawToken = extractAdminToken(req);
-      let authenticatedTenantId = null;
-      let authenticatedRole = null;
-
-      if (rawToken) {
-        try {
-          const decoded: any = jwt.verify(rawToken, JWT_SECRET);
-          authenticatedTenantId = decoded.tenantId;
-          authenticatedRole = decoded.role;
-        } catch {
-          // Fallback to evaluating as an API key if not a valid JWT
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        const authHeader = req.headers['authorization'] as string;
-        if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          const { data: tenant } = await this.supabaseService.client
-            .from('Tenant')
-            .select('id')
-            .eq('apiKey', token)
-            .single();
-          if (tenant) {
-            authenticatedTenantId = tenant.id;
-          }
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        return res.status(401).json({
-          success: false,
-          error: 'Unauthorized: Missing or invalid authentication',
-        });
-      }
+      const authenticatedTenantId = req.tenantId;
+      const authenticatedRole = req.authRole;
 
       const isUUID =
         /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
@@ -348,7 +421,7 @@ export class PassesController {
         if (!data) {
           const { data: fuzzyPass } = await this.supabaseService.client
             .from('Pass')
-            .select('*, Member(*), Tenant(*)')
+            .select('*, Member(*), Tenant(*), Program(*)')
             .ilike('fullPassId', `%${passId}%`)
             .limit(1)
             .single();
@@ -376,8 +449,30 @@ export class PassesController {
 
       const newBalance = parseInt(balance, 10);
 
+      let finalTier = tier || pass.tier;
+
+      // Auto-promotion: only kicks in when the caller doesn't specify a tier at
+      // all. The Live Activity form always sends the pass's current tier, so
+      // treating "tier === pass.tier" as "not specified" silently overrode an
+      // admin who deliberately resubmitted the same tier.
+      if (!tier) {
+        if (pass.programId) {
+          const { data: tiers } = await this.supabaseService.client
+            .from('Tier')
+            .select('*')
+            .eq('programId', pass.programId);
+
+          if (tiers && tiers.length > 0) {
+            const computedTierRow = computeTier(newBalance, tiers);
+            if (computedTierRow) {
+              finalTier = computedTierRow.name;
+            }
+          }
+        }
+      }
+
       // Duplicate check: if the balance and tier are the same, just return success early.
-      if (pass.balance === newBalance && pass.tier === tier) {
+      if (pass.balance === newBalance && pass.tier === finalTier) {
         return res.status(200).json({
           success: true,
           updatedData: { skipped: true, reason: 'Duplicate' },
@@ -389,16 +484,17 @@ export class PassesController {
         .from('Pass')
         .update({
           balance: newBalance,
-          tier: tier || pass.tier,
+          tier: finalTier,
         })
         .eq('id', pass.id);
 
       // Async follow-ups (Google PATCH + WAHA with logging)
+      const tenantWallet = await this.walletService.forTenant(pass.tenantId);
       Promise.all([
-        this.walletService
+        tenantWallet
           .updateGenericObject(pass.fullPassId, {
-            balance: balance.toString(),
-            tier: tier || pass.tier,
+            balance: (balance ?? 0).toString(),
+            tier: finalTier,
             pushNotification,
           })
           .then(() =>
@@ -417,16 +513,20 @@ export class PassesController {
               type: 'balance_update',
               channel: 'wallet_push',
               status: 'failed',
-              errorReason: err?.message || String(err),
+              errorReason: describeError(err),
             }),
           ),
         pass.Member?.phone || phone
           ? this.whatsappService
               .sendRedemptionReceiptWithLog(
                 pass.Member?.phone || phone,
-                balance.toString(),
+                (balance ?? 0).toString(),
                 pass.Tenant?.name || brandName || 'LinearCard',
-                { tenantId: pass.tenantId, memberId: pass.memberId },
+                {
+                  tenantId: pass.tenantId,
+                  memberId: pass.memberId,
+                  programName: pass.Program?.name,
+                },
               )
               .catch((err) =>
                 console.error('WhatsApp receipt failed (non-fatal):', err),
@@ -436,7 +536,7 @@ export class PassesController {
         console.error('Async follow-up failed (non-fatal):', err);
       });
 
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, tier: finalTier });
     } catch (error: any) {
       console.error('API Error updating pass:', error);
       return res.status(500).json({
@@ -446,18 +546,39 @@ export class PassesController {
     }
   }
 
+  // SEC-3: authenticated, and the class suffix comes from a template the
+  // caller's tenant owns — never from the request body, which let any caller
+  // overwrite any tenant's live class design.
   @Post('create-class')
-  async postcreateclass(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async postcreateclass(@Req() req: TenantRequest, @Res() res: Response) {
     try {
       const body = req.body;
+
+      const { data: template } = await this.supabaseService.client
+        .from('PassTemplate')
+        .select('*, tenant:Tenant(*)')
+        .eq('id', body.templateId)
+        .eq('tenantId', req.tenantId)
+        .maybeSingle();
+
+      if (!template) {
+        return res.status(404).json({
+          success: false,
+          error:
+            'templateId is required and must reference a template this tenant owns.',
+        });
+      }
 
       // Google Wallet strictly requires absolute URLs for images; convert relative paths
       body.logoUrl = resolveImageUrl(body.logoUrl);
       body.heroImageUrl = resolveImageUrl(body.heroImageUrl);
 
-      // In a real scenario, you'd parse `body` for background color, logo URL, etc.
-      // For now we just pass it to createGenericClass
-      const result = await this.walletService.createGenericClass(body);
+      const tenantWallet = await this.walletService.forTenant(req.tenantId!);
+      const result = await tenantWallet.createGenericClass({
+        ...body,
+        classSuffix: template.classSuffix || template.tenant?.classSuffix,
+      });
 
       return res.status(200).json({ success: true, classData: result });
     } catch (error: any) {
@@ -480,8 +601,16 @@ export class PassesController {
           .json({ success: false, error: 'classSuffix is required' });
       }
 
+      // No tenant context on this legacy diagnostic endpoint — falls back to
+      // the shared env issuer (no more hardcoded literal fallback).
       const issuerId =
-        process.env.GOOGLE_WALLET_ISSUER_ID || '3388000000023177673';
+        process.env.GOOGLE_WALLET_ISSUER_ID || process.env.ISSUER_ID;
+      if (!issuerId) {
+        return res.status(500).json({
+          success: false,
+          error: 'Missing ISSUER_ID / GOOGLE_WALLET_ISSUER_ID in environment.',
+        });
+      }
       const classId = `${issuerId}.${classSuffix}`;
 
       const client = await this.walletService.getGoogleAuthClient();
@@ -503,9 +632,10 @@ export class PassesController {
   }
 
   @Post('send-promo-message')
-  async postsendpromomessage(@Req() req: Request, @Res() res: Response) {
+  @UseGuards(TenantGuard)
+  async postsendpromomessage(@Req() req: TenantRequest, @Res() res: Response) {
     try {
-      const { passId, header, body, bypassQuota } = req.body;
+      const { passId, header, body } = req.body;
 
       if (!passId || !header || !body) {
         return res.status(400).json({
@@ -514,42 +644,8 @@ export class PassesController {
         });
       }
 
-      // API Key or Admin Session Validation
-      const rawToken = extractAdminToken(req);
-      let authenticatedTenantId = null;
-      let authenticatedRole = null;
-
-      if (rawToken) {
-        try {
-          const decoded: any = jwt.verify(rawToken, JWT_SECRET);
-          authenticatedTenantId = decoded.tenantId;
-          authenticatedRole = decoded.role;
-        } catch {
-          // Fallback
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        const authHeader = req.headers['authorization'] as string;
-        if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          const { data: tenant } = await this.supabaseService.client
-            .from('Tenant')
-            .select('id')
-            .eq('apiKey', token)
-            .single();
-          if (tenant) {
-            authenticatedTenantId = tenant.id;
-          }
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        return res.status(401).json({
-          success: false,
-          error: 'Unauthorized: Missing or invalid authentication',
-        });
-      }
+      const authenticatedTenantId = req.tenantId;
+      const authenticatedRole = req.authRole;
 
       // Lookup Pass
       const isUUID =
@@ -596,13 +692,13 @@ export class PassesController {
         });
       }
 
-      const result = await this.walletService.sendPromoMessageWithAudit(
+      const tenantWallet = await this.walletService.forTenant(pass.tenantId);
+      const result = await tenantWallet.sendPromoMessageWithAudit(
         pass.id, // we can use pass.id or fullPassId here, service handles it
         pass.memberId,
         pass.tenantId,
         header,
         body,
-        bypassQuota === true || bypassQuota === 'true',
       );
 
       return res.status(200).json({
@@ -619,6 +715,86 @@ export class PassesController {
         success: false,
         statusCode,
         error: error.message || 'Failed to send promotional message',
+      });
+    }
+  }
+
+  @Get('scan-history')
+  @UseGuards(TenantGuard)
+  async getScanHistory(@Req() req: TenantRequest, @Res() res: Response) {
+    try {
+      const authenticatedTenantId = req.tenantId;
+
+      const { timeFilter } = req.query; // 'today', 'this_week', 'this_month', 'last_month', 'all'
+
+      let query = this.supabaseService.client
+        .from('AuditLog')
+        .select('*, Member(name, phone)')
+        .eq('action', 'order_transaction')
+        .eq('tenantId', authenticatedTenantId)
+        .order('createdAt', { ascending: false })
+        .limit(100);
+
+      const now = new Date();
+      if (timeFilter && timeFilter !== 'all') {
+        let startDate: Date;
+        let endDate = new Date(now);
+
+        switch (timeFilter) {
+          case 'today':
+            startDate = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate(),
+            );
+            break;
+          case 'this_week':
+            startDate = new Date(now);
+            startDate.setDate(now.getDate() - now.getDay()); // Sunday as start of week
+            startDate.setHours(0, 0, 0, 0);
+            break;
+          case 'this_month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+          case 'last_month':
+            startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            endDate = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              0,
+              23,
+              59,
+              59,
+              999,
+            );
+            break;
+          default:
+            startDate = null; // 'all' or unknown falls back to no filter
+        }
+
+        if (startDate) {
+          query = query.gte('createdAt', startDate.toISOString());
+          if (timeFilter === 'last_month') {
+            query = query.lte('createdAt', endDate.toISOString());
+          }
+        }
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      return res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      console.error('API Error fetching scan history:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to fetch scan history',
       });
     }
   }
@@ -652,34 +828,22 @@ export class PassesController {
         });
       }
 
-      // Admin authentication
-      const rawToken = extractAdminToken(req);
-      let authenticatedTenantId = null;
+      // Admin authentication (soft — this endpoint allows unauthenticated
+      // POS callers, but identifies the tenant/role when credentials exist)
+      const resolved = await this.tenantGuard.resolveTenant(req);
+      const authenticatedTenantId = resolved?.tenantId || null;
+      const authenticatedRole = resolved?.role || null;
       let authenticatedAdminId = 'system';
-      let authenticatedRole = null;
-
-      if (rawToken) {
-        try {
-          const decoded: any = jwt.verify(rawToken, JWT_SECRET);
-          authenticatedTenantId = decoded.tenantId;
-          authenticatedAdminId = decoded.sub || decoded.adminId || 'admin';
-          authenticatedRole = decoded.role;
-        } catch {
-          // Token verification fallback
-        }
-      }
-
-      if (!authenticatedTenantId) {
-        const authHeader = req.headers['authorization'] as string;
-        if (authHeader?.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          const { data: tenant } = await this.supabaseService.client
-            .from('Tenant')
-            .select('id')
-            .eq('apiKey', token)
-            .single();
-          if (tenant) {
-            authenticatedTenantId = tenant.id;
+      if (resolved) {
+        const rawToken = req.headers['authorization']?.startsWith('Bearer ')
+          ? req.headers['authorization'].substring(7)
+          : null;
+        if (rawToken) {
+          try {
+            const decoded: any = jwt.verify(rawToken, JWT_SECRET);
+            authenticatedAdminId = decoded.sub || decoded.adminId || 'admin';
+          } catch {
+            // Not a JWT (likely an API key) — keep default admin id.
           }
         }
       }
@@ -698,6 +862,32 @@ export class PassesController {
         authenticatedAdminId,
         staffTenantId,
       );
+
+      // Dispatch WhatsApp Receipt for /scan manual transactions
+      if (result.transaction && result.transaction.passId) {
+        const { data: fullPass } = await this.supabaseService.client
+          .from('Pass')
+          .select('*, Member(*), Tenant(*), Program(*)')
+          .eq('id', result.transaction.passId)
+          .single();
+
+        if (fullPass && fullPass.Member?.phone) {
+          this.whatsappService
+            .sendRedemptionReceiptWithLog(
+              fullPass.Member.phone,
+              (result.newBalance ?? 0).toString() + ' Pts',
+              fullPass.Tenant?.name || 'LinearCard',
+              {
+                tenantId: fullPass.tenantId,
+                memberId: fullPass.memberId,
+                programName: fullPass.Program?.name,
+              },
+            )
+            .catch((err) =>
+              console.error('WhatsApp receipt failed (non-fatal):', err),
+            );
+        }
+      }
 
       return res.status(200).json(result);
     } catch (error: any) {
@@ -746,7 +936,7 @@ export class PassesController {
         .from('Pass')
         .select('id, Member!inner(phone)')
         .eq('tenantId', tenantId)
-        .eq('Member.phone', phone)
+        .ilike('Member.phone', '%' + phone)
         .single();
 
       if (!pass) {
@@ -772,17 +962,25 @@ export class PassesController {
       // We need to fetch full pass details to send the message properly.
       const { data: fullPass } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*), Program(*)')
         .eq('id', pass.id)
         .single();
-        
+
       if (fullPass && fullPass.Member?.phone) {
-        this.whatsappService.sendRedemptionReceiptWithLog(
-          fullPass.Member.phone,
-          result.newBalance.toString(),
-          fullPass.Tenant?.name || 'LinearCard',
-          { tenantId: fullPass.tenantId, memberId: fullPass.memberId }
-        ).catch(err => console.error('WhatsApp webhook receipt failed (non-fatal):', err));
+        this.whatsappService
+          .sendRedemptionReceiptWithLog(
+            fullPass.Member.phone,
+            (result.newBalance ?? 0).toString(),
+            fullPass.Tenant?.name || 'LinearCard',
+            {
+              tenantId: fullPass.tenantId,
+              memberId: fullPass.memberId,
+              programName: fullPass.Program?.name,
+            },
+          )
+          .catch((err) =>
+            console.error('WhatsApp webhook receipt failed (non-fatal):', err),
+          );
       }
 
       return res.status(200).json(result);
@@ -798,27 +996,45 @@ export class PassesController {
     }
   }
 
-  @Post('webhooks/google-wallet')
+  /**
+   * Phase 7.2 — the callback is now verified end to end against Google's
+   * published root signing keys (ECv2SigningOnly), replacing the Phase 0.3
+   * shared-secret stopgap. An unverifiable callback is rejected outright,
+   * so a forged `del` can no longer soft-delete a pass and a forged `save`
+   * can no longer fire WhatsApp at a real member (SEC-2).
+   *
+   * The `:secret?` segment is kept only so the URLs already published into
+   * live Google Wallet classes keep resolving; it no longer authorises
+   * anything.
+   */
+  @Post('webhooks/google-wallet/:secret?')
   async postGoogleWalletWebhook(@Req() req: Request, @Res() res: Response) {
     try {
-      const token = typeof req.body === 'string' ? req.body : req.body?.signedMessage;
-      if (!token) {
+      const envelope =
+        typeof req.body === 'string' ? safeJson(req.body) : req.body;
+      const raw = envelope?.signedMessage;
+      if (!raw) {
         return res.status(400).send('Missing signedMessage');
       }
 
-      // We decode the JWS payload. For production, signature verification with Google's public keys is required.
-      const decoded = jwt.decode(token, { json: true }) as any;
-      if (!decoded) {
-        return res.status(400).send('Invalid JWS');
+      let decoded: any;
+      try {
+        decoded = await verifyWalletCallback(
+          envelope,
+          process.env.ISSUER_ID || process.env.GOOGLE_ISSUER_ID || '',
+        );
+      } catch (sigErr: any) {
+        // 401, deliberately — a rejected callback is not something Google
+        // should retry, and a 200 here would hide a forgery attempt behind
+        // a success in the logs.
+        console.warn(
+          `Rejected unverified Google Wallet callback: ${sigErr.message}`,
+        );
+        return res.status(401).send('Signature verification failed');
       }
 
-      const { objectId, eventType } = decoded;
-      
-      // Process only save events ('save', 'SAVE', or sometimes 'add'/'ADD')
+      const { classId, objectId, eventType, nonce } = decoded || {};
       const typeStr = (eventType || '').toLowerCase();
-      if (typeStr !== 'save' && typeStr !== 'add') {
-        return res.status(200).send('Ignored event type');
-      }
 
       if (!objectId) {
         return res.status(400).send('Missing objectId');
@@ -827,17 +1043,133 @@ export class PassesController {
       // Look up the pass by fullPassId (objectId in Google Wallet)
       const { data: pass } = await this.supabaseService.client
         .from('Pass')
-        .select('*, Member(*), Tenant(*)')
+        .select('*, Member(*), Tenant(*), Program(*)')
         .eq('fullPassId', objectId)
         .single();
 
-      if (pass && pass.Member?.phone) {
-        await this.whatsappService.sendWalletSaveConfirmationWithLog(
-          pass.Member.phone,
-          pass.Tenant?.name || 'LinearCard',
-          { tenantId: pass.tenantId, memberId: pass.memberId }
-        ).catch(err => console.error('WhatsApp save confirmation failed (non-fatal):', err));
+      if (!pass) {
+        // No tenant/member to attribute this to — a NotificationLog insert
+        // here could never succeed (tenantId/memberId are NOT NULL FKs), so
+        // this is surfaced in the server log instead.
+        console.warn(
+          `Google Wallet callback for unrecognized objectId: ${objectId} (eventType=${eventType}, classId=${classId})`,
+        );
+        return res.status(200).send('Unknown objectId');
       }
+
+      if (typeStr === 'del') {
+        // No secret gate any more: the signature above is the authorisation.
+        await this.supabaseService.client
+          .from('Pass')
+          .update({ deletedAt: new Date().toISOString() })
+          .eq('id', pass.id);
+
+        try {
+          await this.auditService.record({
+            tenantId: pass.tenantId,
+            memberId: pass.memberId,
+            passId: pass.id,
+            programId: pass.programId ?? null,
+            actor: 'google-wallet-webhook',
+            action: 'pass_deleted',
+            details: { objectId, classId, nonce },
+          });
+        } catch (auditErr: any) {
+          console.error(
+            `AuditLog insertion warning for pass ${pass.id}:`,
+            auditErr.message,
+          );
+        }
+
+        this.webhookService
+          .dispatch(
+            pass.tenantId,
+            'pass.deleted',
+            {
+              passId: pass.id,
+              objectId,
+              memberId: pass.memberId,
+            },
+            pass.programId ?? null,
+          )
+          .catch(() => {});
+
+        return res.status(200).send('OK');
+      }
+
+      // Process only save events ('save', 'SAVE', or sometimes 'add'/'ADD')
+      if (typeStr !== 'save' && typeStr !== 'add') {
+        await this.notifyService.logNotification({
+          tenantId: pass.tenantId,
+          memberId: pass.memberId,
+          type: 'wallet_callback',
+          channel: 'google_wallet',
+          status: 'failed',
+          errorReason: `Unhandled eventType: ${eventType}`,
+        });
+        return res.status(200).send('Ignored event type');
+      }
+
+      // A pass removed from the wallet and re-added via the same link must
+      // come back out of the soft-deleted state the 'del' branch put it in.
+      if (pass.deletedAt) {
+        await this.supabaseService.client
+          .from('Pass')
+          .update({ deletedAt: null })
+          .eq('id', pass.id);
+      }
+
+      // First install wins: this is the timestamp the Overview tab counts, and
+      // re-adding a removed pass must not move it.
+      if (!pass.installedAt) {
+        await this.supabaseService.client
+          .from('Pass')
+          .update({ installedAt: new Date().toISOString() })
+          .eq('id', pass.id);
+      }
+
+      this.auditService
+        .record({
+          tenantId: pass.tenantId,
+          memberId: pass.memberId,
+          passId: pass.id,
+          programId: pass.programId ?? null,
+          actor: 'google-wallet-webhook',
+          action: 'pass_installed',
+        })
+        .catch(() => {});
+
+      if (pass.Member?.phone) {
+        await this.whatsappService
+          .sendWalletSaveConfirmationWithLog(
+            pass.Member.phone,
+            pass.Tenant?.name || 'LinearCard',
+            {
+              tenantId: pass.tenantId,
+              memberId: pass.memberId,
+              programName: pass.Program?.name,
+            },
+          )
+          .catch((err) =>
+            console.error(
+              'WhatsApp save confirmation failed (non-fatal):',
+              err,
+            ),
+          );
+      }
+
+      this.webhookService
+        .dispatch(
+          pass.tenantId,
+          'pass.installed',
+          {
+            passId: pass.id,
+            objectId,
+            memberId: pass.memberId,
+          },
+          pass.programId ?? null,
+        )
+        .catch(() => {});
 
       return res.status(200).send('OK');
     } catch (error: any) {
@@ -846,4 +1178,3 @@ export class PassesController {
     }
   }
 }
-

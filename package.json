@@ -7,18 +7,23 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run kill-ports && turbo run dev",
-    "dev:clean": "npm run kill-ports && turbo run dev",
-    "kill-ports": "npx -y kill-port 3000 3001 || true",
+    "dev": "echo \"Run the two servers in separate terminals: 'npm run dev:api' and 'npm run dev:web'.\" && exit 1",
+    "dev:api": "npm run build -w packages/types && npm run dev -w apps/api",
+    "dev:web": "npm run build -w packages/types && npm run dev -w apps/web",
+    "kill-ports": "npx -y kill-port 3000 3001",
     "build": "turbo run build",
     "start": "turbo run start",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "demo:reset": "npm run demo:reset -w apps/api --"
   },
   "devDependencies": {
+    "@googleapis/walletobjects": "^18.0.0",
+    "supabase": "^2.117.0",
     "turbo": "latest",
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "@ngrok/ngrok": "^1.7.0",
     "googleapis": "^180.0.0"
   }
 }

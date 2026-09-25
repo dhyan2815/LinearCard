@@ -15,3 +15,8 @@ plans/
 .agent/
 .claude/
 next-env.d.ts
+CLAUDE.md
+.claude/.worktrees/
+.worktrees/
+apps/web/.env.local
+.mcp.json

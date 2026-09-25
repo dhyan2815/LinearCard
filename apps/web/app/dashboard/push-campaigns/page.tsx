@@ -1,16 +1,6 @@
 'use client';
-import React from 'react';
-import { PushCampaignsView } from '../_components/PushCampaignsView';
-import { useDashboard } from '../_components/DashboardContext';
+import { LegacyProgramRedirect } from '../_components/LegacyProgramRedirect';
 
-export default function PushCampaignsPage() {
-  const { selectedTenantId } = useDashboard();
-
-  return (
-    <div className="min-h-full pb-12">
-      <div className="max-w-[1600px] mx-auto">
-        <PushCampaignsView tenantId={selectedTenantId} />
-      </div>
-    </div>
-  );
+export default function Page() {
+  return <LegacyProgramRedirect slug="campaigns" />;
 }

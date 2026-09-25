@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
   Req,
@@ -11,13 +12,14 @@ import { Request, Response } from 'express';
 import { SupabaseService } from '../supabase/supabase.service';
 import { OtpService } from '../notification/otp.service';
 import { WhatsappService } from '../notification/whatsapp.service';
-import { WalletService } from '../wallet/wallet.service';
-import { NotifyService } from '../notification/notify.service';
-import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
-import { SendOtpRequest, VerifyOtpRequest } from '@linearcard/types';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key';
+import {
+  SendOtpRequest,
+  VerifyOtpRequest,
+  DEFAULT_PASS_HEX,
+} from '@linearcard/types';
+import { JWT_SECRET } from '../env';
+import { PassIssuanceService } from '../passes/pass-issuance.service';
 
 @Controller('auth')
 export class AuthController {
@@ -25,14 +27,13 @@ export class AuthController {
     private readonly supabaseService: SupabaseService,
     private readonly otpService: OtpService,
     private readonly whatsappService: WhatsappService,
-    private readonly walletService: WalletService,
-    private readonly notifyService: NotifyService,
+    private readonly passIssuanceService: PassIssuanceService,
   ) {}
 
   @Post('send-otp')
   async sendOtp(@Body() body: SendOtpRequest) {
     try {
-      const { tenantId } = body;
+      const { tenantId, programId } = body;
       let { phone } = body;
       if (!phone)
         throw new HttpException('phone required', HttpStatus.BAD_REQUEST);
@@ -40,7 +41,7 @@ export class AuthController {
 
       if (await this.otpService.isOtpRateLimited(phone, 'enrollment')) {
         throw new HttpException(
-          'An OTP was recently sent. Please wait before requesting a new code.',
+          'Too many OTP requests. Please wait 5 minutes before requesting a new code.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
@@ -58,6 +59,17 @@ export class AuthController {
         if (tenant) brandName = tenant.name;
       }
 
+      let programName: string | undefined;
+      if (programId && tenantId) {
+        const { data: program } = await this.supabaseService.client
+          .from('Program')
+          .select('name')
+          .eq('id', programId)
+          .eq('tenantId', tenantId)
+          .single();
+        if (program) programName = program.name;
+      }
+
       const { error: insertError } = await this.supabaseService.client
         .from('OtpSession')
         .insert({
@@ -69,7 +81,13 @@ export class AuthController {
         });
       if (insertError) throw new Error(`DB Error: ${insertError.message}`);
 
-      await this.whatsappService.sendOtp(phone, otp, brandName);
+      await this.whatsappService.sendOtp(
+        phone,
+        otp,
+        brandName,
+        programName,
+        programId,
+      );
       return { success: true };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
@@ -80,10 +98,47 @@ export class AuthController {
     }
   }
 
+  /**
+   * Phase 3.6 — which program an enrollment issues against.
+   *
+   * An explicit `programId` must belong to the tenant, or the caller is
+   * trying to enroll someone into someone else's program. With none, the
+   * tenant's oldest program is the default, which is what keeps the
+   * pre-Phase-3 `/enroll/:slug` URL working.
+   */
+  private async resolveEnrollmentProgram(
+    tenantId: string,
+    programId?: string,
+  ): Promise<any | null> {
+    if (programId) {
+      const { data } = await this.supabaseService.client
+        .from('Program')
+        .select('*')
+        .eq('id', programId)
+        .eq('tenantId', tenantId)
+        .maybeSingle();
+      if (!data)
+        throw new HttpException(
+          'Program not found for this brand.',
+          HttpStatus.NOT_FOUND,
+        );
+      return data;
+    }
+
+    const { data } = await this.supabaseService.client
+      .from('Program')
+      .select('*')
+      .eq('tenantId', tenantId)
+      .order('createdAt', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    return data ?? null;
+  }
+
   @Post('verify-otp')
   async verifyOtp(@Body() body: VerifyOtpRequest, @Req() req: Request) {
     try {
-      const { otp, consentGiven, tenantId, ...passData } = body;
+      const { otp, consentGiven, tenantId, programId, ...passData } = body;
       let { phone } = body;
       if (!phone || !otp || !consentGiven)
         throw new HttpException(
@@ -116,10 +171,15 @@ export class AuthController {
           HttpStatus.UNAUTHORIZED,
         );
       }
-      if (!this.otpService.verifyOtp(otp, otpSession.otpHash)) {
+      const attempt = await this.otpService.verifyOtpAttempt(otp, otpSession);
+      if (!attempt.ok) {
         throw new HttpException(
-          'Incorrect code. Please try again.',
-          HttpStatus.UNAUTHORIZED,
+          attempt.locked
+            ? 'Too many incorrect attempts. Please request a new code.'
+            : 'Incorrect code. Please try again.',
+          attempt.locked
+            ? HttpStatus.TOO_MANY_REQUESTS
+            : HttpStatus.UNAUTHORIZED,
         );
       }
 
@@ -149,6 +209,23 @@ export class AuthController {
       if (tenantError || !tenant)
         throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
 
+      // Admin Exclusivity Validation: Admin phone numbers cannot be duplicated as Members
+      const { data: adminExists } = await this.supabaseService.client
+        .from('Admin')
+        .select('id')
+        .eq('tenantId', targetTenantId)
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (adminExists) {
+        throw new HttpException(
+          'Phone number is reserved for admin use.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      // Member Duplication: We insert unconditionally to allow multiple members with the same phone number
+
       const { data: member, error: memberError } =
         await this.supabaseService.client
           .from('Member')
@@ -171,61 +248,28 @@ export class AuthController {
         legalTextVersion: 'DPDP_v1',
       });
 
-      const startingTier = passData.tier || 'Bronze';
-      const startingBalance = passData.balance || '0 Pts';
-      const explicitPassId = crypto.randomUUID();
+      // Phase 3.6 — the pass is issued against a *program*, not a tenant.
+      // An explicit programId wins; otherwise fall back to the tenant's
+      // oldest program so the old /enroll/:slug URL keeps working.
+      const targetProgram = await this.resolveEnrollmentProgram(
+        targetTenantId,
+        programId,
+      );
 
-      const passResult = await this.walletService.createGoogleWalletPass({
-        ...passData,
-        passId: explicitPassId,
-        tier: startingTier,
-        balance: startingBalance,
-        barcodeAltText: `${startingTier} Tier • ${startingBalance}`,
-        cardTitle: tenant.name,
-        classSuffix: tenant.classSuffix,
-        hexBackgroundColor: tenant.brandHexColor,
-        logoUrl: tenant.logoUrl?.startsWith('/')
-          ? `http://localhost:3000${tenant.logoUrl}`
-          : tenant.logoUrl,
-        heroImageUrl: tenant.heroUrl?.startsWith('/')
-          ? `http://localhost:3000${tenant.heroUrl}`
-          : tenant.heroUrl,
+      // Phase 5 — issuance itself lives in PassIssuanceService, shared with
+      // payment-triggered enrollment (5.2).
+      const issued = await this.passIssuanceService.issueForMember({
+        tenantId: targetTenantId,
+        member,
+        program: targetProgram,
+        tenant,
+        passData,
       });
 
-      let passRecordId = null;
-      if (passResult.success && passResult.fullPassId) {
-        const { data: insertedPass, error: passError } =
-          await this.supabaseService.client
-            .from('Pass')
-            .insert({
-              id: explicitPassId,
-              memberId: member.id,
-              tenantId: targetTenantId,
-              fullPassId: passResult.fullPassId,
-              balance: 0,
-              tier: startingTier,
-            })
-            .select()
-            .single();
-        if (!passError && insertedPass) passRecordId = insertedPass.id;
-      }
-
-      if (passResult.googleWalletUrl && passRecordId) {
-        const shortUrl = `http://localhost:3000/api/p/${passRecordId}`;
-        this.whatsappService
-          .sendPassLinkWithLog(
-            phone,
-            shortUrl,
-            passData.memberName || phone,
-            tenant.name,
-            { tenantId: targetTenantId, memberId: member.id },
-          )
-          .catch((err) =>
-            console.error('WhatsApp pass link failed (non-fatal):', err),
-          );
-      }
-
-      return { success: true, ...passResult };
+      const { existing, success, ...rest } = issued;
+      return existing
+        ? { success, existing: true, ...rest }
+        : { success, ...rest };
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(
@@ -245,7 +289,7 @@ export class AuthController {
 
       if (await this.otpService.isOtpRateLimited(phone, 'admin_login')) {
         throw new HttpException(
-          'An OTP was recently sent. Please wait before requesting a new code.',
+          'Too many OTP requests. Please wait 5 minutes before requesting a new code.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
@@ -314,10 +358,15 @@ export class AuthController {
         );
       }
 
-      if (!this.otpService.verifyOtp(otp, otpSession.otpHash)) {
+      const attempt = await this.otpService.verifyOtpAttempt(otp, otpSession);
+      if (!attempt.ok) {
         throw new HttpException(
-          'Invalid code. Please try again.',
-          HttpStatus.UNAUTHORIZED,
+          attempt.locked
+            ? 'Too many incorrect attempts. Please request a new code.'
+            : 'Invalid code. Please try again.',
+          attempt.locked
+            ? HttpStatus.TOO_MANY_REQUESTS
+            : HttpStatus.UNAUTHORIZED,
         );
       }
 
@@ -327,50 +376,27 @@ export class AuthController {
         .eq('id', otpSession.id);
 
       // Check or create admin
-      let { data: admin } = await this.supabaseService.client
+      const { data: admin } = await this.supabaseService.client
         .from('Admin')
         .select('*')
         .eq('phone', phone)
         .limit(1)
         .single();
       if (!admin) {
-        const { data: tenant } = await this.supabaseService.client
-          .from('Tenant')
-          .select('id')
-          .limit(1)
-          .single();
-        if (!tenant)
-          throw new HttpException(
-            'No tenants configured',
-            HttpStatus.INTERNAL_SERVER_ERROR,
-          );
-
-        const { data: newAdmin, error: adminErr } =
-          await this.supabaseService.client
-            .from('Admin')
-            .insert({
-              phone,
-              tenantId: tenant.id,
-              role: 'admin',
-            })
-            .select()
-            .single();
-        if (adminErr || !newAdmin)
-          throw new Error(`Failed to create admin: ${adminErr?.message}`);
-        admin = newAdmin;
+        // No silent join. Attaching an unknown phone to the first tenant in
+        // the table put one brand's admin inside another brand's account.
+        // The caller completes onboarding at POST /auth/admin/signup, which
+        // is the only path that creates a Tenant.
+        const signupToken = jwt.sign({ phone, purpose: 'signup' }, JWT_SECRET, {
+          expiresIn: '10m',
+        });
+        return { success: true, needsOnboarding: true, signupToken };
       }
 
-      const token = jwt.sign(
-        { adminId: admin.id, tenantId: admin.tenantId, role: admin.role },
-        JWT_SECRET,
-        { expiresIn: '1d' },
-      );
-
-      res.cookie('admin_session', token, {
-        httpOnly: false,
-        sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000,
-        path: '/',
+      const token = this.setAdminSession(res, {
+        adminId: admin.id,
+        tenantId: admin.tenantId,
+        role: admin.role,
       });
 
       return { success: true, token };
@@ -381,5 +407,170 @@ export class AuthController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /**
+   * Issues the admin JWT and sets the session cookie. Shared by login and
+   * signup so the two paths cannot set different cookie options.
+   */
+  private setAdminSession(
+    res: Response,
+    claims: { adminId: string; tenantId: string; role: string },
+  ): string {
+    const token = jwt.sign(claims, JWT_SECRET, { expiresIn: '1d' });
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('admin_session', token, {
+      httpOnly: true, // Secure: JS cannot access, only sent automatically with credentials: 'include'
+      secure: isProd, // HTTPS only in production
+      // Prod serves web/api from separate Vercel domains (cross-site), which
+      // requires SameSite=None; dev is same-site (just different ports), so
+      // 'lax' works there and avoids needing HTTPS locally.
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+    return token;
+  }
+
+  /**
+   * Completes self-serve onboarding. The only path that creates a Tenant.
+   * The signup token proves the phone passed OTP within the last 10 minutes;
+   * it is single-use in effect, because a second call finds the Admin row
+   * this one created and is refused.
+   */
+  @Post('admin/signup')
+  async adminSignup(
+    @Body()
+    body: { signupToken?: string; brandName?: string; adminName?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { signupToken, brandName, adminName } = body || {};
+    const name = (brandName || '').trim();
+    const adminDisplayName = (adminName || '').trim();
+    if (!signupToken || !name || !adminDisplayName)
+      throw new HttpException(
+        'signupToken, brandName, and adminName are required',
+        HttpStatus.BAD_REQUEST,
+      );
+
+    let phone: string;
+    try {
+      const decoded: any = jwt.verify(signupToken, JWT_SECRET);
+      if (decoded?.purpose !== 'signup' || !decoded?.phone) throw new Error();
+      phone = decoded.phone;
+    } catch {
+      throw new HttpException(
+        'Signup link expired. Please sign in again.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const { data: existingAdmin } = await this.supabaseService.client
+      .from('Admin')
+      .select('id')
+      .eq('phone', phone)
+      .maybeSingle();
+    if (existingAdmin)
+      throw new HttpException(
+        'This number already belongs to an account.',
+        HttpStatus.CONFLICT,
+      );
+
+    const classSuffix = await this.uniqueClassSuffix(name);
+
+    const { data: tenant, error: tenantErr } = await this.supabaseService.client
+      .from('Tenant')
+      .insert({
+        name,
+        classSuffix,
+        brandHexColor: DEFAULT_PASS_HEX,
+        publishStatus: 'demo',
+        logoUrl:
+          'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=1000&auto=format&fit=crop&q=80',
+        heroUrl:
+          'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1000&auto=format&fit=crop&q=80',
+      })
+      .select()
+      .single();
+    if (tenantErr || !tenant)
+      throw new HttpException(
+        `Failed to create account: ${tenantErr?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+
+    const { data: admin, error: adminErr } = await this.supabaseService.client
+      .from('Admin')
+      .insert({
+        phone,
+        tenantId: tenant.id,
+        role: 'admin',
+        name: adminDisplayName,
+      })
+      .select()
+      .single();
+    if (adminErr || !admin)
+      throw new HttpException(
+        `Failed to create admin: ${adminErr?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+
+    this.setAdminSession(res, {
+      adminId: admin.id,
+      tenantId: tenant.id,
+      role: admin.role,
+    });
+    return { success: true, tenantId: tenant.id };
+  }
+
+  /** `blue_tokai`, then `blue_tokai_2` — the class-id namespace must be unique. */
+  private async uniqueClassSuffix(brandName: string): Promise<string> {
+    const root =
+      brandName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'brand';
+    const { data } = await this.supabaseService.client
+      .from('Tenant')
+      .select('classSuffix');
+    const taken = new Set((data || []).map((t: any) => t.classSuffix));
+    if (!taken.has(root)) return root;
+    for (let i = 2; ; i++)
+      if (!taken.has(`${root}_${i}`)) return `${root}_${i}`;
+  }
+
+  @Get('me')
+  async getMe(@Req() req: Request) {
+    const token =
+      req.cookies?.admin_session ||
+      (req.headers['authorization']?.startsWith('Bearer ')
+        ? req.headers['authorization'].substring(7)
+        : null);
+    if (!token)
+      throw new HttpException('Not authenticated', HttpStatus.UNAUTHORIZED);
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      const { data: admin } = await this.supabaseService.client
+        .from('Admin')
+        .select('phone, role, tenantId')
+        .eq('id', decoded.adminId)
+        .single();
+      if (!admin)
+        throw new HttpException('Admin not found', HttpStatus.UNAUTHORIZED);
+      return { success: true, admin };
+    } catch {
+      throw new HttpException('Invalid session', HttpStatus.UNAUTHORIZED);
+    }
+  }
+
+  @Post('admin/logout')
+  async adminLogout(@Res({ passthrough: true }) res: Response) {
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie('admin_session', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/',
+    });
+    return { success: true };
   }
 }
