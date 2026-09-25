@@ -71,8 +71,8 @@ export async function apiClient<T = any>(endpoint: string, options: RequestInit 
   let baseApiUrl = process.env.NEXT_PUBLIC_API_URL;
 
   if (isServer) {
-    if (!baseApiUrl && process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview') {
-      const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL || process.env.NEXT_PUBLIC_VERCEL_URL;
+    if (!baseApiUrl && (process.env.VERCEL_ENV === 'preview' || process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview')) {
+      const vercelUrl = process.env.VERCEL_BRANCH_URL || process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL || process.env.NEXT_PUBLIC_VERCEL_URL;
       if (vercelUrl) {
         baseApiUrl = `https://${vercelUrl.replace(/^linearcard(-git)?/, 'linearcard-api$1')}`;
       }

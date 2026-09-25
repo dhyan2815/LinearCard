@@ -526,6 +526,9 @@ export class WalletService {
     const base = (
       (!isDeployed && process.env.PUBLIC_CALLBACK_URL) ||
       process.env.NEXT_PUBLIC_API_URL ||
+      (process.env.VERCEL_BRANCH_URL
+        ? `https://${process.env.VERCEL_BRANCH_URL}`
+        : '') ||
       (process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL
         ? `https://${process.env.NEXT_PUBLIC_VERCEL_BRANCH_URL}`
         : '') ||
